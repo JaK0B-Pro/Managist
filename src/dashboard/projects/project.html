@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestion des Projets</title>
+    <!-- Preload critical resources -->
+  <link rel="preload" href="pro.css" as="style">
+  <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" as="style">
+  
+  <!-- Load CSS -->
+  <link rel="stylesheet" href="pro.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <h2><i class="fas fa-cogs"></i>Managist</h2>
+    <ul>
+      <li><a href="../index.html"><i class="fas fa-home"></i> Dashboard</a></li>
+      <li><a href="../salaire/salaire.html"><i class="fas fa-wallet"></i> Salary</a></li>
+      <li class="active"><a href="project.html"><i class="fas fa-tasks"></i> Projects</a></li>
+      <li><a href="../analytics/analytics.html"><i class="fas fa-chart-bar"></i> Analytics</a></li>
+      <li ><a href="../settings/setting.html"><i class="fas fa-cog"></i> Settings</a></li>
+    </ul>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <h1>Gestion des Projets</h1>
+
+    <!-- Bouton Ajouter un projet -->
+    <button id="showFormBtn" class="btn btn-primary">
+      <i class="fas fa-plus"></i> 
+      Ajouter un projet
+    </button>
+
+    <!-- Formulaire d'ajout de projet -->
+    <form id="projectForm" style="display: none; margin-top: 15px;">
+      <h2><i class="fas fa-plus-circle"></i> Ajouter un nouveau projet</h2>
+      <input type="text" id="nomProjet" placeholder="Nom de Projet..." required>
+      <input type="text" id="location" placeholder="Location..." required>
+      <input type="number" id="nmbrDesBlocs" placeholder="Nombre des blocs" required>
+      <input type="number" id="nmbrDesEtages" placeholder="Nombre des Etages dans chaque bloc" required>
+      <input type="number" id="nmbrDesAppartementsDansChaqueBloc" placeholder="Nombre des Apartments dans chaque bloc" required>
+      <input type="text" id="types" placeholder="Type des Appartements (F2, F3, F4)..." required>
+      <input type="number" id="nmbrDesAppartementsTotal" placeholder="Nombre des Apartments Total" required>
+      <input type="date" id="dateDeDebut" placeholder="Date de Debut" required>
+      <input type="date" id="dateDeFin" placeholder="Date de Fin" required>
+      <div class="form-buttons">
+        <button type="submit" class="ajouter-projet-button">Ajouter Le Projet</button>
+        <button type="button" class="cancel-btn">Annuler</button>
+      </div>
+    </form>
+
+    <!-- Liste des projets -->
+    <div class="project-list" id="projectList">
+      <!-- Les projets seront affichés ici -->
+    </div>
+  </div>
+  <!-- Confirmation Modal -->
+  <div id="confirmationModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2><i class="fas fa-exclamation-triangle"></i> Confirmer la suppression</h2>
+        <span class="close" id="confirmModalClose">&times;</span>
+      </div>
+      <div class="modal-body">
+        <p>Êtes-vous sûr de vouloir supprimer ce projet ?</p>
+        <p><strong>Cette action est irréversible.</strong></p>
+      </div>
+      <div class="modal-footer">
+        <button class="confirm-delete-btn" id="confirmDelete">
+          <i class="fas fa-trash"></i> Supprimer
+        </button>
+        <button class="cancel-btn" id="confirmCancel">Annuler</button>
+      </div>
+    </div>
+  </div>
+  <!-- Success Modal for Deletion -->
+  <div id="successModal" class="modal">
+    <div class="modal-content success-modal">
+      <div class="modal-header success-header">
+        <h2><i class="fas fa-check-circle"></i> Suppression réussie</h2>
+      </div>
+      <div class="modal-body">
+        <p>Votre projet a été supprimé avec succès.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="ok-btn" id="successOk">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Success Modal for Project Addition -->
+  <div id="addProjectSuccessModal" class="modal">
+    <div class="modal-content success-modal">
+      <div class="modal-header success-header">
+        <h2><i class="fas fa-check-circle"></i> Projet ajouté avec succès</h2>
+      </div>
+      <div class="modal-body">
+        <p>Votre nouveau projet a été ajouté avec succès à la base de données.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="ok-btn" id="addProjectSuccessOk">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>

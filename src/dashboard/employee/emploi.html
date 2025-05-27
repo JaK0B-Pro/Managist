@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Managist- Présences & Chat</title>
+    <link rel="stylesheet" href="emploi.css">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+</head>
+<body>
+    <header class="worker-header">
+        <h1>Managist..</h1>
+    </header>
+
+    <main class="main-content">
+        <!-- Section Agenda (visible par défaut) -->
+        <section class="timecard home">
+            <h2>Agenda des Présences</h2>
+            <div class="calendar-controls">
+                <button id="prevMonth">&lt;</button>
+                <h3 id="currentMonth"></h3>
+                <button id="nextMonth">&gt;</button>
+            </div>
+            <div class="calendar-grid" id="calendar"></div>
+            <div class="calendar-legend">
+                <div><span class="legend-present"></span> Présent</div>
+                <div><span class="legend-absent"></span> Absent</div>
+                <div><span class="legend-future"></span> À venir</div>
+            </div>
+            <!-- Ajouter cette section après le calendrier -->
+<div class="salary-summary">
+    <h3>Résumé Financier</h3>
+    <div class="summary-content">
+        <div class="summary-item">
+            <span>Jours Travaillés:</span>
+            <span id="workedDays">0</span>
+        </div>
+        <div class="summary-item">
+            <span>Jours Absents:</span>
+            <span id="absentDays">0</span>
+        </div>
+        <div class="summary-item total">
+            <span>Salaire Mensuel:</span>
+            <span id="monthSalary">0.00 DA</span>
+        </div>
+    </div>
+</div>
+        </section>
+
+       
+
+        <!-- Section Paie (cachée) -->
+        <section class="pay" style="display: none;">
+            <h2>Votre Paie</h2>
+            
+            <div class="pay-summary">
+                <div class="summary-card">
+                    <h3>Salaire Net Novembre 2023</h3>
+                    <div class="amount">46655 DA></data></div>
+                    <div class="details">
+                        <span>➤ Période: 01/11 - 30/11</span>
+                        <span>➤ Heures: 151h</span>
+                    </div>
+                </div>
+            </div>
+        
+            <div class="pay-details">
+                <div class="detail-item">
+                    <span>Salaire Brut</span>
+                    <span>3 450,00 DA</span>
+                </div>
+                <div class="detail-item deduction">
+                    <span>Cotisations Sociales</span>
+                    <span>- 450,25 DA</span>
+                </div>
+                <div class="detail-item deduction">
+                    <span>Impôt sur le revenu</span>
+                    <span>- 148,75 DA</span>
+                </div>
+            </div>
+        
+            <div class="document-item">
+                <span>Bulletin novembre 2023</span>
+                <button class="download-btn" onclick="generatePaySlip()">
+                    <i class="material-icons">download</i>
+                    PDF
+                </button>
+            </div>
+        </section>
+         <!-- Chat -->
+        <div class="chat-icon" id="chatIcon">
+            <i class="material-icons">chat</i>
+            <span class="chat-notification">2</span>
+        </div>
+        
+        <div class="chat-window" id="chatWindow">
+            <div class="chat-header">
+                <h4>Support RH</h4>
+                <div class="chat-controls">
+                    
+                    <button class="chat-btn close-btn" id="closeChat" title="Fermer le chat">
+                        &times;
+                    </button>
+                </div>
+            </div>
+            
+            <div class="chat-body" id="chatBody">
+                <div class="message received">
+                    <div class="text">Bonjour ! Comment puis-je vous aider ?</div>
+                    <div class="time">09:00</div>
+                </div>
+            </div>
+            <div class="chat-footer">
+                <input type="text" placeholder="Écrivez votre message..." id="messageInput">
+                <button class="send-btn" id="sendBtn">
+                    <i class="material-icons">send</i>
+                </button>
+            </div>
+        </div>
+        
+    </main>
+
+    <!-- Navigation -->
+    <nav class="worker-nav">
+        <button class="nav-btn active" data-page="home">
+            <i class="material-icons">calendar_today</i>
+            Présences
+        </button>
+        
+        <button class="nav-btn" data-page="pay">
+            <i class="material-icons">euro</i>
+            Paie
+        </button>
+    </nav>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="emploi.js"></script>
+</body>
+</html>

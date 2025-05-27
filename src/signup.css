@@ -1,0 +1,83 @@
+/* Basic reset */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    }
+
+    body {
+    font-family: 'Open Sans', sans-serif; /* Body font */
+    background-color: #1c1c1c;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    }
+
+    .container {
+    background-color: #1c1c1c;
+    width: 100%;
+    max-width: 400px;
+    padding: 20px;
+    text-align: center;
+    color: #fff;
+    }
+
+    /* Logo area */
+    .logo {
+    background-color: #c4c4c4;
+    padding: 50px 0;
+    margin-bottom: 20px;
+    }
+    .logo h1 {
+    font-size: 2em;
+    color: black;
+    }
+
+    /* Input group styling */
+    .input-group {
+    background-color: #f4f4f4;
+    margin-bottom: 15px;
+    padding: 10px 10px;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    }
+    /* If you use icons, style them here */
+    .input-group img {
+    width: 20px;
+    margin-left: auto; /* Move the eye icon to the right end */
+    cursor: pointer; /* For toggling password visibility */
+    }
+    /* Text fields should be black text */
+    .input-group input {
+    border: none;
+    background: none;
+    outline: none;
+    font-size: 1em;
+    color: #000;
+    flex: 1; /* Fill the remaining space */
+    }
+    .input-group input::placeholder {
+    color: #888; /* Subtle placeholder color */
+    }
+
+    /* Sign up button */
+    .signup-button {
+    background-color: #5a3cff;
+    color: #fff;
+    padding: 15px;
+    border: none;
+    border-radius: 5px;
+    font-size: 1.2em;
+    cursor: pointer;
+    width: 100%;
+    margin-top: 10px;
+    margin-bottom: 10px;
+    }
+
+    /* Link for users who have an account */
+    .have-account {
+    font-size: 0.9em;
+    margin-top: 15px;
+}

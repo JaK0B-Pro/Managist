@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Managist></title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <aside class="sidebar">
+            <h2>Managist</h2>
+            <nav>
+                <div class="container">
+                    <aside class="sidebar">
+            <ul>
+                <li><a href="../index.html">Dashboard</a></li>
+                <li><a href="./salaire.html">Salary</a></li>
+                <li><a href="../projects/project.html">Projects</a></li>
+                <li><a href="../analytics/analytics.html">Analytics</a></li>
+                <li><a href="../settings/setting.html">Settings</a></li>
+            </ul>
+
+            </nav>        
+        </aside>
+
+        <main class="content">
+            <header>
+                <h1>Bienvenue, [Utilisateur]</h1>
+            </header>
+
+            <section class="transactions">
+                <input type="text" id="search" placeholder="Rechercher">
+                <div class="button-group">
+                    <button type="submit" id="ajouter-un-emploee-button">Ajouter un employee</button>
+                    <select id="project-selector" class="project-dropdown">
+                        <option value="administration" selected>Administration</option>
+                        <!-- Projects will be loaded here dynamically -->
+                    </select>
+                    <button type="submit" id="mode-de-saisir-button">Mode de saisier</button>
+                </div>  
+                <table>
+                        <thead>
+                        <tr>
+                            <th>Id</th>
+                            <th>Nom et Prenom</th>
+                            <th>Prix de Jour</th>
+                            <th>Prix de Hour</th>
+                            <th>Nombre des Jours</th>
+                            <th>Nombre des Heurx</th>
+                            <th>Traveux Attache</th>
+                            <th>Salaire</th>
+                            <th>Acompte</th>
+                            <th>Net a Payer</th>
+                            <th>Observation</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Example row structure -->
+                        <tr>
+                            <td>1</td>
+                            <td>John Doe</td>
+                            <td>100</td>
+                            <td>10</td>
+                            <td>20</td>
+                            <td>160</td>
+                            <td>Project A</td>
+                            <td>2000</td>
+                            <td>500</td>
+                            <td>1500</td>
+                            <td style="position:relative;">None
+                                <div class="action-buttons">
+                                    <button class="action-btn edit-btn"><i class="fas fa-edit"></i></button>
+                                    <button class="action-btn delete-btn"><i class="fas fa-trash"></i></button>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+            
+            <section class="balance">
+                <p class="amount"></p>
+            </section>
+        </main>
+    </div>
+
+
+
+    <!-- Add Employee Modal -->
+    <div id="addEmployeeModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Ajouter un Nouvel Employé</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form id="employeeForm">
+                    <div class="form-group">
+                        <label for="nomPrenom">Nom et Prénom</label>
+                        <input type="text" id="nomPrenom" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="prixJour">Prix de Jours</label>
+                        <input type="number" id="prixJour" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="nombreJours">Nombre des Jours</label>
+                        <input type="number" id="nombreJours" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="nombreHeurx">Nombre des Heurx</label>
+                        <input type="number" id="nombreHeurx" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="travauxAttache">Travaux Attaché</label>
+                        <input type="text" id="travauxAttache" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="acompte">Acompte</label>
+                        <input type="number" id="acompte" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="observation">Observation</label>
+                        <textarea id="observation"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="cancel-btn">Annuler</button>
+                <button class="save-btn">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+
+
+
+    <!-- Edit Employee Modal -->
+    <div id="editEmployeeModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Modifier Employé</h2>
+                <span class="close-edit">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form id="editEmployeeForm">
+                    <div class="form-group">
+                        <label for="editId">Id</label>
+                        <input type="text" id="editId" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label for="editNomPrenom">Nom et Prénom</label>
+                        <input type="text" id="editNomPrenom" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editPrixJour">Prix de Jours</label>
+                        <input type="number" id="editPrixJour" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editPrixHour">Prix de Hour</label>
+                        <input type="number" id="editPrixHour" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editNombreJours">Nombre des Jours</label>
+                        <input type="number" id="editNombreJours" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editNombreHeurx">Nombre des Heurx</label>
+                        <input type="number" id="editNombreHeurx" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editTravauxAttache">Travaux Attaché</label>
+                        <input type="text" id="editTravauxAttache" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editSalaire">Salaire</label>
+                        <input type="number" id="editSalaire" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editAcompte">Acompte</label>
+                        <input type="number" id="editAcompte" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editNetAPayer">Net à Payer</label>
+                        <input type="number" id="editNetAPayer" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editObservation">Observation</label>
+                        <textarea id="editObservation"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="cancel-edit-btn">Annuler</button>
+                <button class="update-btn" style="background-color:#4a90e2;color:white;">Mettre à jour</button>
+            </div>
+        </div>
+    </div>
+
+
+
+    <script src="index.js"></script>
+</body>
+</html>

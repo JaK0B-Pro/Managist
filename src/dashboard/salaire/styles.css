@@ -1,0 +1,498 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+    display: flex;
+    height: 100vh;
+    background-color: #f5f7fa;
+}
+
+.container {
+    display: flex;
+    width: 100%;
+}
+
+.sidebar {
+    width: 250px;
+    background: #2c3e50;
+    color: white;
+    padding: 20px;
+}
+
+.sidebar h2 {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.sidebar nav ul {
+    list-style: none;
+}
+
+.sidebar nav ul li {
+    margin: 15px 0;
+}
+
+.sidebar nav ul li a {
+    color: white;
+    text-decoration: none;
+    display: block;
+    padding: 10px;
+    border-radius: 5px;
+    transition: background 0.3s;
+}
+
+.sidebar nav ul li a:hover {
+    background: #34495e;
+}
+
+.content {
+    flex: 1;
+    padding: 20px;
+    position: relative;
+}
+
+header h1 {
+    margin-bottom: 20px;
+}
+
+.balance {
+    background: #fff;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 250px;
+    z-index: 100;
+}
+
+.balance .amount {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #27ae60;
+    margin-top: 10px;
+}
+
+.transactions {
+    position: relative;
+    padding: 20px;
+    background-color: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    margin-bottom: 20px;
+    margin-right: 100px;
+}
+
+/* Search input styling */
+#search {
+    padding: 12px 20px;
+    width: 300px;
+    border: 2px solid #e1e4e8;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: all 0.3s ease;
+    background-color: white;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+#search:focus {
+    outline: none;
+    border-color: #4a90e2;
+    box-shadow: 0 2px 8px rgba(74, 144, 226, 0.2);
+}
+
+/* Add employee button styling */
+#ajouter-un-emploee-button {
+    position: absolute;
+    right: 220px;
+    top: 20px;
+    padding: 12px 24px;
+    background-color: #4a90e2;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 2px 4px rgba(74, 144, 226, 0.2);
+}
+
+#ajouter-un-emploee-button::before {
+    content: "+";
+    font-size: 18px;
+    font-weight: bold;
+}
+
+#ajouter-un-emploee-button:hover {
+    background-color: #357abd;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(74, 144, 226, 0.3);
+}
+
+/* Mode de saiser button styling */
+#mode-de-saisir-button {
+    position: absolute;
+    right: 20px;
+    top: 20px;
+    padding: 12px 24px;
+    background-color: #e24a4a;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 2px 4px rgba(74, 144, 226, 0.2);
+}
+
+#mode-de-saisir-button::before {
+    content: "+";
+    font-size: 18px;
+    font-weight: bold;
+}
+
+#mode-de-saisir-button:hover {
+    background-color: #bd3535;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(226, 74, 74, 0.3);
+}
+
+
+/* Table styling */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    position: relative;
+}
+
+th, td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #e1e4e8;
+}
+
+th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    color: #333;
+}
+
+tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+.transactions table th, 
+.transactions table td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+
+.transactions .status {
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.transactions .status.completed {
+    color: #27ae60;
+}
+
+.transactions .status.pending {
+    color: #e67e22;
+}
+
+
+
+/* Modal Styles */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+}
+
+.modal-content {
+    position: relative;
+    background-color: #fff;
+    margin: 3% auto;
+    padding: 15px;
+    width: 45%;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    animation: modalFadeIn 0.3s ease;
+}
+
+@keyframes modalFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e1e4e8;
+}
+
+.modal-header h2 {
+    color: #333;
+    font-size: 1.5rem;
+    margin: 0;
+}
+
+.close {
+    color: #666;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: color 0.3s ease;
+}
+
+.close:hover {
+    color: #333;
+}
+
+.modal-body {
+    max-height: 70vh;
+    overflow-y: auto;
+    padding: 10px 0;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    color: #333;
+    font-weight: 500;
+}
+
+.form-group input,
+.form-group textarea {
+    width: 100%;
+    padding: 10px;
+    border: 2px solid #e1e4e8;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: all 0.3s ease;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: #4a90e2;
+    box-shadow: 0 2px 8px rgba(74, 144, 226, 0.2);
+}
+
+.form-group textarea {
+    min-height: 100px;
+    resize: vertical;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 15px;
+    padding-top: 20px;
+    border-top: 1px solid #e1e4e8;
+}
+
+.cancel-btn, 
+.save-btn {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.cancel-btn {
+    background-color: #ff4444;
+    color: white;
+}
+
+.save-btn {
+    background-color: #4a90e2;
+    color: white;
+}
+
+.cancel-btn:hover {
+    background-color: #cc0000;
+    transform: translateY(-2px);
+}
+
+.save-btn:hover {
+    background-color: #357abd;
+    transform: translateY(-2px);
+}
+
+.button-group {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.button-group button {
+    margin: 0;
+}
+
+table th, table td {
+    text-align: center;
+    vertical-align: middle;
+}
+
+
+
+.balance {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    margin-top: 20px;
+    padding: 10px 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.amount {
+    font-size: 2.2rem;
+    font-weight: bold;
+    color: #2b9348;
+    background: none;
+    border-radius: 0;
+    padding: 0;
+    box-shadow: none;
+    min-width: 160px;
+    text-align: center;
+}
+
+tbody tr {
+    position: relative;
+}
+
+tbody tr td:last-child {
+    position: relative;
+    padding-right: 48px;
+    vertical-align: middle;
+}
+
+.observation-text {
+    display: inline-block;
+    vertical-align: middle;
+    word-break: break-word;
+    max-width: 100%;
+}
+
+.action-buttons {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+    display: flex;
+    gap: 8px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+    z-index: 2;
+}
+
+tbody tr:hover .action-buttons {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.action-btn {
+    padding: 8px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.action-btn i {
+    font-size: 14px;
+}
+
+.edit-btn {
+    background-color: #6c757d;
+    color: white;
+}
+
+.edit-btn:hover {
+    background-color: #5a6268;
+}
+
+.delete-btn {
+    background-color: #e24a4a;
+    color: white;
+}
+
+.delete-btn:hover {
+    background-color: #bd3535;
+}
+
+/* Project dropdown styling */
+.project-dropdown {
+    position: absolute;
+    right: 420px;
+    top: 20px;
+    padding: 12px 20px;
+    margin-right: 20px;
+    background-color: white;
+    border: 2px solid #e1e4e8;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #333;
+    width: 180px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.project-dropdown:focus {
+    outline: none;
+    border-color: #4a90e2;
+    box-shadow: 0 2px 8px rgba(74, 144, 226, 0.2);
+}
+
+.project-dropdown option {
+    padding: 10px;
+    font-size: 14px;
+}

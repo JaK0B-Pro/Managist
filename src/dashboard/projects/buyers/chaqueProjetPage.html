@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Name</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <aside class="sidebar">
+        <h2>Managist</h2>
+        <ul>
+            <li><a href="../../index.html">Dashboard</a></li>
+            <li><a href="../../salaire/salaire.html">Salary</a></li>
+            <li><a href="../../projects/project.html">Projects</a></li>
+            <li><a href="../../analytics/analytics.html">Analytics</a></li>
+            <li><a href="../../settings/setting.html">Settings</a></li>
+        </ul>
+    </aside>
+    
+    <div class="table-controls">
+        <button id="addNewBuyerButton">Add New Buyer</button>
+        <input type="text" id="searchInput" placeholder="Search buyers...">
+    </div>
+    <div class="table-container">
+        <table id="buyersTable">
+            <thead>
+                <tr>
+                    <th>NIVEAU</th>
+                    <th>N° LOGT</th>
+                    <th>NOM</th>
+                    <th>PRENOM</th>
+                    <th>TYPE LOGT</th>
+                    <th>SURFACE</th>
+                    <th>DATE</th>
+                    <th>PRIX TOTALE</th>
+                    <!-- <th>PRIX TOTALE/MOY</th> -->
+                    <!-- <th>PRIX TOTALE/MAX</th> -->
+                    <!-- <th>ND /ESPE./MOY</th> -->
+                    <!-- <th>ND /ESPE./MAX</th> -->
+                    <th>REMISE</th>
+                    <th>T0</th>
+                    <th>Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Buyer rows will be inserted here by JavaScript -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Modal for adding new buyer -->
+    <div id="buyerModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Add New Buyer</h2>
+            <form id="addBuyerForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="niveau">NIVEAU</label>
+                        <input type="text" id="niveau" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="logtNum">N° LOGT</label>
+                        <input type="text" id="logtNum" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="nom">NOM</label>
+                        <input type="text" id="nom" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="prenom">PRENOM</label>
+                        <input type="text" id="prenom" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="typeLogt">TYPE LOGT</label>
+                        <input type="text" id="typeLogt" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="surface">SURFACE</label>
+                        <input type="text" id="surface" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="date">DATE</label>
+                        <input type="date" id="date" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="prixTotale">PRIX TOTALE</label>
+                        <input type="number" id="prixTotale" required>
+                    </div>
+                </div>
+                <!-- <div class="form-row">
+                    <div class="form-group">
+                        <label for="prixTotaleMoy">PRIX TOTALE/MOY</label>
+                        <input type="number" id="prixTotaleMoy" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="prixTotaleMax">PRIX TOTALE/MAX</label>
+                        <input type="number" id="prixTotaleMax" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="ndEspeMoy">ND /ESPE./MOY</label>
+                        <input type="text" id="ndEspeMoy" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="ndEspeMax">ND /ESPE./MAX</label>
+                        <input type="text" id="ndEspeMax" required>
+                    </div>
+                </div> -->
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="remise">REMISE</label>
+                        <input type="number" id="remise" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="t0">T 0 DA</label>
+                        <input type="number" id="t0" required>
+                    </div>
+                </div>
+                <!-- <div class="form-row">
+                    <div class="form-group">
+                        <label for="t1">T 1 DA</label>
+                        <input type="number" id="t1" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="t2">T 2 DA</label>
+                        <input type="number" id="t2" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="t3">T 3 DA</label>
+                        <input type="number" id="t3" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="t4">T 4 DA</label>
+                        <input type="number" id="t4" required>
+                    </div>
+                </div> -->
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="total">Total</label>
+                        <input type="number" id="total" required>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" id="addBuyerBtn" class="btn-add">Add</button>
+                    <button type="button" id="cancelBtn" class="btn-cancel">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="javascript.js"></script>
+</body>
+</html>

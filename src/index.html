@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tauri App</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=UnifrakturMaguntia&family=Open+Sans&display=swap" rel="stylesheet">
+    <script type="module" src="./main.js"></script>
+  </head>
+
+  <body>
+    <main class="container">
+      <div class="container">
+        <div class="logo">
+            <h1>Managist</h1>
+        </div>
+      
+        <div class="input-group">
+            <img src="assets/ProfilePicture.png" alt="User Icon">
+            <input type="text" placeholder="Email" id="username" required>
+        </div>
+
+
+        <div class="input-group">
+            <img src="assets/Password.png">
+            <input type="password" id="passwordInput" placeholder="Password" required>
+            <!-- <img src="assets/setShowPassword.png" id="togglePassword"> -->
+        </div>
+
+        <div class="forgot-password">
+          <a href="#" style="color: white; text-decoration: none;">Forget Password</a>
+        </div>
+        <div id="login-message"></div>
+        <hr style="opacity: 0;">
+        <button class="login-button" id="login_Button">Login</button>
+
+        <div class="signup-text"><a href="signup.html" style="color: white; text-decoration: none;">I don't have an account?</a></div>
+    </div>
+    </main>
+  </body>
+</html>

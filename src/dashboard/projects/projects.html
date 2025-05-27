@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Gestion des Projets</title>
+  <link rel="stylesheet" href="./style.css">
+  <!-- <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script> Import Font Awesome -->
+  <script src="script.js"></script>
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <h2><i class="fas fa-cogs"></i>Managist</h2>
+    <ul>
+      <li><a href="../index.html"><i class="fas fa-home"></i> Dashboard</a></li>
+      <li><a href="../salaire/salaire.html"><i class="fas fa-wallet"></i> Salary</a></li>
+      <li class="active"><a href="./project.html"><i class="fas fa-tasks"></i> Projects</a></li>
+      <li><a href="../analytics/analytics.html"><i class="fas fa-chart-bar"></i> Analytics</a></li>
+      <li ><a href="../settings/setting.html"><i class="fas fa-cog"></i> Settings</a></li>
+    </ul>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <h1>Projets en cours</h1>
+
+    <!-- Bouton Ajouter un projet -->
+    <button id="showFormBtn" class="btn btn-primary">
+      <i class="fas fa-plus"></i> Ajouter un projet
+    </button>
+
+    <!-- Formulaire d'ajout de projet -->
+    <form id="projectForm" style="display: none; margin-top: 15px;">
+      <input type="text" id="nomProjet" placeholder="Nom du projet" required>
+      <input type="number" id="achatProjet" placeholder="Montant achat (DZD)" required>
+      <input type="number" id="venteProjet" placeholder="Montant vente (DZD)" required>
+      <input type="number" id="nbBat" placeholder="Nombre de bâtiments">
+      <input type="text" id="types" placeholder="Types de bâtiments (ex: Villa, Appartement)">
+      <input type="number" id="vendus" placeholder="Nombre vendus">
+      <input type="number" id="restants" placeholder="Nombre restants">
+      <input type="number" id="pourcentage" placeholder="% Avancement">
+      <input type="text" id="nomAcheteur" placeholder="Nom acheteur">
+      <input type="text" id="prenomAcheteur" placeholder="Prénom acheteur">
+      <input type="text" id="telAcheteur" placeholder="Téléphone acheteur">
+      <input type="number" id="montantPaye" placeholder="Montant payé (DZD)">
+      <input type="number" id="montantRestant" placeholder="Montant restant (DZD)">
+      <button type="submit" class="btn btn-primary">Ajouter</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Liste des projets -->
+    <div class="project-list" id="projectList">
+      <!-- Les projets seront affichés ici -->
+    </div>
+  </div>
+
+  
+</body>
+</html>

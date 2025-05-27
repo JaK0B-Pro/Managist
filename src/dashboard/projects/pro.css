@@ -1,0 +1,718 @@
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  display: flex;
+  background: #f5f5f5;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 200px;
+  background: #2c3e50;
+  color: white;
+  min-height: 100vh;
+  padding: 20px;
+}
+
+.sidebar h2 {
+  margin-bottom: 20px;
+}
+
+.sidebar ul {
+  list-style: none;
+  padding: 0;
+}
+
+.sidebar ul li {
+  margin: 15px 0;
+}
+
+.sidebar ul li a {
+  color: white;
+  text-decoration: none;
+}
+
+.sidebar ul li.active a {
+  font-weight: bold;
+  color: #1abc9c;
+}
+
+/* Main Content */
+.main-content {
+  flex: 1;
+  padding: 20px;
+  box-sizing: border-box;
+  width: calc(100% - 200px); /* Adjust for sidebar width */
+}
+
+/* Container des projets : grille */
+.project-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 400px)); /* Fixed max width instead of 1fr */
+  gap: 30px;
+  width: 100%;
+  max-width: 1200px; /* Slightly larger container max width */
+  padding: 20px;
+  box-sizing: border-box;
+  justify-content: start; /* Align to the left */
+}
+
+/* Project list grid - make this the single source of truth */
+#projectList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 400px)); /* Fixed max width instead of 1fr */
+  gap: 30px;
+  width: 100%;
+  max-width: 1200px; /* Slightly larger container max width */
+  box-sizing: border-box;
+  justify-content: start; /* Align to the left */
+}
+
+/* Carte de projet */
+.project-card {
+  background-color: white;
+  border-radius: 12px;
+  padding: 20px;
+  margin: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  width: 100%;
+  max-width: 500px; /* Better maximum width for individual cards */
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  border-top: 4px solid #4a90e2;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  justify-self: start; /* Ensure cards align to the left within their grid cell */
+}
+
+/* Effet hover sur projet */
+.project-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12);
+}
+
+/* Titre du projet */
+.project-card h2 {
+  color: #2c3e50;
+  font-size: 1.4rem;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+/* Location */
+.project-card .location {
+  color: #7f8c8d;
+  font-size: 0.9rem;
+  margin-bottom: 15px;
+}
+
+/* Info row */
+.project-card .info-row {
+  display: flex;
+  justify-content: space-between;
+  margin: 15px 0;
+}
+
+.project-card .info-row div {
+  font-size: 0.9rem;
+}
+
+/* Progress bar styles */
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 5px;
+  font-size: 0.9rem;
+  color: #34495e;
+}
+
+.progress-bar {
+  height: 8px;
+  background-color: #ecf0f1;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 15px;
+}
+
+.progress-fill {
+  height: 100%;
+  background-color: #4a90e2;
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+/* Bouton Voir plus */
+.voir-plus-btn {
+  margin-top: 15px;
+  padding: 10px 20px;
+  background-color: #4a90e2;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  width: 100%;
+}
+
+.voir-plus-btn:hover {
+  background-color: #357abd;
+  transform: translateY(-2px);
+}
+
+/* Bouton Voir plus / Voir moins */
+.toggle-details-btn {
+  margin-top: 10px;
+  padding: 8px 16px;
+  background-color: #28a745;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.3s ease;
+}
+
+.toggle-details-btn:hover {
+  background-color: #218838;
+}
+
+/* Modal overlay */
+#modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0);
+  z-index: 999;
+  transition: background-color 0.3s ease;
+}
+
+#modal-overlay.active {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+/* Formulaire */
+form {
+  background: #fff;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  max-width: 600px;
+  margin-top: 20px;
+}
+
+form input {
+  width: 100%;
+  margin: 8px 0;
+  padding: 12px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+
+form button {
+  padding: 10px 20px;
+  background: #1abc9c;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+/* Generic button styles */
+.btn {
+  padding: 12px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.btn-primary {
+  background-color: #007bff;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #0056b3;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 123, 255, 0.3);
+}
+
+.btn i {
+  margin-right: 8px;
+}
+
+/* Bouton Ajouter Projet */
+#showFormBtn {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  padding: 12px 20px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  cursor: pointer;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  transition: background-color 0.3s ease;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#showFormBtn i {
+  margin-right: 8px;
+}
+
+#showFormBtn:hover {
+  background-color: #0056b3;
+}
+
+/* Style pour les inputs et boutons dans le formulaire */
+#projectForm input,
+#projectForm button {
+  display: block;
+  margin: 12px 0;
+  padding: 12px 15px;
+  width: 100%;
+  box-sizing: border-box;
+  border: 2px solid #e1e4e8;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+#projectForm {
+  display: none;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.95);
+  background: #fff;
+  padding: 25px;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  z-index: 1000;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+  opacity: 0;
+  animation: formAppear 0.3s forwards;
+}
+
+@keyframes formAppear {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+#projectForm h2 {
+  margin-top: 0;
+  margin-bottom: 20px;
+  color: #2c3e50;
+  text-align: center;
+  font-size: 1.5rem;
+}
+
+#projectForm input:focus {
+  outline: none;
+  border-color: #4a90e2;
+  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.2);
+}
+
+/* Boutons du formulaire */
+#projectForm button {
+  padding: 12px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 20px;
+}
+
+#projectForm .ajouter-projet-button {
+  background-color: #4a90e2;
+  color: white;
+  margin-right: 10px;
+}
+
+#projectForm .cancel-btn {
+  background-color: #ff4444;
+  color: white;
+}
+
+#projectForm .ajouter-projet-button:hover {
+  background-color: #357abd;
+  transform: translateY(-2px);
+}
+
+#projectForm .cancel-btn:hover {
+  background-color: #cc0000;
+  transform: translateY(-2px);
+}
+
+/* Container pour les boutons du formulaire */
+.form-buttons {
+  display: flex;
+  justify-content: space-between; /* Changed from flex-end to space-between */
+  margin-top: 20px;
+  width: 100%;
+}
+
+#projectForm .ajouter-projet-button,
+#projectForm .cancel-btn {
+  flex: 1;
+  margin: 0 5px;
+}
+
+/* Action buttons for project cards */
+.project-actions {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  display: flex;
+  gap: 8px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: 10;
+}
+
+.project-card:hover .project-actions {
+  opacity: 1;
+}
+
+.action-btn {
+  padding: 8px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-btn i {
+  font-size: 14px;
+}
+
+.delete-btn {
+  background-color: #e24a4a;
+  color: white;
+}
+
+.delete-btn:hover {
+  background-color: #bd3535;
+  transform: scale(1.1);
+}
+
+/* Red hover effect for project card when hovering delete button */
+.delete-btn:hover ~ *,
+.delete-btn:hover ~ * * {
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.project-card:has(.delete-btn:hover) {
+  background-color: #ffeaea;
+  border-top-color: #e24a4a;
+  transform: translateY(-5px);
+  box-shadow: 0 8px 16px rgba(226, 74, 74, 0.3);
+}
+
+.project-card:has(.delete-btn:hover) h2 {
+  color: #bd3535;
+}
+
+.project-card:has(.delete-btn:hover) .location {
+  color: #a94442;
+}
+
+/* JavaScript-based delete hover effect for better browser support */
+.project-card.delete-hover {
+  background-color: #ffeaea !important;
+  border-top-color: #e24a4a !important;
+  transform: translateY(-5px) !important;
+  box-shadow: 0 8px 16px rgba(226, 74, 74, 0.3) !important;
+}
+
+.project-card.delete-hover h2 {
+  color: #bd3535 !important;
+}
+
+.project-card.delete-hover .location {
+  color: #a94442 !important;
+}
+
+/* Adjust the project list grid for smaller screens */
+@media (max-width: 992px) {
+  .project-list, #projectList {
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 20px;
+    max-width: 800px;
+  }
+}
+
+@media (max-width: 768px) {
+  .main-content {
+    width: 100%; /* Full width on mobile */
+  }
+  
+  .project-list, #projectList {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 15px;
+    padding: 10px;
+    max-width: 600px;
+  }
+  
+  .project-card {
+    max-width: none; /* Allow full width on smaller screens */
+  }
+}
+
+@media (max-width: 480px) {
+  .project-list, #projectList {
+    grid-template-columns: 1fr;
+    max-width: 400px;
+  }
+}
+
+/* Confirmation Modal Styles */
+.modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+}
+
+.modal.show {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-content {
+  background-color: #fff;
+  padding: 0;
+  width: 500px;
+  max-width: 85%;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  animation: modalFadeIn 0.3s ease;
+  position: relative;
+}
+
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 20px 15px 20px;
+  border-bottom: 1px solid #e1e4e8;
+}
+
+.modal-header h2 {
+  color: #e24a4a;
+  font-size: 1.3rem;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.modal-header i {
+  color: #e24a4a;
+}
+
+.close {
+  color: #666;
+  font-size: 28px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: color 0.3s ease;
+  line-height: 1;
+}
+
+.close:hover {
+  color: #333;
+}
+
+.modal-body {
+  padding: 20px;
+  text-align: center;
+}
+
+.modal-body p {
+  margin: 0 0 10px 0;
+  color: #333;
+  font-size: 1rem;
+}
+
+.modal-body p:last-child {
+  margin-bottom: 0;
+  color: #e24a4a;
+  font-weight: 600;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 15px 20px 20px 20px;
+  border-top: 1px solid #e1e4e8;
+}
+
+.modal-footer button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cancel-btn {
+  background-color: #007bff;
+  color: white;
+}
+
+.cancel-btn:hover {
+  background-color: #0056b3;
+}
+
+.confirm-delete-btn {
+  background-color: #e24a4a;
+  color: white;
+}
+
+.confirm-delete-btn:hover {
+  background-color: #bd3535;
+  transform: translateY(-1px);
+}
+
+/* Success Modal Styles */
+.success-modal {
+  border-top: 4px solid #28a745;
+}
+
+.success-header {
+  background-color: #f8fff9;
+  border-bottom: 1px solid #d4edda;
+}
+
+.success-header h2 {
+  color: #28a745 !important;
+  font-size: 1.3rem;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.success-header i {
+  color: #28a745;
+}
+
+.success-modal .modal-body {
+  padding: 20px;
+  text-align: center;
+  background-color: #f8fff9;
+}
+
+.success-modal .modal-body p {
+  margin: 0;
+  color: #333;
+  font-size: 1.1rem;
+  font-weight: 500;
+}
+
+.ok-btn {
+  background-color: #28a745;
+  color: white;
+  padding: 12px 30px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 auto;
+}
+
+.ok-btn:hover {
+  background-color: #218838;
+  transform: translateY(-1px);
+}
+
+/* Responsive modal */
+@media (max-width: 768px) {
+  .modal-content {
+    width: 90%;
+    max-width: 90%;
+  }
+}
+
+@media (max-width: 480px) {
+  .modal-content {
+    width: 95%;
+    max-width: 95%;
+  }
+  
+  .modal-footer {
+    flex-direction: column-reverse;
+    gap: 10px;
+  }
+  
+  .modal-footer button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+

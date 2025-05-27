@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings</title>
+    <link rel="stylesheet" href="setting.css">
+    <!-- <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script> -->
+</head>
+<body>
+
+    <!-- 🌍 Barre latérale -->
+    <div class="sidebar">
+        <h2><i class="fas fa-cogs"></i>Managist</h2>
+        <ul>
+            <li><a href="../index.html"><i class="fas fa-home"></i> Dashboard</a></li>
+            <li><a href="../salaire/salaire.html"><i class="fas fa-home"></i>Salary</a></li>
+            <li><a href="../projects/project.html"><i class="fas fa-tasks"></i> Projects</a></li>
+            <li><a href="../analytics/analytics.html"><i class="fas fa-chart-bar"></i> Analytics</a></li>
+            <li class="active"><a href="./setting.html"><i class="fas fa-cog"></i> Settings</a></li>
+        </ul>
+    </div>
+
+    <!-- 🛠️ Contenu principal -->
+    <div class="main-content">
+        <header><i class="fas fa-tools"></i> Settings</header>
+
+        <!-- 🎨 Section des paramètres avec illustrations -->
+        <div class="settings-container">
+
+            <!-- 💬 Chat -->
+            <div class="settings-card" onclick="openSection('chat')">
+                <img src="../assets/chat-icon.jpg".png" alt="Chat Illustration">
+                <h2>Chat with Admin</h2>
+                <p>Communicate with the administrator in real-time.</p>
+                <button>Open Chat <i class="fas fa-arrow-right"></i></button>
+            </div>
+
+            <!-- 🌐 Sélection de la langue -->
+            <div class="settings-card" onclick="openSection('language')">
+                <img src="../assets/language-icon.jpg" alt="Language Illustration">
+                <h2>Change Language</h2>
+                <p>Select your preferred language.</p>
+                <button>Change Language <i class="fas fa-arrow-right"></i></button>
+            </div>
+
+            <!-- 🔒 Changement de mot de passe -->
+            <div class="settings-card" onclick="openSection('password')">
+                <img src="../assets/password-icon.png" alt="Password Illustration">
+                <h2>Change Password</h2>
+                <p>Update your security credentials.</p>
+                <button>Change Password <i class="fas fa-arrow-right"></i></button>
+            </div>
+
+        </div>
+
+        <!-- 💬 Section du Chat -->
+        <div id="chat-section" class="hidden">
+            <h2><i class="fas fa-comments"></i> Chat with Admin</h2>
+            <div class="chat-box" id="chat-box">
+                <p class="admin-message"><i class="fas fa-user-shield"></i> Admin: Hello! How can I help you?</p>
+            </div>
+            <input type="text" id="chat-input" placeholder="Type a message...">
+            <button onclick="sendMessage()"><i class="fas fa-paper-plane"></i> Send</button>
+        </div>
+
+        <!-- 🌐 Section Langue -->
+        <div id="language-section" class="hidden">
+            <h2><i class="fas fa-globe"></i> Select Language</h2>
+            <select id="language-select">
+                <option value="fr">Français</option>
+                <option value="en">English</option>
+                <option value="es">Español</option>
+            </select>
+        </div>
+
+        <!-- 🔒 Section Mot de passe -->
+        <div id="password-section" class="hidden">
+            <h2><i class="fas fa-lock"></i> Change Password</h2>
+            <form>
+                <label for="current-password"><i class="fas fa-key"></i> Current Password:</label>
+                <input type="password" id="current-password">
+
+                <label for="new-password"><i class="fas fa-lock"></i> New Password:</label>
+                <input type="password" id="new-password">
+
+                <button type="submit"><i class="fas fa-save"></i> Update Password</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function openSection(section) {
+            document.getElementById("chat-section").classList.add("hidden");
+            document.getElementById("language-section").classList.add("hidden");
+            document.getElementById("password-section").classList.add("hidden");
+
+            document.getElementById(section + "-section").classList.remove("hidden");
+        }
+
+        function sendMessage() {
+            let input = document.getElementById("chat-input");
+            let message = input.value.trim();
+            if (message !== "") {
+                let chatBox = document.getElementById("chat-box");
+                let userMessage = document.createElement("p");
+                userMessage.className = "user-message";
+                userMessage.innerHTML = "<i class='fas fa-user'></i> You: " + message;
+                chatBox.appendChild(userMessage);
+                input.value = "";
+            }
+        }
+    </script>
+
+</body>
+</html>

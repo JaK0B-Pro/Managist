@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+        <title>Managist</title>
+
+        <!-- Google Fonts (example) -->
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link 
+            href="https://fonts.googleapis.com/css2?family=UnifrakturMaguntia&family=Open+Sans&display=swap" 
+            rel="stylesheet"
+        >
+        <link rel="stylesheet" href="signup.css">
+
+        <script type="module" src="signup.js"></script>
+        </head>
+
+        <body>
+
+        <div class="container">
+            <!-- Logo area -->
+            <div class="logo">
+            <h1>Managist</h1>
+            </div>
+
+            <!-- First Name -->
+            <div class="input-group">
+                <input type="text" placeholder="First Name" id="first-name" required>
+            </div>
+
+            <!-- Last Name -->
+            <div class="input-group">
+                <input type="text" placeholder="Last Name">
+            </div>
+
+            <div class="input-group">
+                <input type="email" placeholder="Email">
+            </div>
+            
+            <div class="input-group">
+                <input type="number" placeholder="Phone Number">
+            </div>
+
+            <!-- Password -->
+            <div class="input-group">
+                <input type="password" placeholder="Password" id="passwordInput" required>
+                <!-- <img src="assets/setShowPassword.png" alt="Show Password Icon" id="togglePassword"> -->
+            </div>
+
+            <!-- Confirm Password -->
+            <div class="input-group">
+                <input type="password" placeholder="Confirm Password" id="togglePassword">
+                <!-- <img src="assets/setShowPassword.png" alt="Show Confirm Password Icon" id="toggleConfirmPassword">-->
+            </div>
+            <div class="input-group">
+                <input type="number" placeholder="Admin.. 1/0" max="1" min="0" id="checkAdmin">
+            </div>
+
+            <button class="signup-button" id="signUpButton"> Sign Up</button>
+        
+
+
+            <div id="signup-div-message"></div>
+            <div class="have-account">
+                <a href="./index.html" style="text-decoration: none; color: white;">I have an account</a>
+            </div>
+        </div>
+    </body>
+</html>
