@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Project Name</title>
+    <title>Project Buyers Management</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
     <aside class="sidebar">
@@ -16,31 +17,33 @@
             <li><a href="../../analytics/analytics.html">Analytics</a></li>
             <li><a href="../../settings/setting.html">Settings</a></li>
         </ul>
+        <button id="logout-button">Logout</button>
     </aside>
     
+    <main class="content">
+        <header>
+            <h1 id="pageTitle">Project Buyers Management</h1>
+        </header>
+    
     <div class="table-controls">
-        <button id="addNewBuyerButton">Add New Buyer</button>
-        <input type="text" id="searchInput" placeholder="Search buyers...">
+        <button id="addNewBuyerButton"><i class="fas fa-plus"></i> Add New Buyer</button>
+        <div class="search-container">
+            <input type="text" id="searchInput" placeholder="Search buyers...">
+            <button id="searchButton" class="search-btn">
+                <i class="fas fa-search"></i>
+            </button>
+        </div>
+    </div>
+    
+    <div class="table-info">
+        <span id="buyerCount">Total Buyers: 0</span>
+        <span id="filteredCount" style="display: none;">Showing: 0 results</span>
     </div>
     <div class="table-container">
         <table id="buyersTable">
             <thead>
-                <tr>
-                    <th>NIVEAU</th>
-                    <th>N° LOGT</th>
-                    <th>NOM</th>
-                    <th>PRENOM</th>
-                    <th>TYPE LOGT</th>
-                    <th>SURFACE</th>
-                    <th>DATE</th>
-                    <th>PRIX TOTALE</th>
-                    <!-- <th>PRIX TOTALE/MOY</th> -->
-                    <!-- <th>PRIX TOTALE/MAX</th> -->
-                    <!-- <th>ND /ESPE./MOY</th> -->
-                    <!-- <th>ND /ESPE./MAX</th> -->
-                    <th>REMISE</th>
-                    <th>T0</th>
-                    <th>Total</th>
+                <tr id="tableHeader">
+                    <!-- Table headers will be generated dynamically by JavaScript -->
                 </tr>
             </thead>
             <tbody>
@@ -117,40 +120,28 @@
                 </div> -->
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="remise">REMISE</label>
-                        <input type="number" id="remise" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="t0">T 0 DA</label>
-                        <input type="number" id="t0" required>
+                        <label for="remise">REMISE (%)</label>
+                        <input type="number" id="remise" step="0.01" required>
                     </div>
                 </div>
-                <!-- <div class="form-row">
-                    <div class="form-group">
-                        <label for="t1">T 1 DA</label>
-                        <input type="number" id="t1" required>
+                
+                <!-- Tranches Section -->
+                <div class="tranches-section">
+                    <h3>Payment Tranches</h3>
+                    <div id="tranchesContainer">
+                        <div class="tranche-row">
+                            <label>T0:</label>
+                            <input type="number" step="0.01" min="0" name="tranche_0" 
+                                   placeholder="Enter amount for T0" oninput="calculateTotalPaid()">
+                            <button type="button" class="btn-remove-tranche" onclick="removeTranche(this)" style="display: none;">×</button>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="t2">T 2 DA</label>
-                        <input type="number" id="t2" required>
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="t3">T 3 DA</label>
-                        <input type="number" id="t3" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="t4">T 4 DA</label>
-                        <input type="number" id="t4" required>
-                    </div>
-                </div> -->
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="total">Total</label>
-                        <input type="number" id="total" required>
+                    <button type="button" id="addTrancheBtn" class="btn-add-tranche">+ Add Tranche</button>
+                    <div class="tranche-summary">
+                        <strong>Total Paid: <span id="totalPaidDisplay">0 DA</span></strong>
                     </div>
                 </div>
+                
                 <div class="form-actions">
                     <button type="submit" id="addBuyerBtn" class="btn-add">Add</button>
                     <button type="button" id="cancelBtn" class="btn-cancel">Cancel</button>
@@ -159,6 +150,39 @@
         </div>
     </div>
 
-    <script src="javascript.js"></script>
+    <!-- Success Modal -->
+    <div id="successModal" class="modal">
+        <div class="modal-content success-modal">
+            <div class="success-header">
+                <i class="fas fa-check-circle"></i>
+                <h2>Success!</h2>
+            </div>
+            <p>Buyer has been added successfully to the table.</p>
+            <div class="success-actions">
+                <button id="successOkBtn" class="btn-success">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="deleteConfirmationModal" class="modal">
+        <div class="modal-content delete-modal">
+            <div class="modal-header">
+                <i class="fas fa-exclamation-triangle warning-icon"></i>
+                <h2>Confirm Delete</h2>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete this buyer?</p>
+                <p class="warning-text">This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button id="cancelDeleteBtn" class="btn-cancel-delete">Annuler</button>
+                <button id="confirmDeleteBtn" class="btn-confirm-delete">Supprimer</button>
+            </div>
+        </div>
+    </div>
+    </main>
+
+    <script type="module" src="javascript.js" defer></script>
 </body>
 </html>

@@ -41,16 +41,77 @@ body {
     font-weight: 500;
 }
 
-#addNewBuyerButton::before {
-    content: '+';
-    font-size: 20px;
-    font-weight: bold;
-}
-
 #addNewBuyerButton:hover {
     background: #F57C00; /* Darker orange */
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+}
+
+/* Search container styles */
+.search-container {
+    display: flex;
+    align-items: center;
+    position: relative;
+    gap: 0;
+}
+
+#searchInput {
+    padding: 10px 15px;
+    font-size: 16px;
+    border: 2px solid #ddd;
+    border-radius: 6px 0 0 6px;
+    width: 300px;
+    outline: none;
+    transition: border-color 0.3s ease;
+    background: white;
+}
+
+#searchInput:focus {
+    border-color: #4a90e2;
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+}
+
+.search-btn {
+    background: #4a90e2;
+    color: white;
+    border: 2px solid #4a90e2;
+    border-left: none;
+    padding: 10px 15px;
+    border-radius: 0 6px 6px 0;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 50px;
+}
+
+.search-btn:hover {
+    background: #357abd;
+    border-color: #357abd;
+    transform: translateY(-1px);
+}
+
+.search-btn i {
+    font-size: 16px;
+}
+
+/* Table info styles */
+.table-info {
+    max-width: 1200px;
+    margin: 10px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+    color: #666;
+}
+
+#buyerCount, #filteredCount {
+    background: #f8f9fa;
+    padding: 5px 12px;
+    border-radius: 4px;
+    border: 1px solid #e9ecef;
 }
 
 
@@ -67,43 +128,147 @@ body {
 #addBuyerBtn:hover {
     background: #F57C00; /* Darker orange on hover */
 }
-#searchInput {
-    padding: 8px 12px;
-    font-size: 16px;
-    border-radius: 4px;
-    border: 1px solid #ccc;
-    width: 250px;
-}
 
 .table-container {
     position: relative;
-    /* max-width: 1200px; */
     margin: 0 auto;
     background: white;
     border-radius: 12px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.05);
     padding: 20px;
     margin: 20px;
-    /* overflow-x: hidden; Remove horizontal scroll */
+    overflow-x: auto; /* Enable horizontal scroll for dynamic columns */
+    min-width: 100%;
 }
 
-table, td, td {
+table {
     border-collapse: collapse;
     width: 100%;
+    min-width: 1200px; /* Minimum width to accommodate base columns */
     text-align: center;
     vertical-align: middle;
-    table-layout: fixed; /* Make table cells distribute space evenly */
+    table-layout: auto; /* Auto layout for dynamic columns */
 }
+
 th, td {
     border: 1px solid #e0e0e0;
     padding: 8px 10px;
     text-align: center;
     font-size: 15px;
     word-wrap: break-word; /* Allow text to wrap in cells */
+    white-space: nowrap; /* Prevent text wrapping for tranche columns */
+    min-width: 80px; /* Minimum column width */
 }
+
+/* Special styling for tranche columns */
+.tranche-cell {
+    min-width: 90px;
+    max-width: 120px;
+    font-weight: 500;
+    background-color: #f8fffe;
+}
+
+/* Make base info columns slightly wider */
+th:nth-child(1), td:nth-child(1), /* NIVEAU */
+th:nth-child(2), td:nth-child(2), /* N° LOGT */
+th:nth-child(5), td:nth-child(5), /* TYPE LOGT */
+th:nth-child(6), td:nth-child(6)  /* SURFACE */
+{
+    min-width: 80px;
+    max-width: 100px;
+}
+
+/* Name columns wider */
+th:nth-child(3), td:nth-child(3), /* NOM */
+th:nth-child(4), td:nth-child(4)  /* PRENOM */
+{
+    min-width: 120px;
+    max-width: 150px;
+}
+
+/* Price columns */
+th:nth-child(8), td:nth-child(8), /* PRIX TOTALE */
+th:nth-child(9), td:nth-child(9)  /* REMISE */
+{
+    min-width: 100px;
+    max-width: 130px;
+}
+
+/* Status column */
+.status-cell {
+    min-width: 120px;
+    max-width: 150px;
+}
+
+/* Total paid column */
+.total-paid-cell {
+    min-width: 100px;
+    max-width: 130px;
+    font-weight: 600;
+    background-color: #f0f8ff;
+}
+
 th {
     background: #f0f0f0;
     font-weight: bold;
+}
+
+/* Table row hover effect */
+tbody tr:hover {
+    background-color: #f8f9fa;
+    transition: background-color 0.2s ease;
+}
+
+/* Grouped NIVEAU cell styles */
+td[rowspan] {
+    vertical-align: middle;
+    font-weight: 600;
+    /* background-color: #e8f4fd; */
+    /* border-right: 2px solid #2196F3; */
+    /* color: #1976D2; */
+    text-align: center;
+}
+
+/* Style for rows within the same NIVEAU group */
+.buyer-row:first-child td[rowspan] {
+    /* border-top: 2px solid #2196F3; */
+}
+
+.buyer-row:last-child td:first-child[rowspan] {
+    border-bottom: 2px solid #2196F3;
+}
+
+/* Delete button styles */
+.delete-btn {
+    background: #e74c3c;
+    color: white;
+    border: none;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 14px;
+}
+
+.delete-btn:hover {
+    background: #c0392b;
+    transform: scale(1.05);
+}
+
+.delete-btn i {
+    font-size: 12px;
+}
+
+/* Animation for success message */
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
 }
 
 
@@ -236,6 +401,62 @@ th {
     background-color: #c82333;
 }
 
+/* Success Modal Styles */
+.success-modal {
+    max-width: 450px;
+    text-align: center;
+    background: white;
+    border-radius: 12px;
+    padding: 30px;
+}
+
+.success-header {
+    margin-bottom: 20px;
+}
+
+.success-header i {
+    font-size: 60px;
+    color: #27ae60;
+    margin-bottom: 15px;
+    display: block;
+}
+
+.success-header h2 {
+    color: #2c3e50;
+    font-size: 24px;
+    margin: 0;
+}
+
+.success-modal p {
+    color: #7f8c8d;
+    font-size: 16px;
+    margin-bottom: 25px;
+    line-height: 1.5;
+}
+
+.success-actions {
+    display: flex;
+    justify-content: center;
+}
+
+.btn-success {
+    background: #27ae60;
+    color: white;
+    border: none;
+    padding: 12px 30px;
+    border-radius: 6px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: 500;
+}
+
+.btn-success:hover {
+    background: #229954;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3);
+}
+
 .sidebar h2 {
   
     text-align: center;
@@ -270,4 +491,337 @@ th {
 .sidebar ul li.active a {
     background: #007bff;
     color: white;
+}
+
+/* Hover actions for buyer rows */
+.buyer-row {
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.buyer-row:hover {
+    background: linear-gradient(135deg, #f8f9ff 0%, #f0f2ff 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.actions-cell {
+    position: relative;
+    text-align: center;
+    padding: 8px;
+}
+
+.hover-actions {
+    display: none;
+    gap: 8px;
+    justify-content: center;
+    align-items: center;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(255, 255, 255, 0.95);
+    padding: 4px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    backdrop-filter: blur(10px);
+    z-index: 10;
+}
+
+.buyer-row:hover .hover-actions {
+    display: flex;
+}
+
+.action-btn {
+    padding: 6px 8px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    height: 32px;
+}
+
+.action-btn:hover {
+    transform: scale(1.1);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+
+.edit-btn {
+    background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+    color: white;
+}
+
+.edit-btn:hover {
+    background: linear-gradient(135deg, #357abd 0%, #2968a3 100%);
+}
+
+.action-btn.delete-btn {
+    background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+    color: white;
+}
+
+.action-btn.delete-btn:hover {
+    background: linear-gradient(135deg, #ff5252 0%, #d32f2f 100%);
+}
+
+/* Tranches Section Styles */
+.tranches-section {
+    margin: 20px 0;
+    padding: 20px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    background-color: #f9f9f9;
+}
+
+.tranches-section h3 {
+    margin: 0 0 15px 0;
+    color: #333;
+    font-size: 18px;
+}
+
+.tranche-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    background-color: white;
+}
+
+.tranche-row label {
+    min-width: 60px;
+    font-weight: bold;
+    color: #555;
+}
+
+.tranche-row input {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.btn-add-tranche {
+    background-color: #28a745;
+    color: white;
+    border: none;
+    padding: 10px 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    margin-top: 10px;
+}
+
+.btn-add-tranche:hover {
+    background-color: #218838;
+}
+
+.btn-remove-tranche {
+    background-color: #dc3545;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.btn-remove-tranche:hover {
+    background-color: #c82333;
+}
+
+.tranche-summary {
+    margin-top: 15px;
+    padding: 10px;
+    background-color: #e9ecef;
+    border-radius: 5px;
+    text-align: center;
+}
+
+.payment-status {
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.payment-status.unpaid {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.payment-status.partial {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.payment-status.paid {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+/* Table responsiveness for new columns */
+.table-container {
+    overflow-x: auto;
+    max-width: 100%;
+}
+
+#buyersTable {
+    min-width: 1400px; /* Increased for new columns */
+}
+
+#buyersTable th,
+#buyersTable td {
+    min-width: 80px;
+    padding: 8px 4px;
+    font-size: 13px;
+}
+
+/* Specific styling for tranche columns */
+.tranche-cell {
+    background-color: #f8f9fa;
+    font-weight: bold;
+}
+
+.tranche-cell.paid {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.tranche-cell.empty {
+    background-color: #fff;
+    color: #999;
+}
+
+/* Logout button styling */
+#logout-button {
+    margin-top: 20px;
+    padding: 10px;
+    background-color: #f44336;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    width: 100%;
+}
+
+#logout-button:hover {
+    background-color: #e53935;
+}
+
+/* Delete Confirmation Modal Styles */
+.delete-modal {
+    max-width: 450px;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.delete-modal .modal-header {
+    background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+    color: white;
+    padding: 20px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.delete-modal .warning-icon {
+    font-size: 2.5rem;
+    animation: pulse 2s infinite;
+}
+
+.delete-modal .modal-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.delete-modal .modal-body {
+    padding: 25px;
+    text-align: center;
+    background: white;
+}
+
+.delete-modal .modal-body p {
+    margin: 0 0 10px 0;
+    font-size: 1.1rem;
+    color: #333;
+}
+
+.delete-modal .warning-text {
+    color: #666 !important;
+    font-size: 0.95rem !important;
+    font-style: italic;
+}
+
+.delete-modal .modal-footer {
+    background: #f8f9fa;
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    border-top: 1px solid #e9ecef;
+}
+
+.btn-cancel-delete {
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    min-width: 100px;
+}
+
+.btn-cancel-delete:hover {
+    background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 123, 255, 0.3);
+}
+
+.btn-confirm-delete {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    min-width: 100px;
+}
+
+.btn-confirm-delete:hover {
+    background: linear-gradient(135deg, #c82333 0%, #a71e2a 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(220, 53, 69, 0.3);
+}
+
+.btn-confirm-delete:disabled,
+.btn-cancel-delete:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
 }

@@ -1,6 +1,18 @@
 // Employee Dashboard JavaScript
+import { resizeWindow } from "../utils/windowUtils.js";
+import { clearCurrentUser } from '../utils/userState.js';
 
 document.addEventListener('DOMContentLoaded', function() {
+  // Logout functionality
+  const logoutButton = document.getElementById("logout-button");
+  if (logoutButton) {
+    logoutButton.addEventListener("click", () => {
+      clearCurrentUser();  // Clear the user state
+      resizeWindow(500, 600);
+      window.location.href = "../";
+    });
+  }
+
   // Get current user from localStorage (set during login)
   const currentUser = localStorage.getItem('currentUser') || 'Employee';
   
@@ -17,4 +29,4 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('completed-count').textContent = '2';
     document.getElementById('pending-count').textContent = '3';
   }, 500);
-}); 
+});

@@ -1,18 +1,28 @@
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
-// const { appWindow } = "@tauri-apps/api/window";
+const { getCurrentWindow } = window.__TAURI__.window;
 
-// const { appDir } = "@tauri-apps/api/path";
+// Utility functions (embedded to avoid import issues)
+async function resizeWindow(width, height) {
+  const appWindow = await getCurrentWindow();
+  await appWindow.setSize({ type: 'Logical', width, height });
+}
 
-// const { getCurrentWindow, LogicalSize } = window.__TAURI__.window;
-// const { event, window: tauriWindow, path } = window.__TAURI__;
+function clearCurrentUser() {
+    localStorage.removeItem('currentUser');
+}
 
-
-// const ajouter_un_employee_button = document.getElementById("ajouter-un-employee-button");
-
-// ajouter_un_employee_button.addEventListener("click", async () => {
-    
-// });
+// Logout functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const logoutButton = document.getElementById("logout-button");
+    if (logoutButton) {
+        logoutButton.addEventListener("click", () => {
+            clearCurrentUser();  // Clear the user state
+            resizeWindow(500, 600);
+            window.location.href = "../";
+        });
+    }
+});
 
 document.addEventListener('DOMContentLoaded', async function() {
     // Set initial amount to 0
@@ -160,7 +170,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     });
 
-    // Delegate click event for edit buttons
+    // Delegate click event for edit and delete buttons
     document.querySelector('table tbody').addEventListener('click', function(e) {
         if (e.target.closest('.edit-btn')) {
             const row = e.target.closest('tr');
@@ -181,34 +191,103 @@ document.addEventListener('DOMContentLoaded', async function() {
             // Show modal
             editModal.style.display = 'block';
         }
+        
+        // Handle delete button clicks
+        if (e.target.closest('.delete-btn')) {
+            const row = e.target.closest('tr');
+            const cells = row.querySelectorAll('td');
+            const employeeId = cells[0].textContent.trim();
+            const employeeName = cells[1].textContent.trim();
+            
+            deleteEmployee(e.target.closest('.delete-btn'), employeeId, employeeName);
+        }
     });
 
-    // Handle update button click (implement backend update logic as needed)
+    // Handle update button click with proper salary calculations
     updateButton.addEventListener('click', async function(e) {
         e.preventDefault();
-        // Collect updated values
+        
+        // Get basic values
+        const id = parseInt(document.getElementById('editId').value);
+        const nom_et_prenom = document.getElementById('editNomPrenom').value;
+        const prix_jour = parseFloat(document.getElementById('editPrixJour').value);
+        const nombre_des_jours = parseInt(document.getElementById('editNombreJours').value);
+        const nombreHeurx = parseFloat(document.getElementById('editNombreHeurx').value) || 0;
+        const travaux_attache = parseFloat(document.getElementById('editTravauxAttache').value) || 0;
+        const acompte = parseFloat(document.getElementById('editAcompte').value) || 0;
+        const observation = document.getElementById('editObservation').value;
+        
+        // Calculate derived values (same logic as in add employee)
+        const prix_hour = prix_jour / 8; // Prix de hour is prix de jour/8
+        const salaire = (prix_jour * nombre_des_jours) + (prix_hour * nombreHeurx) + travaux_attache;
+        const net_a_payer = salaire - acompte;
+        
+        // Create the updated employee object
         const updatedEmployee = {
-            id: document.getElementById('editId').value,
-            nom_et_prenom: document.getElementById('editNomPrenom').value,
-            prix_jour: parseFloat(document.getElementById('editPrixJour').value),
-            prix_hour: parseFloat(document.getElementById('editPrixHour').value),
-            nombre_des_jours: parseFloat(document.getElementById('editNombreJours').value),
-            nombreHeurx: parseFloat(document.getElementById('editNombreHeurx').value),
-            travaux_attache: document.getElementById('editTravauxAttache').value,
-            salaire: parseFloat(document.getElementById('editSalaire').value),
-            acompte: parseFloat(document.getElementById('editAcompte').value),
-            net_a_payer: parseFloat(document.getElementById('editNetAPayer').value),
-            observation: document.getElementById('editObservation').value
+            id: id, // ID is never changed, only used for WHERE clause
+            nom_et_prenom: nom_et_prenom,
+            prix_jour: prix_jour,
+            prix_hour: prix_hour,
+            nombre_des_jours: nombre_des_jours,
+            travaux_attache: travaux_attache,
+            salaire: salaire,
+            acompte: acompte,
+            net_a_payer: net_a_payer,
+            observation: observation
         };
+        
         try {
-            // Call backend to update employee (implement this in your backend)
+            // Call backend to update employee
             await invoke('update_employee', { employee: updatedEmployee });
             closeEditModal();
             await loadEmployees();
         } catch (error) {
-            alert('Erreur lors de la mise à jour de l\'employé.');
+            console.error('Update error:', error);
+            alert('Erreur lors de la mise à jour de l\'employé: ' + error);
         }
     });
+
+    // Add automatic calculation listeners for edit modal
+    function addEditModalCalculationListeners() {
+        const editPrixJour = document.getElementById('editPrixJour');
+        const editNombreJours = document.getElementById('editNombreJours');
+        const editNombreHeurx = document.getElementById('editNombreHeurx');
+        const editTravauxAttache = document.getElementById('editTravauxAttache');
+        const editAcompte = document.getElementById('editAcompte');
+        const editPrixHour = document.getElementById('editPrixHour');
+        const editSalaire = document.getElementById('editSalaire');
+        const editNetAPayer = document.getElementById('editNetAPayer');
+        
+        function calculateEditValues() {
+            const prixJour = parseFloat(editPrixJour.value) || 0;
+            const nombreJours = parseInt(editNombreJours.value) || 0;
+            const nombreHeurx = parseFloat(editNombreHeurx.value) || 0;
+            const travauxAttache = parseFloat(editTravauxAttache.value) || 0;
+            const acompte = parseFloat(editAcompte.value) || 0;
+            
+            // Calculate prix_hour (prix de jour / 8)
+            const prixHour = prixJour / 8;
+            editPrixHour.value = prixHour.toFixed(2);
+            
+            // Calculate salaire: (prix_jour * nombre_des_jours) + (prix_hour * nombre_heurx) + travaux_attache
+            const salaire = (prixJour * nombreJours) + (prixHour * nombreHeurx) + travauxAttache;
+            editSalaire.value = salaire.toFixed(2);
+            
+            // Calculate net_a_payer: salaire - acompte
+            const netAPayer = salaire - acompte;
+            editNetAPayer.value = netAPayer.toFixed(2);
+        }
+        
+        // Add event listeners to all relevant fields
+        editPrixJour.addEventListener('input', calculateEditValues);
+        editNombreJours.addEventListener('input', calculateEditValues);
+        editNombreHeurx.addEventListener('input', calculateEditValues);
+        editTravauxAttache.addEventListener('input', calculateEditValues);
+        editAcompte.addEventListener('input', calculateEditValues);
+    }
+    
+    // Call this function when the page loads
+    addEditModalCalculationListeners();
 
     // get the number of projects from the database AND insert them into the dropdown
     const projects = await invoke('get_project_names');
@@ -285,10 +364,10 @@ function updateEmployeeTable(employees) {
     
     let totalNetAPayer = 0;
     
-    employees.forEach((employee, index) => {
+    employees.forEach((employee) => {
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td>${index + 1}</td>
+            <td>${employee.id}</td>
             <td>${employee.nom_et_prenom}</td>
             <td>${employee.prix_jour}</td>
             <td>${employee.prix_hour}</td>
@@ -313,4 +392,106 @@ function updateEmployeeTable(employees) {
     
     // Update total Net a Payer in the balance section
     document.querySelector('.amount').textContent = totalNetAPayer.toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+// Delete employee function (global scope for onclick)
+async function deleteEmployee(button, employeeId, employeeName) {
+    showDeleteConfirmationModal(button, employeeId, employeeName);
+}
+
+// Function to show delete confirmation modal
+function showDeleteConfirmationModal(button, employeeId, employeeName) {
+    const modal = document.getElementById('deleteConfirmationModal');
+    const confirmBtn = document.getElementById('confirmDelete');
+    const cancelBtn = document.getElementById('cancelDelete');
+    const closeBtn = document.querySelector('.close-delete');
+    const confirmationText = document.getElementById('deleteConfirmationText');
+    
+    // Update confirmation text with employee name
+    confirmationText.textContent = `Êtes-vous sûr de vouloir supprimer l'employé "${employeeName}" ?`;
+    
+    // Show modal
+    modal.style.display = 'flex';
+    
+    // Handle confirm deletion
+    const handleConfirm = async () => {
+        try {
+            // Show loading state
+            const originalHTML = button.innerHTML;
+            button.innerHTML = '<div class="loading-spinner"></div>';
+            button.disabled = true;
+            
+            // Close modal first
+            modal.style.display = 'none';
+            
+            // Delete from database
+            await invoke('delete_employee', { employeeId: parseInt(employeeId) });
+            
+            // Remove row from table
+            const row = button.closest('tr');
+            row.remove();
+            
+            // Reload employees to update the table and total
+            await loadEmployees();
+            
+            // Show success message
+            const successMsg = document.createElement('div');
+            successMsg.textContent = 'Employé supprimé avec succès';
+            successMsg.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #27ae60;
+                color: white;
+                padding: 10px 20px;
+                border-radius: 6px;
+                z-index: 10000;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                animation: slideIn 0.3s ease;
+            `;
+            document.body.appendChild(successMsg);
+            
+            setTimeout(() => {
+                successMsg.remove();
+            }, 3000);
+            
+        } catch (error) {
+            console.error('Error deleting employee:', error);
+            
+            // Reset button state
+            button.innerHTML = originalHTML;
+            button.disabled = false;
+            
+            // Show error message
+            alert('Erreur lors de la suppression: ' + error);
+        }
+        
+        // Clean up event listeners
+        confirmBtn.removeEventListener('click', handleConfirm);
+        cancelBtn.removeEventListener('click', handleCancel);
+        closeBtn.removeEventListener('click', handleCancel);
+    };
+    
+    // Handle cancel deletion
+    const handleCancel = () => {
+        modal.style.display = 'none';
+        
+        // Clean up event listeners
+        confirmBtn.removeEventListener('click', handleConfirm);
+        cancelBtn.removeEventListener('click', handleCancel);
+        closeBtn.removeEventListener('click', handleCancel);
+    };
+    
+    // Add event listeners
+    confirmBtn.addEventListener('click', handleConfirm);
+    cancelBtn.addEventListener('click', handleCancel);
+    closeBtn.addEventListener('click', handleCancel);
+    
+    // Close modal when clicking outside
+    window.addEventListener('click', function closeOnOutsideClick(event) {
+        if (event.target === modal) {
+            handleCancel();
+            window.removeEventListener('click', closeOnOutsideClick);
+        }
+    });
 }

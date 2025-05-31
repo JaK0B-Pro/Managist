@@ -219,3 +219,19 @@ form button {
     margin-top: 10px;
 }
 
+/* Logout button styling */
+#logout-button {
+    margin-top: 20px;
+    padding: 10px;
+    background-color: #f44336;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    width: 100%;
+}
+
+#logout-button:hover {
+    background-color: #e53935;
+}
+

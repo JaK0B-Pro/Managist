@@ -1,5 +1,28 @@
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
+const { getCurrentWindow } = window.__TAURI__.window;
+
+// Utility functions (embedded to avoid import issues)
+async function resizeWindow(width, height) {
+  const appWindow = await getCurrentWindow();
+  await appWindow.setSize({ type: 'Logical', width, height });
+}
+
+function clearCurrentUser() {
+    localStorage.removeItem('currentUser');
+}
+
+// Logout functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const logoutButton = document.getElementById("logout-button");
+    if (logoutButton) {
+        logoutButton.addEventListener("click", () => {
+            clearCurrentUser();  // Clear the user state
+            resizeWindow(500, 600);
+            window.location.href = "../";
+        });
+    }
+});
 
 // // Liste des projets par défaut
 // const projects = [
@@ -81,15 +104,16 @@ document.getElementById('projectList').addEventListener('click', function(e) {
   // Check if the clicked element is a "Voir plus" button
   if (e.target.classList.contains('voir-plus-btn')) {
     const card = e.target.closest('.project-card');
-    const index = card.dataset.index;
-    window.location.href = "./buyers/chaqueProjetPage.html";
+    const deleteBtn = card.querySelector('.delete-btn');
+    const projectId = deleteBtn.getAttribute('data-project-id');
+    window.location.href = `./buyers/chaqueProjetPage.html?projectId=${projectId}`;
   }
   
   // Check if the clicked element is a delete button
   if (e.target.classList.contains('delete-btn') || e.target.closest('.delete-btn')) {
-    e.stopPropagation(); // Prevent event bubbling
+    e.stopPropagation();
     const deleteBtn = e.target.closest('.delete-btn');
-    const projectId = deleteBtn.getAttribute('data-project-id');
+    const projectId = deleteBtn.getAttribute('data-project-id') ;
     deleteProject(projectId);
   }
 });

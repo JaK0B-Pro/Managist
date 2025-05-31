@@ -4,9 +4,8 @@ const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig({
   // prevent vite from obscuring rust errors
-  clearScreen: false,
-  server: {
-    port: 1420,
+  clearScreen: false,  server: {
+    port: 1422,
     // Tauri expects a fixed port, fail if that port is not available
     strictPort: true,
     // if the host Tauri is expecting is set, use it
@@ -15,7 +14,7 @@ export default defineConfig({
       ? {
           protocol: 'ws',
           host,
-          port: 1421,
+          port: 1423,
         }
       : undefined,
 

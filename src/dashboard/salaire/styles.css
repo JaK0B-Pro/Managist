@@ -230,6 +230,12 @@ tbody tr:hover {
     z-index: 1000;
 }
 
+/* Delete confirmation modal flexbox centering */
+#deleteConfirmationModal {
+    align-items: center;
+    justify-content: center;
+}
+
 .modal-content {
     position: relative;
     background-color: #fff;
@@ -239,6 +245,19 @@ tbody tr:hover {
     border-radius: 12px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
     animation: modalFadeIn 0.3s ease;
+}
+
+/* Delete confirmation modal specific content styling */
+#deleteConfirmationModal .modal-content {
+    background-color: #fff;
+    padding: 0;
+    width: 500px;
+    max-width: 85%;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    animation: modalFadeIn 0.3s ease;
+    position: relative;
+    margin: auto;
 }
 
 @keyframes modalFadeIn {
@@ -267,15 +286,40 @@ tbody tr:hover {
     margin: 0;
 }
 
-.close {
+/* Delete confirmation modal specific header styling */
+#deleteConfirmationModal .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 20px 15px 20px;
+    border-bottom: 1px solid #e1e4e8;
+    margin-bottom: 0;
+    padding-bottom: 15px;
+}
+
+#deleteConfirmationModal .modal-header h2 {
+    color: #e24a4a;
+    font-size: 1.3rem;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+#deleteConfirmationModal .modal-header i {
+    color: #e24a4a;
+}
+
+.close, .close-delete {
     color: #666;
     font-size: 28px;
     font-weight: bold;
     cursor: pointer;
     transition: color 0.3s ease;
+    line-height: 1;
 }
 
-.close:hover {
+.close:hover, .close-delete:hover {
     color: #333;
 }
 
@@ -283,6 +327,45 @@ tbody tr:hover {
     max-height: 70vh;
     overflow-y: auto;
     padding: 10px 0;
+}
+
+/* Delete confirmation modal specific styling */
+#deleteConfirmationModal .modal-body {
+    padding: 20px;
+    text-align: center;
+}
+
+#deleteConfirmationModal .modal-body p {
+    margin: 0 0 10px 0;
+    color: #333;
+    font-size: 1rem;
+}
+
+#deleteConfirmationModal .modal-body p:last-child {
+    margin-bottom: 0;
+    color: #e24a4a;
+    font-weight: 600;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #e1e4e8;
+    gap: 10px;
+}
+
+/* Delete confirmation modal specific footer styling */
+#deleteConfirmationModal .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 15px 20px 20px 20px;
+    border-top: 1px solid #e1e4e8;
+    margin-top: 0;
+    padding-top: 0;
 }
 
 .form-group {
@@ -327,7 +410,10 @@ tbody tr:hover {
 }
 
 .cancel-btn, 
-.save-btn {
+.save-btn,
+.update-btn,
+.cancel-edit-btn,
+.confirm-delete-btn {
     padding: 10px 24px;
     border: none;
     border-radius: 8px;
@@ -337,22 +423,44 @@ tbody tr:hover {
     transition: all 0.3s ease;
 }
 
-.cancel-btn {
-    background-color: #ff4444;
-    color: white;
-}
-
-.save-btn {
+/* Edit modal buttons (normal order: cancel blue, update blue) */
+.cancel-btn, .cancel-edit-btn {
     background-color: #4a90e2;
     color: white;
 }
 
-.cancel-btn:hover {
+.save-btn, .update-btn {
+    background-color: #4a90e2;
+    color: white;
+}
+
+.cancel-btn:hover, .cancel-edit-btn:hover {
+    background-color: #357abd;
+    transform: translateY(-2px);
+}
+
+.save-btn:hover, .update-btn:hover {
+    background-color: #357abd;
+    transform: translateY(-2px);
+}
+
+/* Delete confirmation modal buttons (reversed order: delete red, cancel blue) */
+.confirm-delete-btn {
+    background-color: #ff4444;
+    color: white;
+}
+
+.confirm-delete-btn:hover {
     background-color: #cc0000;
     transform: translateY(-2px);
 }
 
-.save-btn:hover {
+#deleteConfirmationModal .cancel-btn {
+    background-color: #4a90e2;
+    color: white;
+}
+
+#deleteConfirmationModal .cancel-btn:hover {
     background-color: #357abd;
     transform: translateY(-2px);
 }
@@ -495,4 +603,88 @@ tbody tr:hover .action-buttons {
 .project-dropdown option {
     padding: 10px;
     font-size: 14px;
+}
+
+/* Logout button styling */
+#logout-button {
+    margin-top: 20px;
+    padding: 10px;
+    background-color: #f44336;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    width: 100%;
+}
+
+#logout-button:hover {
+    background-color: #e53935;
+}
+
+/* Loading spinner animation */
+.loading-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #333;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    display: inline-block;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Animation for success message */
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Delete confirmation button styling */
+.confirm-delete-btn {
+    background-color: #e24a4a;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.confirm-delete-btn:hover {
+    background-color: #bd3535;
+    transform: translateY(-1px);
+}
+
+.cancel-btn {
+    background-color: #007bff;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.cancel-btn:hover {
+    background-color: #0056b3;
 }

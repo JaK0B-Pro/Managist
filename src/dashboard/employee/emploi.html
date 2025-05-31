@@ -7,9 +7,18 @@
     <link rel="stylesheet" href="emploi.css">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 </head>
-<body>
-    <header class="worker-header">
+<body>    <header class="worker-header">
         <h1>Managist..</h1>
+        <div class="header-right">
+            <div class="profile-container">
+                <img id="profile-picture" src="../assets/ProfilePCicture.png" alt="Profile" class="profile-pic">
+                <div class="profile-dropdown" id="profile-dropdown">
+                    <a href="#" id="view-profile">View Profile</a>
+                    <a href="#" id="logout-link">Logout</a>
+                </div>
+            </div>
+            <button id="logout-button" class="header-logout-btn">Logout</button>
+        </div>
     </header>
 
     <main class="main-content">
@@ -130,9 +139,79 @@
         <button class="nav-btn" data-page="pay">
             <i class="material-icons">euro</i>
             Paie
-        </button>
-    </nav>
+        </button>    </nav>
+
+    <!-- Profile Modal -->
+    <div id="profile-modal" class="modal">
+        <div class="modal-content profile-modal">
+            <div class="modal-header">
+                <h2>Employee Profile</h2>
+                <span class="close-profile" id="close-profile">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="profile-section">
+                    <div class="profile-avatar">
+                        <img src="../assets/ProfilePicture.png" alt="Profile Picture" class="large-profile-pic">
+                        <button id="change-avatar" class="change-avatar-btn">Change Picture</button>
+                        <input type="file" id="avatar-upload" accept="image/*" style="display: none;">
+                    </div>
+                    <div class="profile-info">
+                        <h3 id="employee-name">Employee Name</h3>
+                        <p id="employee-email">employee@company.com</p>
+                        <p id="employee-role">Employee</p>
+                    </div>
+                </div>
+                
+                <div class="password-reset-section">
+                    <h3>Reset Password</h3>
+                    <form id="password-reset-form">
+                        <div class="form-group">
+                            <label for="current-password">Current Password:</label>
+                            <div class="password-input-container">
+                                <input type="password" id="current-password" required>
+                                <button type="button" class="toggle-password" data-target="current-password">
+                                    <i class="material-icons">visibility</i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="new-password">New Password:</label>
+                            <div class="password-input-container">
+                                <input type="password" id="new-password" required minlength="6">
+                                <button type="button" class="toggle-password" data-target="new-password">
+                                    <i class="material-icons">visibility</i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="confirm-password">Confirm New Password:</label>
+                            <div class="password-input-container">
+                                <input type="password" id="confirm-password" required minlength="6">
+                                <button type="button" class="toggle-password" data-target="confirm-password">
+                                    <i class="material-icons">visibility</i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="password-strength" id="password-strength"></div>
+                        <div class="form-actions">
+                            <button type="submit" id="reset-password-btn" class="btn-primary">Reset Password</button>
+                            <button type="button" id="cancel-reset" class="btn-secondary">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Success/Error Messages -->
+    <div id="message-toast" class="toast hidden">
+        <div class="toast-content">
+            <span id="toast-message"></span>
+            <button id="close-toast">&times;</button>
+        </div>
+    </div>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="emploi.js"></script>
+    <script type="module" src="emploi.js" defer></script>
 </body>
 </html>

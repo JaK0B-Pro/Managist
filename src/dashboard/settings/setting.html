@@ -11,14 +11,14 @@
 
     <!-- 🌍 Barre latérale -->
     <div class="sidebar">
-        <h2><i class="fas fa-cogs"></i>Managist</h2>
-        <ul>
+        <h2><i class="fas fa-cogs"></i>Managist</h2>        <ul>
             <li><a href="../index.html"><i class="fas fa-home"></i> Dashboard</a></li>
             <li><a href="../salaire/salaire.html"><i class="fas fa-home"></i>Salary</a></li>
             <li><a href="../projects/project.html"><i class="fas fa-tasks"></i> Projects</a></li>
             <li><a href="../analytics/analytics.html"><i class="fas fa-chart-bar"></i> Analytics</a></li>
             <li class="active"><a href="./setting.html"><i class="fas fa-cog"></i> Settings</a></li>
         </ul>
+        <button id="logout-button">Logout</button>
     </div>
 
     <!-- 🛠️ Contenu principal -->
@@ -108,9 +108,9 @@
                 userMessage.innerHTML = "<i class='fas fa-user'></i> You: " + message;
                 chatBox.appendChild(userMessage);
                 input.value = "";
-            }
-        }
+            }        }
     </script>
+    <script type="module" src="setting.js" defer></script>
 
 </body>
 </html>

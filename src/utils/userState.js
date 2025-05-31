@@ -1,9 +1,17 @@
 let currentUser = null;
 
 export function setCurrentUser(username) {
-    currentUser = username;
-    // You can also store it in localStorage for persistence
-    localStorage.setItem('currentUser', username);
+    // Create a proper user object instead of just storing the username string
+    const userObject = {
+        username: username,
+        email: username + '@company.com',
+        role: 'Employee',
+        password: 'defaultPassword123' // Default password for demo
+    };
+    
+    currentUser = userObject;
+    // Store the complete user object as JSON
+    localStorage.setItem('currentUser', JSON.stringify(userObject));
 }
 
 export function getCurrentUser() {
@@ -13,8 +21,24 @@ export function getCurrentUser() {
     // If not in memory, try to get from localStorage
     const storedUser = localStorage.getItem('currentUser');
     if (storedUser) {
-        currentUser = storedUser;
-        return storedUser;
+        try {
+            // Try to parse as JSON first
+            const userObject = JSON.parse(storedUser);
+            currentUser = userObject;
+            return userObject;
+        } catch (error) {
+            // If it's not JSON, assume it's just a username string and convert it
+            const userObject = {
+                username: storedUser,
+                email: storedUser + '@company.com',
+                role: 'Employee',
+                password: 'defaultPassword123'
+            };
+            currentUser = userObject;
+            // Update localStorage with the proper format
+            localStorage.setItem('currentUser', JSON.stringify(userObject));
+            return userObject;
+        }
     }
     
     return null;
@@ -23,4 +47,4 @@ export function getCurrentUser() {
 export function clearCurrentUser() {
     currentUser = null;
     localStorage.removeItem('currentUser');
-} 
+}
