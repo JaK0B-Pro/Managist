@@ -18,7 +18,6 @@
                 <li><a href="../index.html">Dashboard</a></li>
                 <li><a href="./salaire.html">Salary</a></li>
                 <li><a href="../projects/project.html">Projects</a></li>
-                <li><a href="../analytics/analytics.html">Analytics</a></li>
                 <li><a href="../settings/setting.html">Settings</a></li>
             </ul>
             <button id="logout-button">Logout</button>
@@ -203,6 +202,78 @@
             </div>        </div>
     </div>
 
+    <!-- Mode de Saisir Modal -->
+    <div id="modeDeSaisirModal" class="modal">
+        <div class="modal-content mode-saisir-content">
+            <div class="modal-header">
+                <h2>Mode de Saisir</h2>
+                <span class="close-mode-saisir">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form id="modeDeSaisirForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="modeSaisirNomPrenom">Nom et Prénom</label>
+                            <div class="autocomplete-container">
+                                <input type="text" id="modeSaisirNomPrenom" required autocomplete="off">
+                                <div id="autocomplete-list" class="autocomplete-items"></div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="modeSaisirPrixJour">Prix de Jours</label>
+                            <input type="number" id="modeSaisirPrixJour">
+                        </div>
+                        <div class="form-group">
+                            <label for="modeSaisirPrixHour">Prix de Hour</label>
+                            <input type="number" id="modeSaisirPrixHour" readonly>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="modeSaisirNombreJours">Nombre des Jours</label>
+                            <input type="number" id="modeSaisirNombreJours">
+                        </div>
+                        <div class="form-group">
+                            <label for="modeSaisirNombreHeurx">Nombre des Heurx</label>
+                            <input type="number" id="modeSaisirNombreHeurx">
+                        </div>
+                        <div class="form-group">
+                            <label for="modeSaisirTravauxAttache">Travaux Attaché</label>
+                            <input type="text" id="modeSaisirTravauxAttache">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="modeSaisirSalaire">Salaire</label>
+                            <input type="number" id="modeSaisirSalaire" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label for="modeSaisirAcompte">Acompte</label>
+                            <input type="number" id="modeSaisirAcompte">
+                        </div>
+                        <div class="form-group">
+                            <label for="modeSaisirNetAPayer">Net à Payer</label>
+                            <input type="number" id="modeSaisirNetAPayer" readonly>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group full-width">
+                            <label for="modeSaisirObservation">Observation</label>
+                            <textarea id="modeSaisirObservation"></textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="cancel-mode-saisir-btn">Annuler</button>
+                <button class="save-mode-saisir-btn">Mettre à jour</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Delete Confirmation Modal -->
     <div id="deleteConfirmationModal" class="modal">
         <div class="modal-content">
@@ -219,6 +290,21 @@
                     <i class="fas fa-trash"></i> Supprimer
                 </button>
                 <button class="cancel-btn" id="cancelDelete">Annuler</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Success Modal -->
+    <div id="updateSuccessModal" class="modal">
+        <div class="modal-content success-modal">
+            <div class="modal-header success-header">
+                <h2><i class="fas fa-check-circle"></i> Succès</h2>
+            </div>
+            <div class="modal-body">
+                <p>L'employé a été mis à jour avec succès!</p>
+            </div>
+            <div class="modal-footer">
+                <button class="success-ok-btn" id="successOk">OK</button>
             </div>
         </div>
     </div>

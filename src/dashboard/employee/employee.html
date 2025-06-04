@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Managist - Présences & Chat</title>
+    <title>Managist - Employee Dashboard</title>
     <link rel="stylesheet" href="emploi.css">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 </head>
 <body>
     <header class="worker-header">
-        <h1>Managist..</h1>
+        <h1>Managist</h1>
         <div class="header-right">
             <div class="profile-container">
                 <img id="profile-picture" src="../assets/ProfilePicture.png" alt="Profile" class="profile-pic">
@@ -23,21 +23,23 @@
     </header>
 
     <main class="main-content">
-        <!-- Section Agenda (visible par défaut) -->
+        <!-- Section Agenda (visible by default) -->
         <section class="timecard home">
             <h2>Agenda des Présences</h2>
             <div class="calendar-controls">
                 <button id="prevMonth">&lt;</button>
-                <h3 id="currentMonth"></h3>
+                <h3 id="currentMonth">Loading...</h3>
                 <button id="nextMonth">&gt;</button>
             </div>
-            <div class="calendar-grid" id="calendar"></div>
+            <div class="calendar-grid" id="calendar">
+                <div class="day">Loading calendar...</div>
+            </div>
             <div class="calendar-legend">
                 <div><span class="legend-present"></span> Présent</div>
                 <div><span class="legend-absent"></span> Absent</div>
                 <div><span class="legend-future"></span> À venir</div>
             </div>
-            <!-- Ajouter cette section après le calendrier -->
+            
             <div class="salary-summary">
                 <h3>Résumé Financier</h3>
                 <div class="summary-content">
@@ -57,7 +59,7 @@
             </div>
         </section>
 
-        <!-- Section Paie (cachée) -->
+        <!-- Section Paie (hidden by default) -->
         <section class="pay" style="display: none;">
             <h2>Votre Paie</h2>
             

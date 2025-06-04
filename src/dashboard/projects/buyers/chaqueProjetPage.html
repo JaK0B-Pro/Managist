@@ -14,7 +14,6 @@
             <li><a href="../../index.html">Dashboard</a></li>
             <li><a href="../../salaire/salaire.html">Salary</a></li>
             <li><a href="../../projects/project.html">Projects</a></li>
-            <li><a href="../../analytics/analytics.html">Analytics</a></li>
             <li><a href="../../settings/setting.html">Settings</a></li>
         </ul>
         <button id="logout-button">Logout</button>
@@ -35,9 +34,20 @@
         </div>
     </div>
     
-    <div class="table-info">
-        <span id="buyerCount">Total Buyers: 0</span>
-        <span id="filteredCount" style="display: none;">Showing: 0 results</span>
+    <!-- Bloc Tabs positioned directly above the table -->
+    <div class="bloc-tabs-container">
+        <div class="table-info">
+            <span id="buyerCount">Total Buyers: 0</span>
+            <span id="filteredCount" style="display: none;">Showing: 0 results</span>
+        </div>
+        <div class="bloc-tabs" id="blocTabs">
+            <button class="tab-btn active" data-bloc="all">
+                <i class="fas fa-layer-group"></i>
+                Tous les Blocs
+                <span class="bloc-stats"></span>
+            </button>
+            <!-- Dynamic tabs will be added here -->
+        </div>
     </div>
     <div class="table-container">
         <table id="buyersTable">
@@ -60,64 +70,54 @@
             <form id="addBuyerForm">
                 <div class="form-row">
                     <div class="form-group">
+                        <label for="bloc">BLOC</label>
+                        <select id="bloc" required>
+                            <option value="">Select Bloc</option>
+                            <!-- Options will be populated dynamically -->
+                        </select>
+                    </div>
+                    <div class="form-group">
                         <label for="niveau">NIVEAU</label>
                         <input type="text" id="niveau" required>
                     </div>
+                </div>
+                <div class="form-row">
                     <div class="form-group">
                         <label for="logtNum">N° LOGT</label>
                         <input type="text" id="logtNum" required>
                     </div>
-                </div>
-                <div class="form-row">
                     <div class="form-group">
                         <label for="nom">NOM</label>
                         <input type="text" id="nom" required>
                     </div>
+                </div>
+                <div class="form-row">
                     <div class="form-group">
                         <label for="prenom">PRENOM</label>
                         <input type="text" id="prenom" required>
                     </div>
-                </div>
-                <div class="form-row">
                     <div class="form-group">
                         <label for="typeLogt">TYPE LOGT</label>
                         <input type="text" id="typeLogt" required>
                     </div>
+                </div>
+                <div class="form-row">
                     <div class="form-group">
                         <label for="surface">SURFACE</label>
                         <input type="text" id="surface" required>
                     </div>
-                </div>
-                <div class="form-row">
                     <div class="form-group">
                         <label for="date">DATE</label>
                         <input type="date" id="date" required>
                     </div>
+                </div>
+                <div class="form-row">
                     <div class="form-group">
                         <label for="prixTotale">PRIX TOTALE</label>
                         <input type="number" id="prixTotale" required>
                     </div>
                 </div>
-                <!-- <div class="form-row">
-                    <div class="form-group">
-                        <label for="prixTotaleMoy">PRIX TOTALE/MOY</label>
-                        <input type="number" id="prixTotaleMoy" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="prixTotaleMax">PRIX TOTALE/MAX</label>
-                        <input type="number" id="prixTotaleMax" required>
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="ndEspeMoy">ND /ESPE./MOY</label>
-                        <input type="text" id="ndEspeMoy" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="ndEspeMax">ND /ESPE./MAX</label>
-                        <input type="text" id="ndEspeMax" required>
-                    </div>
-                </div> -->
+                
                 <div class="form-row">
                     <div class="form-group">
                         <label for="remise">REMISE (%)</label>
@@ -131,8 +131,7 @@
                     <div id="tranchesContainer">
                         <div class="tranche-row">
                             <label>T0:</label>
-                            <input type="number" step="0.01" min="0" name="tranche_0" 
-                                   placeholder="Enter amount for T0" oninput="calculateTotalPaid()">
+                            <input type="number" step="0.01" min="0" name="tranche_0" placeholder="Enter amount for T0" oninput="calculateTotalPaid()">
                             <button type="button" class="btn-remove-tranche" onclick="removeTranche(this)" style="display: none;">×</button>
                         </div>
                     </div>

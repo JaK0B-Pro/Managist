@@ -57,7 +57,9 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // open modal when modeDeSaisier button is clicked
     modeDeSaisierButton.addEventListener('click', function() {
-        modal.style.display = 'block';
+        // Open the mode de saisir modal instead of the regular add modal
+        const modeDeSaisirModal = document.getElementById('modeDeSaisirModal');
+        modeDeSaisirModal.style.display = 'block';
     });
 
 
@@ -98,7 +100,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             const nombre_des_jours = parseFloat(document.getElementById('nombreJours').value);
             const nombreHeurx = parseFloat(document.getElementById('nombreHeurx').value);
             const travaux_attache = parseInt(document.getElementById('travauxAttache').value) || 0;
-            const salaire = (prix_jour * nombre_des_jours) + (prix_hour * nombreHeurx);
+            const salaire = (prix_jour * nombre_des_jours) + (prix_hour * nombreHeurx) + travaux_attache;
             const acompte = parseFloat(document.getElementById('acompte').value);
             const net_a_payer = salaire - acompte;
             const observation = document.getElementById('observation').value;
@@ -289,21 +291,274 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Call this function when the page loads
     addEditModalCalculationListeners();
 
-    // get the number of projects from the database AND insert them into the dropdown
-    const projects = await invoke('get_project_names');
-    const projectDropdown = document.getElementById('project-selector');
-    projectDropdown.innerHTML = ''; // Clear existing options
-    const defaultOption = document.createElement('option');
-    defaultOption.value = 'administration';
-    defaultOption.textContent = 'Administration';
-    defaultOption.selected = true;
-    projectDropdown.appendChild(defaultOption);
-    projects.forEach(project => {
-        const option = document.createElement('option');
-        option.value = project.id;
-        option.textContent = project.name;
-        projectDropdown.appendChild(option);
+    // Mode de Saisir Modal functionality
+    const modeDeSaisirModal = document.getElementById('modeDeSaisirModal');
+    const closeModeSaisirButton = document.querySelector('.close-mode-saisir');
+    const cancelModeSaisirButton = document.querySelector('.cancel-mode-saisir-btn');
+    const saveModeSaisirButton = document.querySelector('.save-mode-saisir-btn');
+    const modeDeSaisirForm = document.getElementById('modeDeSaisirForm');
+
+    // Close mode de saisir modal functions
+    function closeModeDeSaisirModal() {
+        modeDeSaisirModal.style.display = 'none';
+        clearAutocomplete();
+        window.selectedEmployeeId = null; // Reset selected employee when closing
+    }
+
+    closeModeSaisirButton.addEventListener('click', closeModeDeSaisirModal);
+    cancelModeSaisirButton.addEventListener('click', function(e) {
+        e.preventDefault();
+        closeModeDeSaisirModal();
     });
+
+    window.addEventListener('click', function(event) {
+        if (event.target === modeDeSaisirModal) {
+            closeModeDeSaisirModal();
+        }
+    });
+
+    // Autocomplete functionality for names
+    let employeeNames = [];
+    
+    async function loadEmployeeNames() {
+        try {
+            const employees = await invoke('get_all_employees');
+            employeeNames = employees.map(emp => emp.nom_et_prenom);
+        } catch (error) {
+            console.error("Error loading employee names:", error);
+        }
+    }
+
+    function setupAutocomplete() {
+        const input = document.getElementById('modeSaisirNomPrenom');
+        const autocompleteList = document.getElementById('autocomplete-list');
+        let currentFocus = -1;
+
+        input.addEventListener('input', function() {
+            const value = this.value;
+            clearAutocomplete();
+            if (!value) return;
+            
+            currentFocus = -1;
+            const filteredNames = employeeNames.filter(name => 
+                name.toLowerCase().includes(value.toLowerCase())
+            );
+
+            if (filteredNames.length > 0) {
+                filteredNames.forEach((name, index) => {
+                    const item = document.createElement('div');
+                    const matchIndex = name.toLowerCase().indexOf(value.toLowerCase());
+                    const beforeMatch = name.substr(0, matchIndex);
+                    const match = name.substr(matchIndex, value.length);
+                    const afterMatch = name.substr(matchIndex + value.length);
+                    
+                    item.innerHTML = beforeMatch + '<strong>' + match + '</strong>' + afterMatch;
+                    item.addEventListener('click', function() {
+                        input.value = name;
+                        clearAutocomplete();
+                        
+                        // Auto-fill data if employee exists
+                        fillEmployeeData(name);
+                    });
+                    autocompleteList.appendChild(item);
+                });
+            }
+        });
+
+        input.addEventListener('keydown', function(e) {
+            const items = autocompleteList.getElementsByTagName('div');
+            if (e.keyCode === 40) { // Arrow Down
+                currentFocus++;
+                addActive(items);
+            } else if (e.keyCode === 38) { // Arrow Up
+                currentFocus--;
+                addActive(items);
+            } else if (e.keyCode === 13) { // Enter
+                e.preventDefault();
+                if (currentFocus > -1 && items[currentFocus]) {
+                    items[currentFocus].click();
+                }
+            }
+        });
+
+        function addActive(items) {
+            if (!items) return;
+            removeActive(items);
+            if (currentFocus >= items.length) currentFocus = 0;
+            if (currentFocus < 0) currentFocus = items.length - 1;
+            items[currentFocus].classList.add('autocomplete-active');
+        }
+
+        function removeActive(items) {
+            for (let item of items) {
+                item.classList.remove('autocomplete-active');
+            }
+        }
+    }
+
+    function clearAutocomplete() {
+        const autocompleteList = document.getElementById('autocomplete-list');
+        autocompleteList.innerHTML = '';
+    }
+
+    async function fillEmployeeData(name) {
+        // Store the selected employee ID for updating, but don't fill the fields
+        try {
+            const employees = await invoke('get_all_employees');
+            const employee = employees.find(emp => emp.nom_et_prenom === name);
+            
+            if (employee) {
+                // Store the employee ID for later update, but keep fields blank
+                window.selectedEmployeeId = employee.id;
+                // Don't fill any fields - let user enter new values
+            }
+        } catch (error) {
+            console.error("Error finding employee:", error);
+        }
+    }
+
+    // Automatic calculation functionality for mode de saisir
+    function addModeSaisirCalculationListeners() {
+        const prixJour = document.getElementById('modeSaisirPrixJour');
+        const nombreJours = document.getElementById('modeSaisirNombreJours');
+        const nombreHeurx = document.getElementById('modeSaisirNombreHeurx');
+        const travauxAttache = document.getElementById('modeSaisirTravauxAttache');
+        const acompte = document.getElementById('modeSaisirAcompte');
+        const prixHour = document.getElementById('modeSaisirPrixHour');
+        const salaire = document.getElementById('modeSaisirSalaire');
+        const netAPayer = document.getElementById('modeSaisirNetAPayer');
+        
+        function calculateModeSaisirValues() {
+            const prixJourVal = parseFloat(prixJour.value) || 0;
+            const nombreJoursVal = parseInt(nombreJours.value) || 0;
+            const nombreHeurxVal = parseFloat(nombreHeurx.value) || 0;
+            const travauxAttacheVal = parseFloat(travauxAttache.value) || 0;
+            const acompteVal = parseFloat(acompte.value) || 0;
+            
+            // Calculate prix_hour (prix de jour / 8)
+            const prixHourVal = prixJourVal / 8;
+            prixHour.value = prixHourVal.toFixed(2);
+            
+            // Calculate salaire: (prix_jour * nombre_des_jours) + (prix_hour * nombre_heurx) + travaux_attache
+            const salaireVal = (prixJourVal * nombreJoursVal) + (prixHourVal * nombreHeurxVal) + travauxAttacheVal;
+            salaire.value = salaireVal.toFixed(2);
+            
+            // Calculate net_a_payer: salaire - acompte
+            const netAPayerVal = salaireVal - acompteVal;
+            netAPayer.value = netAPayerVal.toFixed(2);
+        }
+        
+        // Add event listeners to all relevant fields
+        prixJour.addEventListener('input', calculateModeSaisirValues);
+        nombreJours.addEventListener('input', calculateModeSaisirValues);
+        nombreHeurx.addEventListener('input', calculateModeSaisirValues);
+        travauxAttache.addEventListener('input', calculateModeSaisirValues);
+        acompte.addEventListener('input', calculateModeSaisirValues);
+        
+        // Store function globally for external access
+        window.calculateModeSaisirValues = calculateModeSaisirValues;
+    }
+
+    // Handle save button for mode de saisir
+    saveModeSaisirButton.addEventListener('click', async function(e) {
+        e.preventDefault();
+        
+        // Check if an employee is selected
+        if (!window.selectedEmployeeId) {
+            alert("Veuillez sélectionner un employé à modifier.");
+            return;
+        }
+        
+        try {
+            // First, get the current employee data from database
+            const employees = await invoke('get_all_employees');
+            const currentEmployee = employees.find(emp => emp.id === window.selectedEmployeeId);
+            
+            if (!currentEmployee) {
+                alert("Employé introuvable dans la base de données.");
+                return;
+            }
+            
+            // Start with current employee data
+            const updatedEmployee = { ...currentEmployee };
+            
+            // Update only the fields that have new values
+            const nom_et_prenom = document.getElementById('modeSaisirNomPrenom').value;
+            if (nom_et_prenom && nom_et_prenom.trim() !== '') {
+                updatedEmployee.nom_et_prenom = nom_et_prenom.trim();
+            }
+            
+            const prixJourVal = document.getElementById('modeSaisirPrixJour').value;
+            if (prixJourVal && prixJourVal.trim() !== '') {
+                updatedEmployee.prix_jour = parseFloat(prixJourVal);
+                updatedEmployee.prix_hour = parseFloat(prixJourVal) / 8;
+            }
+            
+            const nombreJoursVal = document.getElementById('modeSaisirNombreJours').value;
+            if (nombreJoursVal && nombreJoursVal.trim() !== '') {
+                updatedEmployee.nombre_des_jours = parseInt(nombreJoursVal);
+            }
+            
+            const nombreHeurxVal = document.getElementById('modeSaisirNombreHeurx').value;
+            if (nombreHeurxVal && nombreHeurxVal.trim() !== '') {
+                updatedEmployee.nombre_des_heurx = parseFloat(nombreHeurxVal);
+            }
+            
+            const travauxAttacheVal = document.getElementById('modeSaisirTravauxAttache').value;
+            if (travauxAttacheVal && travauxAttacheVal.trim() !== '') {
+                updatedEmployee.travaux_attache = parseFloat(travauxAttacheVal);
+            }
+            
+            const acompteVal = document.getElementById('modeSaisirAcompte').value;
+            if (acompteVal && acompteVal.trim() !== '') {
+                updatedEmployee.acompte = parseFloat(acompteVal);
+            }
+            
+            const observationVal = document.getElementById('modeSaisirObservation').value;
+            if (observationVal && observationVal.trim() !== '') {
+                updatedEmployee.observation = observationVal.trim();
+            }
+            
+            // Ensure all numeric fields have valid values for calculation
+            const prixJour = updatedEmployee.prix_jour || 0;
+            const prixHour = updatedEmployee.prix_hour || 0;
+            const nombreJours = updatedEmployee.nombre_des_jours || 0;
+            const nombreHeurx = updatedEmployee.nombre_des_heurx || 0;
+            const travauxAttache = updatedEmployee.travaux_attache || 0;
+            const acompte = updatedEmployee.acompte || 0;
+            
+            // Recalculate salary with updated values
+            const salaire = (prixJour * nombreJours) + (prixHour * nombreHeurx) + travauxAttache;
+            updatedEmployee.salaire = salaire;
+            updatedEmployee.net_a_payer = salaire - acompte;
+
+            // Call Tauri command to update employee
+            await invoke('update_employee', { employee: updatedEmployee });
+
+            // Reset form and close modal
+            modeDeSaisirForm.reset();
+            closeModeDeSaisirModal();
+            window.selectedEmployeeId = null; // Reset selected employee
+
+            // Reload employees from database
+            await loadEmployees();
+            await loadEmployeeNames(); // Refresh autocomplete data
+            
+            // Show success modal instead of alert
+            showSuccessModal();
+            
+        } catch (error) {
+            console.error("Error updating employee:", error);
+            alert("Erreur lors de la mise à jour de l'employé: " + error);
+        }
+    });
+
+    // Initialize mode de saisir functionality
+    addModeSaisirCalculationListeners();
+    await loadEmployeeNames();
+    setupAutocomplete();
+
+    // ...existing code...
 });
 
 // Function to load employees from database and insert them into the table
@@ -372,7 +627,7 @@ function updateEmployeeTable(employees) {
             <td>${employee.prix_jour}</td>
             <td>${employee.prix_hour}</td>
             <td>${employee.nombre_des_jours}</td>
-            <td>0</td>
+            <td>${employee.nombre_des_heurx || 0}</td>
             <td>${employee.travaux_attache}</td>
             <td>${employee.salaire}</td>
             <td>${employee.acompte}</td>
@@ -492,6 +747,30 @@ function showDeleteConfirmationModal(button, employeeId, employeeName) {
         if (event.target === modal) {
             handleCancel();
             window.removeEventListener('click', closeOnOutsideClick);
+        }
+    });
+}
+
+// Success Modal Functions
+function showSuccessModal() {
+    const successModal = document.getElementById('updateSuccessModal');
+    const successOkBtn = document.getElementById('successOk');
+    
+    successModal.style.display = 'flex';
+    
+    // Handle OK button click
+    const handleOk = () => {
+        successModal.style.display = 'none';
+        successOkBtn.removeEventListener('click', handleOk);
+    };
+    
+    successOkBtn.addEventListener('click', handleOk);
+    
+    // Close on outside click
+    window.addEventListener('click', function closeSuccessOnOutside(event) {
+        if (event.target === successModal) {
+            successModal.style.display = 'none';
+            window.removeEventListener('click', closeSuccessOnOutside);
         }
     });
 }

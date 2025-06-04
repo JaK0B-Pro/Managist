@@ -144,41 +144,6 @@ header h1 {
     color: white;
     border-radius: 4px;
 }
-.analytics-card {
-    background: white;
-    padding: 20px;
-    border-radius: 10px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-    max-width: 600px;
-}
-
-.analytics-card h2 {
-    font-size: 18px;
-    margin-bottom: 10px;
-}
-
-.analytics-bar {
-    margin: 15px 0;
-}
-
-.analytics-bar span {
-    display: block;
-    font-weight: bold;
-    margin-bottom: 5px;
-}
-
-.analytics-bar .bar {
-    width: 100%;
-    height: 10px;
-    background: #ddd;
-    border-radius: 5px;
-}
-
-.analytics-bar .fill {
-    height: 100%;
-    background: #007bff;
-    border-radius: 5px;
-}
 * {
     margin: 0;
     padding: 0;

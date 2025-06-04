@@ -2,17 +2,34 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Managist - Présences & Chat</title>
+              <d            <div class="pay-details">
+                <div class="detail-item">
+                    <span>Salaire Brut</span>
+                    <span id="gross-salary">3 450,00 DA</span>
+                </div>                <span>Salaire</span>
+                    <span id="gross-salary">0.00 DA</span>class="pay-details">
+                <div class="detail-item">
+                    <span>Salaire</span>
+                    <span id="gross-salary">0.00 DA</span>
+                </div>
+                <div class="detail-item deduction">
+                    <span>Cotisations Sociales</span>
+                    <span id="social-contributions">- 0.00 DA</span>
+                </div>
+                <div class="detail-item deduction">
+                    <span>Acompte</span>
+                    <span id="acompte-amount">- 0.00 DA</span>
+                </div>
+            </div>viewport" content="width=device-width, initial-scale=1.0">
+    <title>Managist- Présences & Chat</title>
     <link rel="stylesheet" href="emploi.css">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 </head>
-<body>
-    <header class="worker-header">
+<body>    <header class="worker-header">
         <h1>Managist..</h1>
         <div class="header-right">
             <div class="profile-container">
-                <img id="profile-picture" src="../assets/ProfilePicture.png" alt="Profile" class="profile-pic">
+                <img id="profile-picture" src="../assets/ProfilePCicture.png" alt="Profile" class="profile-pic">
                 <div class="profile-dropdown" id="profile-dropdown">
                     <a href="#" id="view-profile">View Profile</a>
                     <a href="#" id="logout-link">Logout</a>
@@ -38,34 +55,34 @@
                 <div><span class="legend-future"></span> À venir</div>
             </div>
             <!-- Ajouter cette section après le calendrier -->
-            <div class="salary-summary">
-                <h3>Résumé Financier</h3>
-                <div class="summary-content">
-                    <div class="summary-item">
-                        <span>Jours Travaillés:</span>
-                        <span id="workedDays">0</span>
-                    </div>
-                    <div class="summary-item">
-                        <span>Jours Absents:</span>
-                        <span id="absentDays">0</span>
-                    </div>
-                    <div class="summary-item total">
-                        <span>Salaire Mensuel:</span>
-                        <span id="monthSalary">0.00 DA</span>
-                    </div>
-                </div>
-            </div>
+<div class="salary-summary">
+    <h3>Résumé Financier</h3>
+    <div class="summary-content">
+        <div class="summary-item">
+            <span>Jours Travaillés:</span>
+            <span id="workedDays">0</span>
+        </div>
+        <div class="summary-item">
+            <span>Jours Absents:</span>
+            <span id="absentDays">0</span>
+        </div>
+        <div class="summary-item total">
+            <span>Salaire Mensuel:</span>
+            <span id="monthSalary">0.00 DA</span>
+        </div>
+    </div>
+</div>
         </section>
+
+       
 
         <!-- Section Paie (cachée) -->
         <section class="pay" style="display: none;">
             <h2>Votre Paie</h2>
             
             <div class="pay-summary">
-                <div class="summary-card">
-                    <h3 id="pay-period-title">Salaire Net Juin 2025</h3>
-                    <div class="amount" id="pay-amount">0.00 DA</div>
-                    <div class="details">
+                <div class="summary-card">                    <h3 id="pay-period-title">Salaire Net Juin 2025</h3>
+                    <div class="amount" id="pay-amount">0.00 DA</div>                    <div class="details">
                         <span id="pay-period">➤ Période: 01/06 - 30/06</span>
                         <span id="pay-hours">➤ Heures: 0h</span>
                     </div>
@@ -75,19 +92,15 @@
             <div class="pay-details">
                 <div class="detail-item">
                     <span>Salaire Brut</span>
-                    <span id="gross-salary">3 450,00 DA</span>
+                    <span>3 450,00 DA</span>
                 </div>
-                <div class="detail-item deduction">
-                    <span>Cotisations Sociales</span>
+                <div class="detail-item deduction">                    <span>Cotisations Sociales</span>
                     <span id="social-contributions">- 0.00 DA</span>
                 </div>
-                <div class="detail-item deduction">
-                    <span>Acompte</span>
+                <div class="detail-item deduction">                    <span>Acompte</span>
                     <span id="acompte-amount">- 0.00 DA</span>
                 </div>
-            </div>
-            
-            <div class="document-item">
+            </div>            <div class="document-item">
                 <span id="bulletin-title">Bulletin Juin 2025</span>
                 <button class="download-btn" onclick="generatePaySlip()">
                     <i class="material-icons">download</i>
@@ -95,8 +108,7 @@
                 </button>
             </div>
         </section>
-        
-        <!-- Chat -->
+         <!-- Chat -->
         <div class="chat-icon" id="chatIcon">
             <i class="material-icons">chat</i>
             <span class="chat-notification">2</span>
@@ -106,6 +118,7 @@
             <div class="chat-header">
                 <h4>Support RH</h4>
                 <div class="chat-controls">
+                    
                     <button class="chat-btn close-btn" id="closeChat" title="Fermer le chat">
                         &times;
                     </button>
@@ -125,6 +138,7 @@
                 </button>
             </div>
         </div>
+        
     </main>
 
     <!-- Navigation -->
@@ -137,8 +151,7 @@
         <button class="nav-btn" data-page="pay">
             <i class="material-icons">euro</i>
             Paie
-        </button>
-    </nav>
+        </button>    </nav>
 
     <!-- Profile Modal -->
     <div id="profile-modal" class="modal">

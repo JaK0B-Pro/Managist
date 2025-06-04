@@ -31,6 +31,67 @@ function getProjectIdFromUrl() {
 
 const PROJECT_ID = getProjectIdFromUrl();
 
+// Current selected bloc (null means "all blocs")
+let currentBloc = 'all';
+
+// Project bloc count for dynamic tabs
+let projectBlocCount = 0;
+
+// Helper function to convert number to letter (1=A, 2=B, etc.)
+function numberToLetter(num) {
+    return String.fromCharCode(65 + num - 1); // 65 is ASCII for 'A'
+}
+
+// Helper function to get bloc color
+function getBlocColor(bloc) {
+    const colors = {
+        'A': '#3498db', // Blue
+        'B': '#2ecc71', // Green  
+        'C': '#e74c3c', // Red
+        'D': '#f39c12', // Orange
+        'E': '#9b59b6', // Purple
+        'F': '#1abc9c', // Teal
+        'G': '#34495e', // Dark Gray
+        'H': '#e67e22', // Dark Orange
+        'I': '#16a085', // Dark Teal
+        'J': '#8e44ad'  // Dark Purple
+    };
+    return colors[bloc] || '#7f8c8d'; // Default gray for unknown blocs
+}
+
+// Populate bloc dropdown in form (global scope)
+async function populateBlocDropdown() {
+    const blocSelect = document.getElementById('bloc');
+    if (!blocSelect) return;
+    
+    // Ensure projectBlocCount is loaded if it's still 0
+    if (projectBlocCount === 0) {
+        try {
+            projectBlocCount = await invoke('get_project_bloc_count', { projectId: PROJECT_ID });
+        } catch (error) {
+            console.error('Error loading project bloc count:', error);
+            return;
+        }
+    }
+    
+    // Clear existing options except the first placeholder
+    blocSelect.innerHTML = '<option value="">Select Bloc</option>';
+    
+    // Add bloc options using letters (A, B, C...)
+    for (let i = 1; i <= projectBlocCount; i++) {
+        const blocLetter = numberToLetter(i);
+        const option = document.createElement('option');
+        option.value = blocLetter;
+        option.textContent = `Bloc ${blocLetter}`;
+        blocSelect.appendChild(option);
+    }
+    
+    // If we're on a specific bloc tab, pre-select it
+    if (currentBloc !== 'all') {
+        blocSelect.value = currentBloc;
+    }
+}
+
 // Tranche management functions
 function addTranche() {
     const tranchesContainer = document.getElementById('tranchesContainer');
@@ -204,9 +265,14 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // Function to update buyer count
-    function updateBuyerCount() {
-        const totalRows = tbody.getElementsByTagName('tr').length;
-        buyerCountEl.textContent = `Total Buyers: ${totalRows}`;
+    function updateBuyerCount(actualCount = null) {
+        if (actualCount !== null) {
+            buyerCountEl.textContent = `Total Buyers: ${actualCount}`;
+        } else {
+            // Count only actual buyer rows (exclude empty state and loading rows)
+            const buyerRows = tbody.querySelectorAll('.buyer-row');
+            buyerCountEl.textContent = `Total Buyers: ${buyerRows.length}`;
+        }
     }
 
     // Function to show loading state
@@ -242,97 +308,125 @@ document.addEventListener('DOMContentLoaded', function () {
             
             tbody.innerHTML = '';
             
-            if (buyers.length === 0) {
+            // Filter buyers by selected bloc if not "all"
+            let filteredBuyers = buyers;
+            if (currentBloc !== 'all') {
+                filteredBuyers = buyers.filter(buyer => buyer.bloc === currentBloc);
+            }
+            
+            if (filteredBuyers.length === 0) {
                 // Generate headers with default 4 tranches for empty state
                 maxTranches = 4;
                 generateTableHeaders(maxTranches);
                 showEmptyState();
-                updateBuyerCount();
+                updateBuyerCount(0); // Pass 0 for empty state
                 return;
             }
 
-            // Determine the maximum number of tranches across all buyers
-            maxTranches = getMaxTranches(buyers);
+            // Determine the maximum number of tranches across filtered buyers
+            maxTranches = getMaxTranches(filteredBuyers);
             
             // Generate table headers dynamically
             generateTableHeaders(maxTranches);
 
-            // Group buyers by NIVEAU
-            const buyersByNiveau = {};
-            buyers.forEach(buyer => {
-                const niveau = buyer.niveau || 'Unknown';
-                if (!buyersByNiveau[niveau]) {
-                    buyersByNiveau[niveau] = [];
-                }
-                buyersByNiveau[niveau].push(buyer);
-            });
-
-            // Sort NIVEAU keys for consistent ordering
-            const sortedNiveaux = Object.keys(buyersByNiveau).sort();
-
-            // Render grouped buyers
-            sortedNiveaux.forEach(niveau => {
-                const buyersInNiveau = buyersByNiveau[niveau];
-                
-                buyersInNiveau.forEach((buyer, index) => {
-                    const newRow = document.createElement('tr');
-                    newRow.className = 'buyer-row';
-                    newRow.setAttribute('data-buyer-id', buyer.id);
-                    
-                    // Parse payments safely
-                    let payments = {};
-                    try {
-                        payments = typeof buyer.payments === 'string' ? JSON.parse(buyer.payments) : buyer.payments || {};
-                    } catch (e) {
-                        console.warn('Error parsing payments for buyer', buyer.id, e);
-                        payments = {};
+            // Different rendering logic for "All Blocs" vs specific bloc
+            if (currentBloc === 'all') {
+                // Group buyers by BLOC first, then by NIVEAU for visual separation
+                const buyersByBloc = {};
+                filteredBuyers.forEach(buyer => {
+                    const bloc = buyer.bloc || 'A';
+                    if (!buyersByBloc[bloc]) {
+                        buyersByBloc[bloc] = {};
                     }
-                    
-                    // Build the base columns - only show NIVEAU for the first buyer in the group
-                    let rowHTML = `
-                        <td ${index === 0 ? `rowspan="${buyersInNiveau.length}"` : 'style="display:none;"'}>${niveau}</td>
-                        <td>${buyer.logt_num}</td>
-                        <td>${buyer.nom}</td>
-                        <td>${buyer.prenom}</td>
-                        <td>${buyer.type_logt}</td>
-                        <td>${buyer.surface}</td>
-                        <td>${buyer.date}</td>
-                        <td>${formatCurrency(buyer.prix_totale || 0)}</td>
-                        <td>${formatCurrency(buyer.remise || 0)}</td>
-                    `;
-                    
-                    // Add tranche columns dynamically (T0, T1, T2, etc.)
-                    for (let i = 0; i <= maxTranches; i++) {
-                        const trancheValue = formatCurrency(payments[`T${i}`] || 0);
-                        rowHTML += `<td class="tranche-cell">${trancheValue}</td>`;
+                    const niveau = buyer.niveau || 'Unknown';
+                    if (!buyersByBloc[bloc][niveau]) {
+                        buyersByBloc[bloc][niveau] = [];
                     }
-                    
-                    // Add final columns
-                    const totalPaid = formatCurrency(buyer.total_paid || 0);
-                    const paymentStatus = getPaymentStatusText(buyer.payment_status || 'unpaid');
-                    const statusClass = getPaymentStatusClass(buyer.payment_status || 'unpaid');
-                    
-                    rowHTML += `
-                        <td class="total-paid-cell">${totalPaid}</td>
-                        <td class="status-cell">
-                            <span class="payment-status ${statusClass}">${paymentStatus}</span>
-                            <div class="hover-actions" style="display: none;">
-                                <button class="action-btn edit-btn" onclick="editBuyer(${buyer.id})" title="Edit Buyer">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="action-btn delete-btn" onclick="deleteBuyer(this, ${buyer.id})" title="Delete Buyer">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                        </td>
-                    `;
-                    
-                    newRow.innerHTML = rowHTML;
-                    tbody.appendChild(newRow);
+                    buyersByBloc[bloc][niveau].push(buyer);
                 });
-            });
+
+                // Sort bloc keys (A, B, C, etc.)
+                const sortedBlocs = Object.keys(buyersByBloc).sort();
+
+                // Render buyers grouped by bloc with visual separation
+                sortedBlocs.forEach((bloc, blocIndex) => {
+                    const buyersByNiveau = buyersByBloc[bloc];
+                    const sortedNiveaux = Object.keys(buyersByNiveau).sort();
+                    const blocColor = getBlocColor(bloc);
+
+                    // Add bloc separator row if not first bloc
+                    if (blocIndex > 0) {
+                        const separatorRow = document.createElement('tr');
+                        separatorRow.className = 'bloc-separator';
+                        separatorRow.innerHTML = `
+                            <td colspan="${totalColumns}" class="bloc-separator-cell">
+                                <div class="bloc-divider" style="background: linear-gradient(90deg, ${blocColor}33, ${blocColor}66, ${blocColor}33);">
+                                    <span class="bloc-label" style="background-color: ${blocColor};">Bloc ${bloc}</span>
+                                </div>
+                            </td>
+                        `;
+                        tbody.appendChild(separatorRow);
+                    } else {
+                        // Add header for first bloc
+                        const headerRow = document.createElement('tr');
+                        headerRow.className = 'bloc-separator';
+                        headerRow.innerHTML = `
+                            <td colspan="${totalColumns}" class="bloc-separator-cell">
+                                <div class="bloc-divider" style="background: linear-gradient(90deg, ${blocColor}33, ${blocColor}66, ${blocColor}33);">
+                                    <span class="bloc-label" style="background-color: ${blocColor};">Bloc ${bloc}</span>
+                                </div>
+                            </td>
+                        `;
+                        tbody.appendChild(headerRow);
+                    }
+
+                    // Render buyers for this bloc
+                    sortedNiveaux.forEach(niveau => {
+                        const buyersInNiveau = buyersByNiveau[niveau];
+                        
+                        buyersInNiveau.forEach((buyer, index) => {
+                            const newRow = document.createElement('tr');
+                            newRow.className = 'buyer-row';
+                            newRow.setAttribute('data-buyer-id', buyer.id);
+                            newRow.style.borderLeft = `4px solid ${blocColor}`;
+                            
+                            renderBuyerRow(newRow, buyer, buyersInNiveau, index, niveau);
+                            tbody.appendChild(newRow);
+                        });
+                    });
+                });
+            } else {
+                // Single bloc view - group by NIVEAU only
+                const buyersByNiveau = {};
+                filteredBuyers.forEach(buyer => {
+                    const niveau = buyer.niveau || 'Unknown';
+                    if (!buyersByNiveau[niveau]) {
+                        buyersByNiveau[niveau] = [];
+                    }
+                    buyersByNiveau[niveau].push(buyer);
+                });
+
+                // Sort NIVEAU keys for consistent ordering
+                const sortedNiveaux = Object.keys(buyersByNiveau).sort();
+                const blocColor = getBlocColor(currentBloc);
+
+                // Render grouped buyers for single bloc
+                sortedNiveaux.forEach(niveau => {
+                    const buyersInNiveau = buyersByNiveau[niveau];
+                    
+                    buyersInNiveau.forEach((buyer, index) => {
+                        const newRow = document.createElement('tr');
+                        newRow.className = 'buyer-row';
+                        newRow.setAttribute('data-buyer-id', buyer.id);
+                        newRow.style.borderLeft = `4px solid ${blocColor}`;
+                        
+                        renderBuyerRow(newRow, buyer, buyersInNiveau, index, niveau);
+                        tbody.appendChild(newRow);
+                    });
+                });
+            }
             
-            updateBuyerCount();
+            updateBuyerCount(filteredBuyers.length);
         } catch (error) {
             console.error('Error loading buyers:', error);
             tbody.innerHTML = `
@@ -346,6 +440,59 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    // Helper function to render a buyer row
+    function renderBuyerRow(newRow, buyer, buyersInNiveau, index, niveau) {
+        // Parse payments safely
+        let payments = {};
+        try {
+            payments = typeof buyer.payments === 'string' ? JSON.parse(buyer.payments) : buyer.payments || {};
+        } catch (e) {
+            console.warn('Error parsing payments for buyer', buyer.id, e);
+            payments = {};
+        }
+        
+        // Build the base columns - only show NIVEAU for the first buyer in the group
+        let rowHTML = `
+            <td ${index === 0 ? `rowspan="${buyersInNiveau.length}"` : 'style="display:none;"'}>${niveau}</td>
+            <td>${buyer.logt_num}</td>
+            <td>${buyer.nom}</td>
+            <td>${buyer.prenom}</td>
+            <td>${buyer.type_logt}</td>
+            <td>${buyer.surface}</td>
+            <td>${buyer.date}</td>
+            <td>${formatCurrency(buyer.prix_totale || 0)}</td>
+            <td>${formatCurrency(buyer.remise || 0)}</td>
+        `;
+        
+        // Add tranche columns dynamically (T0, T1, T2, etc.)
+        for (let i = 0; i <= maxTranches; i++) {
+            const trancheValue = formatCurrency(payments[`T${i}`] || 0);
+            rowHTML += `<td class="tranche-cell">${trancheValue}</td>`;
+        }
+        
+        // Add final columns
+        const totalPaid = formatCurrency(buyer.total_paid || 0);
+        const paymentStatus = getPaymentStatusText(buyer.payment_status || 'unpaid');
+        const statusClass = getPaymentStatusClass(buyer.payment_status || 'unpaid');
+        
+        rowHTML += `
+            <td class="total-paid-cell">${totalPaid}</td>
+            <td class="status-cell">
+                <span class="payment-status ${statusClass}">${paymentStatus}</span>
+                <div class="hover-actions" style="display: none;">
+                    <button class="action-btn edit-btn" onclick="editBuyer(${buyer.id})" title="Edit Buyer">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="action-btn delete-btn" onclick="deleteBuyer(this, ${buyer.id})" title="Delete Buyer">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </td>
+        `;
+        
+        newRow.innerHTML = rowHTML;
+    }
+
     // Load project name and set page title
     async function loadProjectInfo() {
         try {
@@ -354,8 +501,98 @@ document.addEventListener('DOMContentLoaded', function () {
             if (project) {
                 pageTitle.textContent = `${project.project_name} - Buyers`;
             }
+            
+            // Get bloc count from database using new function
+            projectBlocCount = await invoke('get_project_bloc_count', { projectId: PROJECT_ID });
+            // Initialize bloc tabs
+            initializeBlocTabs();
         } catch (error) {
             console.error('Error loading project info:', error);
+        }
+    }
+
+    // Initialize bloc tabs based on project bloc count
+    function initializeBlocTabs() {
+        const blocTabsContainer = document.getElementById('blocTabs');
+        if (!blocTabsContainer) return;
+        
+        // Clear existing dynamic tabs (keep "Tous les Blocs")
+        const allTabsBtn = blocTabsContainer.querySelector('[data-bloc="all"]');
+        blocTabsContainer.innerHTML = '';
+        blocTabsContainer.appendChild(allTabsBtn);
+        
+        // Add bloc-specific tabs using letters (A, B, C...)
+        for (let i = 1; i <= projectBlocCount; i++) {
+            const blocLetter = numberToLetter(i);
+            const blocBtn = document.createElement('button');
+            blocBtn.className = 'tab-btn';
+            blocBtn.setAttribute('data-bloc', blocLetter);
+            blocBtn.innerHTML = `
+                <i class="fas fa-building"></i>
+                Bloc ${blocLetter}
+                <span class="bloc-stats" id="bloc-${blocLetter}-stats"></span>
+            `;
+            blocTabsContainer.appendChild(blocBtn);
+        }
+        
+        // Add event listeners to all tabs
+        addTabEventListeners();
+        
+        // Update tab statistics
+        updateTabStatistics();
+    }
+
+    // Add event listeners to tab buttons
+    function addTabEventListeners() {
+        const tabButtons = document.querySelectorAll('.tab-btn');
+        tabButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                // Remove active class from all tabs
+                tabButtons.forEach(btn => btn.classList.remove('active'));
+                // Add active class to clicked tab
+                button.classList.add('active');
+                // Update current bloc
+                currentBloc = button.getAttribute('data-bloc');
+                // Reload buyers with new filter
+                loadBuyers();
+            });
+        });
+    }
+
+    // Update tab statistics (buyer count per bloc)
+    async function updateTabStatistics() {
+        try {
+            const buyers = await invoke('get_buyers_by_project', { projectId: PROJECT_ID });
+            
+            // Count buyers per bloc
+            const blocCounts = {};
+            buyers.forEach(buyer => {
+                const bloc = buyer.bloc || 'A'; // Default to bloc A if not specified
+                blocCounts[bloc] = (blocCounts[bloc] || 0) + 1;
+            });
+            
+            // Update "Tous les Blocs" count
+            const allTabBtn = document.querySelector('[data-bloc="all"]');
+            if (allTabBtn) {
+                const existingStats = allTabBtn.querySelector('.bloc-stats');
+                if (existingStats) {
+                    existingStats.textContent = `(${buyers.length})`;
+                } else {
+                    allTabBtn.innerHTML += `<span class="bloc-stats">(${buyers.length})</span>`;
+                }
+            }
+            
+            // Update individual bloc counts using letters
+            for (let i = 1; i <= projectBlocCount; i++) {
+                const blocLetter = numberToLetter(i);
+                const statsElement = document.getElementById(`bloc-${blocLetter}-stats`);
+                if (statsElement) {
+                    const count = blocCounts[blocLetter] || 0;
+                    statsElement.textContent = `(${count})`;
+                }
+            }
+        } catch (error) {
+            console.error('Error updating tab statistics:', error);
         }
     }
 
@@ -364,12 +601,15 @@ document.addEventListener('DOMContentLoaded', function () {
     loadBuyers();
 
     // Open modal when Add New Buyer button is clicked
-    addBtn.addEventListener('click', function() {
+    addBtn.addEventListener('click', async function() {
         // Reset form for new buyer
         form.reset();
         form.removeAttribute('data-buyer-id');
         document.querySelector('#buyerModal h2').textContent = 'Add New Buyer';
         document.getElementById('addBuyerBtn').textContent = 'Add Buyer';
+        
+        // Populate bloc dropdown
+        await populateBlocDropdown();
         
         // Reset tranches to just T0
         const tranchesContainer = document.getElementById('tranchesContainer');
@@ -446,6 +686,7 @@ document.addEventListener('DOMContentLoaded', function () {
             // Prepare buyer data
             const buyerData = {
                 project_id: PROJECT_ID,
+                bloc: document.getElementById('bloc').value.trim(),
                 niveau: document.getElementById('niveau').value.trim(),
                 logt_num: document.getElementById('logtNum').value.trim(),
                 nom: document.getElementById('nom').value.trim(),
@@ -669,6 +910,8 @@ async function editBuyer(buyerId) {
         }
         
         // Populate form with current data
+        await populateBlocDropdown();
+        document.getElementById('bloc').value = buyer.bloc || 'A';
         document.getElementById('niveau').value = buyer.niveau || '';
         document.getElementById('logtNum').value = buyer.logt_num || '';
         document.getElementById('nom').value = buyer.nom || '';

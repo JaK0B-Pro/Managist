@@ -53,6 +53,7 @@ pub struct Project {
 pub struct Buyer {
     id: i32,
     project_id: i32,
+    bloc: String,
     niveau: String,
     logt_num: String,
     nom: String,
@@ -71,6 +72,7 @@ pub struct Buyer {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BuyerInput {
     project_id: i32,
+    bloc: String,
     niveau: String,
     logt_num: String,
     nom: String,
@@ -403,10 +405,11 @@ async fn add_buyer_to_database(pool: tauri::State<'_, PgPool>, buyer: BuyerInput
     let is_sold = total_paid >= final_price;
     let payment_status = if is_sold { "paid" } else if total_paid > 0.0 { "partial" } else { "unpaid" };
 
-    let query = "INSERT INTO buyers (project_id, niveau, logt_num, nom, prenom, type_logt, surface, date, prix_totale, remise, payments, payment_status, total_paid, is_sold) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)";
+    let query = "INSERT INTO buyers (project_id, bloc, niveau, logt_num, nom, prenom, type_logt, surface, date, prix_totale, remise, payments, payment_status, total_paid, is_sold) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)";
 
     sqlx::query(query)
         .bind(&buyer.project_id)
+        .bind(&buyer.bloc)
         .bind(&buyer.niveau)
         .bind(&buyer.logt_num)
         .bind(&buyer.nom)
@@ -446,6 +449,7 @@ async fn get_buyers_by_project(pool: tauri::State<'_, PgPool>, project_id: i32) 
         buyers.push(Buyer {
             id: row.try_get("id").map_err(|e| e.to_string())?,
             project_id: row.try_get("project_id").map_err(|e| e.to_string())?,
+            bloc: row.try_get("bloc").unwrap_or_else(|_| "A".to_string()),
             niveau: row.try_get("niveau").map_err(|e| e.to_string())?,
             logt_num: row.try_get("logt_num").map_err(|e| e.to_string())?,
             nom: row.try_get("nom").map_err(|e| e.to_string())?,
@@ -529,10 +533,11 @@ async fn edit_buyer_in_database(pool: tauri::State<'_, PgPool>, buyer_id: i32, b
     let is_sold = total_paid >= final_price;
     let payment_status = if is_sold { "paid" } else if total_paid > 0.0 { "partial" } else { "unpaid" };
 
-    let query = "UPDATE buyers SET project_id = $1, niveau = $2, logt_num = $3, nom = $4, prenom = $5, type_logt = $6, surface = $7, date = $8, prix_totale = $9, remise = $10, payments = $11, payment_status = $12, total_paid = $13, is_sold = $14 WHERE id = $15";
+    let query = "UPDATE buyers SET project_id = $1, bloc = $2, niveau = $3, logt_num = $4, nom = $5, prenom = $6, type_logt = $7, surface = $8, date = $9, prix_totale = $10, remise = $11, payments = $12, payment_status = $13, total_paid = $14, is_sold = $15 WHERE id = $16";
 
     sqlx::query(query)
         .bind(&buyer.project_id)
+        .bind(&buyer.bloc)
         .bind(&buyer.niveau)
         .bind(&buyer.logt_num)
         .bind(&buyer.nom)
@@ -669,6 +674,19 @@ async fn migrate_buyers_table_internal(pool: &PgPool) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
     }
     
+    if !column_names.contains(&"bloc".to_string()) {
+        sqlx::query("ALTER TABLE buyers ADD COLUMN bloc VARCHAR(10) DEFAULT 'A'")
+            .execute(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    
+    // Update any null bloc values to 'A'
+    sqlx::query("UPDATE buyers SET bloc = 'A' WHERE bloc IS NULL")
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    
     // If t0 column exists but payments doesn't, migrate
     if column_names.contains(&"t0".to_string()) && !column_names.contains(&"payments".to_string()) {
         // Add payments column
@@ -691,6 +709,19 @@ async fn migrate_buyers_table_internal(pool: &PgPool) -> Result<(), String> {
 #[tauri::command]
 async fn migrate_buyers_table(pool: tauri::State<'_, PgPool>) -> Result<(), String> {
     migrate_buyers_table_internal(&*pool).await
+}
+
+// Function to get project bloc count
+#[tauri::command]
+async fn get_project_bloc_count(pool: tauri::State<'_, PgPool>, project_id: i32) -> Result<i32, String> {
+    let row = sqlx::query("SELECT nombre_des_bloc FROM projects WHERE id = $1")
+        .bind(project_id)
+        .fetch_one(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    let bloc_count: i32 = row.try_get("nombre_des_bloc").map_err(|e| e.to_string())?;
+    Ok(bloc_count)
 }
 
 // Main function
@@ -785,7 +816,7 @@ pub fn run() -> Result<(), String> {
     tauri::Builder::default()
         .manage(pool)
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![login, signup_proccess, update_user_password, get_employee_by_name, insert_employee, get_all_employees, delete_employee, update_employee, get_project_names, get_projects, add_project_to_the_database, delete_project_from_database, add_buyer_to_database, get_buyers_by_project, delete_buyer_from_database, edit_buyer_in_database, update_buyer_payments, migrate_buyers_table])
+        .invoke_handler(tauri::generate_handler![login, signup_proccess, update_user_password, get_employee_by_name, insert_employee, get_all_employees, delete_employee, update_employee, get_project_names, get_projects, add_project_to_the_database, delete_project_from_database, add_buyer_to_database, get_buyers_by_project, delete_buyer_from_database, edit_buyer_in_database, update_buyer_payments, migrate_buyers_table, get_project_bloc_count])
         .run(tauri::generate_context!())
         .map_err(|e| e.to_string())?;
 
