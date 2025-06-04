@@ -551,14 +551,13 @@ document.addEventListener('DOMContentLoaded', async function() {
             console.error("Error updating employee:", error);
             alert("Erreur lors de la mise à jour de l'employé: " + error);
         }
-    });
-
-    // Initialize mode de saisir functionality
+    });    // Initialize mode de saisir functionality
     addModeSaisirCalculationListeners();
     await loadEmployeeNames();
     setupAutocomplete();
 
-    // ...existing code...
+    // Initialize search functionality
+    initializeSearch();
 });
 
 // Function to load employees from database and insert them into the table
@@ -772,5 +771,87 @@ function showSuccessModal() {
             successModal.style.display = 'none';
             window.removeEventListener('click', closeSuccessOnOutside);
         }
+    });
+}
+
+// Function to initialize search functionality
+function initializeSearch() {
+    const searchInput = document.getElementById('search');
+    const searchButton = document.getElementById('search-button');
+    
+    if (!searchInput || !searchButton) {
+        console.warn('Search elements not found');
+        return;
+    }
+    
+    // Add event listeners for search functionality
+    searchInput.addEventListener('input', performSearch);
+    searchButton.addEventListener('click', performSearch);
+    
+    // Add Enter key support
+    searchInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            performSearch();
+        }
+    });
+}
+
+// Function to perform search filtering
+function performSearch() {
+    const searchInput = document.getElementById('search');
+    const searchTerm = searchInput.value.toLowerCase().trim();
+    const tableRows = document.querySelectorAll('table tbody tr');
+    
+    let visibleCount = 0;
+    
+    tableRows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        let found = false;
+        
+        // Search through all text content in the row
+        cells.forEach(cell => {
+            const cellText = cell.textContent.toLowerCase();
+            if (cellText.includes(searchTerm)) {
+                found = true;
+            }
+        });
+        
+        // Show or hide the row based on search result
+        if (found || searchTerm === '') {
+            row.style.display = '';
+            visibleCount++;
+        } else {
+            row.style.display = 'none';
+        }
+    });
+    
+    // Visual feedback for search input
+    if (searchTerm !== '') {
+        searchInput.style.borderColor = visibleCount > 0 ? '#27ae60' : '#e74c3c';
+    } else {
+        searchInput.style.borderColor = '#e1e4e8';
+    }
+    
+    // Optional: Update total amount based on visible rows
+    updateVisibleTotal();
+}
+
+// Function to update total amount based on visible rows
+function updateVisibleTotal() {
+    const visibleRows = document.querySelectorAll('table tbody tr:not([style*="display: none"])');
+    let totalNetAPayer = 0;
+    
+    visibleRows.forEach(row => {
+        const netPayCell = row.cells[9]; // Net a Payer is the 10th column (index 9)
+        if (netPayCell) {
+            const value = parseFloat(netPayCell.textContent) || 0;
+            totalNetAPayer += value;
+        }
+    });
+    
+    // Update the total amount display
+    document.querySelector('.amount').textContent = totalNetAPayer.toLocaleString('fr-FR', {
+        minimumFractionDigits: 2, 
+        maximumFractionDigits: 2
     });
 }
