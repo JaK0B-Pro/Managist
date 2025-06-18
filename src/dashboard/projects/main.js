@@ -174,13 +174,12 @@ document.addEventListener('click', function(event) {
 // Gestion du formulaire
 document.getElementById('projectForm').addEventListener('submit', async function (e) {
   e.preventDefault();
-
   const project = {
     project_name: document.getElementById('nomProjet').value,
     project_location: document.getElementById('location').value,
     nombre_des_bloc: parseInt(document.getElementById('nmbrDesBlocs').value, 10),
     nombre_des_etages: parseInt(document.getElementById('nmbrDesEtages').value, 10),
-    nombre_des_appartement: parseInt(document.getElementById('nmbrDesAppartementsDansChaqueBloc').value, 10),
+    nombre_des_appartement: parseInt(document.getElementById('nmbrDesAppartementsTotal').value, 10),
     nda_dans_chaque_etage: Math.floor(parseInt(document.getElementById('nmbrDesAppartementsDansChaqueBloc').value, 10) / parseInt(document.getElementById('nmbrDesEtages').value, 10)) || 0,
     nda_vendus: 0, // Initially no apartments are sold
     project_start_date: document.getElementById('dateDeDebut').value,
@@ -203,6 +202,43 @@ document.addEventListener('DOMContentLoaded', function() {
   // Affichage initial
   afficherProjets();
 });
+
+// Automatic calculation for total apartments
+function calculateTotalApartments() {
+  const nmbrDesBlocs = parseInt(document.getElementById('nmbrDesBlocs').value, 10) || 0;
+  const nmbrDesEtages = parseInt(document.getElementById('nmbrDesEtages').value, 10) || 0;
+  const nmbrDesAppartementsDansChaqueBloc = parseInt(document.getElementById('nmbrDesAppartementsDansChaqueBloc').value, 10) || 0;
+  
+  const totalApartments = nmbrDesBlocs * nmbrDesEtages * nmbrDesAppartementsDansChaqueBloc;
+  
+  // Update the total apartments field
+  const totalField = document.getElementById('nmbrDesAppartementsTotal');
+  totalField.value = totalApartments;
+  
+  // Add visual feedback with a subtle animation
+  totalField.style.backgroundColor = '#e8f5e8';
+  setTimeout(() => {
+    totalField.style.backgroundColor = '';
+  }, 1000);
+}
+
+// Add event listeners for automatic calculation
+const calcFields = ['nmbrDesBlocs', 'nmbrDesEtages', 'nmbrDesAppartementsDansChaqueBloc'];
+calcFields.forEach(fieldId => {
+  const field = document.getElementById(fieldId);
+  if (field) {
+    field.addEventListener('input', calculateTotalApartments);
+    field.addEventListener('change', calculateTotalApartments);
+  }
+});
+
+// Make total apartments field read-only to prevent manual editing
+const totalField = document.getElementById('nmbrDesAppartementsTotal');
+if (totalField) {
+  totalField.setAttribute('readonly', true);
+  totalField.style.backgroundColor = '#f5f5f5';
+  totalField.title = 'Ce champ est calculé automatiquement';
+}
 
 // Function to delete a project
 async function deleteProject(projectId) {

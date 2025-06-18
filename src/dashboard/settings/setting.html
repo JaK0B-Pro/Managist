@@ -2,19 +2,17 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Settings</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">    <title>Settings</title>
     <link rel="stylesheet" href="setting.css">
-    <!-- <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script> -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
-<body>
-
-    <!-- 🌍 Barre latérale -->
+<body>    <!-- 🌍 Barre latérale -->
     <div class="sidebar">
-        <h2><i class="fas fa-cogs"></i>Managist</h2>        <ul>
-            <li><a href="../index.html"><i class="fas fa-home"></i> Dashboard</a></li>
-            <li><a href="../salaire/salaire.html"><i class="fas fa-home"></i>Salary</a></li>
+        <h2><i class="fas fa-cogs"></i>Managist</h2>
+        <ul>            <li><a href="../index.html"><i class="fas fa-home"></i> Dashboard</a></li>
+            <li><a href="../salaire/salaire.html"><i class="fas fa-wallet"></i> Salary</a></li>
             <li><a href="../projects/project.html"><i class="fas fa-tasks"></i> Projects</a></li>
+            <li><a href="../analytics/analytics.html"><i class="fas fa-chart-bar"></i> Analytics</a></li>
             <li class="active"><a href="./setting.html"><i class="fas fa-cog"></i> Settings</a></li>
         </ul>
         <button id="logout-button">Logout</button>
@@ -65,37 +63,101 @@
 
         <!-- 🌐 Section Langue -->
         <div id="language-section" class="hidden">
-            <h2><i class="fas fa-globe"></i> Select Language</h2>
-            <select id="language-select">
+            <h2><i class="fas fa-globe"></i> Select Language</h2>            <select id="language-select">
                 <option value="fr">Français</option>
                 <option value="en">English</option>
-                <option value="es">Español</option>
             </select>
+        </div>        <!-- 🔒 Password Change Modal -->
+        <div id="password-modal" class="modal">
+            <div class="modal-content">
+                <span class="close-modal" id="close-password-modal">&times;</span>
+                <h2><i class="fas fa-lock"></i> Change Password</h2>
+                <form id="password-change-form">
+                    <div class="form-group">
+                        <label for="current-password"><i class="fas fa-key"></i> Current Password:</label>
+                        <div class="password-input-container">
+                            <input type="password" id="current-password" required>
+                            <button type="button" class="toggle-password" data-target="current-password">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="new-password"><i class="fas fa-lock"></i> New Password:</label>
+                        <div class="password-input-container">
+                            <input type="password" id="new-password" required minlength="6">
+                            <button type="button" class="toggle-password" data-target="new-password">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                        <div class="password-strength" id="password-strength"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="confirm-password"><i class="fas fa-lock"></i> Confirm New Password:</label>
+                        <div class="password-input-container">
+                            <input type="password" id="confirm-password" required minlength="6">
+                            <button type="button" class="toggle-password" data-target="confirm-password">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="button" class="cancel-btn" id="cancel-password-change">
+                            <i class="fas fa-times"></i> Cancel
+                        </button>
+                        <button type="submit" class="submit-btn">
+                            <i class="fas fa-save"></i> Update Password
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
 
-        <!-- 🔒 Section Mot de passe -->
-        <div id="password-section" class="hidden">
-            <h2><i class="fas fa-lock"></i> Change Password</h2>
-            <form>
-                <label for="current-password"><i class="fas fa-key"></i> Current Password:</label>
-                <input type="password" id="current-password">
-
-                <label for="new-password"><i class="fas fa-lock"></i> New Password:</label>
-                <input type="password" id="new-password">
-
-                <button type="submit"><i class="fas fa-save"></i> Update Password</button>
-            </form>
-        </div>
-    </div>
-
-    <script>
+        <!-- Toast notification -->
+        <div id="toast-notification" class="toast hidden">
+            <div class="toast-content">
+                <i id="toast-icon" class="fas fa-check-circle"></i>
+                <span id="toast-message">Success!</span>
+                <button id="close-toast" class="close-toast">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>    </div>    <script>
         function openSection(section) {
-            document.getElementById("chat-section").classList.add("hidden");
-            document.getElementById("language-section").classList.add("hidden");
-            document.getElementById("password-section").classList.add("hidden");
+            if (section === 'password') {
+                // Open password modal instead of section
+                document.getElementById("password-modal").style.display = "block";
+            } else {
+                // Handle other sections normally
+                document.getElementById("chat-section").classList.add("hidden");
+                document.getElementById("language-section").classList.add("hidden");
 
-            document.getElementById(section + "-section").classList.remove("hidden");
+                document.getElementById(section + "-section").classList.remove("hidden");
+            }
         }
+
+        function closePasswordModal() {
+            document.getElementById("password-modal").style.display = "none";
+            // Clear form
+            document.getElementById("password-change-form").reset();
+            document.getElementById("password-strength").textContent = "";
+            document.getElementById("password-strength").className = "password-strength";
+        }
+
+        // Modal event listeners
+        document.getElementById("close-password-modal").addEventListener("click", closePasswordModal);
+        document.getElementById("cancel-password-change").addEventListener("click", closePasswordModal);
+        
+        // Close modal when clicking outside
+        window.addEventListener("click", function(event) {
+            const modal = document.getElementById("password-modal");
+            if (event.target === modal) {
+                closePasswordModal();
+            }
+        });
 
         function sendMessage() {
             let input = document.getElementById("chat-input");
@@ -107,7 +169,8 @@
                 userMessage.innerHTML = "<i class='fas fa-user'></i> You: " + message;
                 chatBox.appendChild(userMessage);
                 input.value = "";
-            }        }
+            }
+        }
     </script>
     <script type="module" src="setting.js" defer></script>
 

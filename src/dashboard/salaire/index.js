@@ -558,6 +558,8 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Initialize search functionality
     initializeSearch();
+    
+    console.log('Salary page initialized successfully');
 });
 
 // Function to load employees from database and insert them into the table
@@ -848,10 +850,205 @@ function updateVisibleTotal() {
             totalNetAPayer += value;
         }
     });
-    
-    // Update the total amount display
+      // Update the total amount display
     document.querySelector('.amount').textContent = totalNetAPayer.toLocaleString('fr-FR', {
         minimumFractionDigits: 2, 
         maximumFractionDigits: 2
     });
+}
+
+// PDF Generation Functionality
+document.addEventListener('DOMContentLoaded', () => {
+    const pdfButton = document.getElementById('generate-pdf-button');
+    if (pdfButton) {
+        pdfButton.addEventListener('click', generatePDFReport);
+    }
+});
+
+async function generatePDFReport() {
+    try {
+        // Show loading state
+        const pdfButton = document.getElementById('generate-pdf-button');
+        const originalText = pdfButton.innerHTML;
+        pdfButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+        pdfButton.disabled = true;
+
+        // Get current employees data
+        const employees = await invoke('get_all_employees');
+        
+        if (employees.length === 0) {
+            alert('No employee data available to generate report.');
+            return;
+        }
+
+        // Initialize jsPDF
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+
+        // Add title and header
+        doc.setFontSize(20);
+        doc.setFont('helvetica', 'bold');
+        doc.text('SALARY REPORT', 105, 20, { align: 'center' });
+        
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`Generated on: ${new Date().toLocaleDateString('fr-FR')}`, 105, 30, { align: 'center' });
+        
+        // Company info (optional)
+        doc.setFontSize(10);
+        doc.text('Managist - Employee Management System', 105, 40, { align: 'center' });
+
+        // Prepare table data
+        const tableColumns = [
+            'ID',
+            'Employee Name',
+            'Daily Rate',
+            'Hourly Rate',
+            'Days Worked',
+            'Hours Worked',
+            'Attached Work',
+            'Salary',
+            'Advance',
+            'Net Pay',
+            'Observation'
+        ];        const tableRows = employees.map(emp => [
+            emp.id?.toString() || '',
+            emp.nom_et_prenom || '',
+            (parseFloat(emp.prix_jour) || 0).toFixed(2),
+            (parseFloat(emp.prix_hour) || 0).toFixed(2),
+            (parseInt(emp.nombre_des_jours) || 0).toString(),
+            (parseFloat(emp.nombre_des_heurx) || 0).toString(),
+            (parseFloat(emp.travaux_attache) || 0).toFixed(2),
+            (parseFloat(emp.salaire) || 0).toFixed(2),
+            (parseFloat(emp.acompte) || 0).toFixed(2),
+            (parseFloat(emp.net_a_payer) || 0).toFixed(2),
+            emp.observation || 'None'
+        ]);
+
+        // Generate table using autoTable plugin
+        doc.autoTable({
+            head: [tableColumns],
+            body: tableRows,
+            startY: 50,
+            styles: {
+                fontSize: 8,
+                cellPadding: 2,
+                textColor: [0, 0, 0],
+                lineColor: [200, 200, 200],
+                lineWidth: 0.1
+            },
+            headStyles: {
+                fillColor: [52, 152, 219],
+                textColor: [255, 255, 255],
+                fontStyle: 'bold',
+                fontSize: 9
+            },
+            alternateRowStyles: {
+                fillColor: [245, 245, 245]
+            },
+            columnStyles: {
+                0: { halign: 'center', cellWidth: 10 }, // ID
+                1: { halign: 'left', cellWidth: 25 },   // Name
+                2: { halign: 'right', cellWidth: 15 },  // Daily Rate
+                3: { halign: 'right', cellWidth: 15 },  // Hourly Rate
+                4: { halign: 'center', cellWidth: 12 }, // Days
+                5: { halign: 'center', cellWidth: 12 }, // Hours
+                6: { halign: 'right', cellWidth: 18 },  // Attached Work
+                7: { halign: 'right', cellWidth: 18 },  // Salary
+                8: { halign: 'right', cellWidth: 18 },  // Advance
+                9: { halign: 'right', cellWidth: 18 },  // Net Pay
+                10: { halign: 'left', cellWidth: 25 }   // Observation
+            },
+            margin: { left: 10, right: 10 },
+            theme: 'striped'
+        });        // Calculate totals
+        const totalSalary = employees.reduce((sum, emp) => sum + (parseFloat(emp.salaire) || 0), 0);
+        const totalAdvance = employees.reduce((sum, emp) => sum + (parseFloat(emp.acompte) || 0), 0);
+        const totalNetPay = employees.reduce((sum, emp) => sum + (parseFloat(emp.net_a_payer) || 0), 0);
+
+        // Add summary section
+        const finalY = doc.lastAutoTable.finalY + 10;
+        
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text('SUMMARY', 14, finalY);
+        
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`Total Employees: ${employees.length}`, 14, finalY + 10);
+        doc.text(`Total Salary: ${totalSalary.toFixed(2)} DZD`, 14, finalY + 20);
+        doc.text(`Total Advances: ${totalAdvance.toFixed(2)} DZD`, 14, finalY + 30);
+        doc.text(`Total Net Pay: ${totalNetPay.toFixed(2)} DZD`, 14, finalY + 40);
+        
+        // Add footer
+        const pageCount = doc.internal.getNumberOfPages();
+        for (let i = 1; i <= pageCount; i++) {
+            doc.setPage(i);
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'italic');
+            doc.text(
+                `Page ${i} of ${pageCount}`,
+                doc.internal.pageSize.width / 2,
+                doc.internal.pageSize.height - 10,
+                { align: 'center' }
+            );
+        }
+
+        // Save the PDF
+        const fileName = `salary_report_${new Date().toISOString().split('T')[0]}.pdf`;
+        doc.save(fileName);
+
+        // Show success message
+        showPDFSuccessMessage();
+
+    } catch (error) {
+        console.error('Error generating PDF:', error);
+        alert('Error generating PDF report: ' + error.message);
+    } finally {
+        // Reset button state
+        const pdfButton = document.getElementById('generate-pdf-button');
+        pdfButton.innerHTML = '<i class="fas fa-file-pdf"></i> Generate PDF Report';
+        pdfButton.disabled = false;
+    }
+}
+
+function showPDFSuccessMessage() {
+    const message = document.createElement('div');
+    message.textContent = 'PDF Report Generated Successfully!';
+    message.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #27ae60;
+        color: white;
+        padding: 15px 25px;
+        border-radius: 8px;
+        z-index: 10000;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        font-weight: 600;
+        animation: slideInRight 0.3s ease;
+    `;
+    
+    // Add CSS animation
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+    `;
+    document.head.appendChild(style);
+    
+    document.body.appendChild(message);
+    
+    setTimeout(() => {
+        message.remove();
+        style.remove();
+    }, 4000);
 }

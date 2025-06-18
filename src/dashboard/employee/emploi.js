@@ -443,7 +443,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 elements.chatWindow.style.display = 'none';
             }
         });
-    }    // Ajouter cette fonctionnalité
+    }    
+    
+    // Ajouter cette fonctionnalité
     function generatePaySlip() {
         if (typeof jspdf === 'undefined') {
             alert('PDF library not loaded');
@@ -454,7 +456,8 @@ document.addEventListener('DOMContentLoaded', function() {
             alert('Données employé non disponibles');
             return;
         }
-          const doc = new jspdf.jsPDF();
+        
+        const doc = new jspdf.jsPDF();
         const currentYear = 2025;
         const currentMonth = 'juin';
         const monthNum = '06';

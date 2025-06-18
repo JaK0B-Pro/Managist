@@ -470,6 +470,39 @@ form button {
   color: #a94442 !important;
 }
 
+/* Calculated field styling */
+.calculated-field {
+  position: relative;
+  margin: 12px 0;
+}
+
+.calculated-field input[readonly] {
+  background-color: #f8f9fa !important;
+  border: 2px solid #dee2e6 !important;
+  color: #495057;
+  cursor: not-allowed;
+}
+
+.calculated-field .field-note {
+  display: block;
+  margin-top: 4px;
+  color: #6c757d;
+  font-size: 0.8rem;
+  font-style: italic;
+}
+
+.calculated-field .field-note i {
+  color: #007bff;
+  margin-right: 4px;
+}
+
+/* Animation for calculated field updates */
+.calculated-field input.updated {
+  background-color: #e8f5e8 !important;
+  border-color: #28a745 !important;
+  transition: all 0.3s ease;
+}
+
 /* Adjust the project list grid for smaller screens */
 @media (max-width: 992px) {
   .project-list, #projectList {

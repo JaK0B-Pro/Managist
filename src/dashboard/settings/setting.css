@@ -8,24 +8,22 @@
 
 body {
     display: flex;
-    background-color: #f4f7f9;
+    background-color: #f5f5f5;
+    margin: 0;
 }
 
 /* 📜 Barre latérale */
 .sidebar {
-    width: 250px;
+    width: 200px;
     background: #2c3e50;
+    color: white;
+    min-height: 100vh;
     padding: 20px;
-    height: 100vh;
-    box-shadow: 2px 0 5px rgba(253, 253, 253, 0.1);
-    position: fixed;
 }
 
 .sidebar h2 {
-  
-    text-align: center;
     margin-bottom: 20px;
-    color: #f8f5f5;
+    color: white;
 }
 
 .sidebar ul {
@@ -34,34 +32,56 @@ body {
 }
 
 .sidebar ul li {
-    margin: 10px 0;
+    margin: 15px 0;
 }
 
 .sidebar ul li a {
+    color: white;
     text-decoration: none;
-    color: #f8f5f5;
-    font-size: 16px;
     display: flex;
     align-items: center;
-    padding: 10px;
-    border-radius: 5px;
+    gap: 10px;
 }
 
 .sidebar ul li a i {
-    margin-right: 10px;
+    width: 16px;
 }
 
-.sidebar ul li a:hover,
 .sidebar ul li.active a {
-    background: #007bff;
+    font-weight: bold;
+    color: #1abc9c;
+}
+
+.sidebar ul li:hover a {
+    color: #1abc9c;
+    transition: color 0.3s ease;
+}
+
+#logout-button {
+    background: #e74c3c;
     color: white;
+    border: none;
+    padding: 10px 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    width: 100%;
+    margin-top: 20px;
+    font-size: 14px;
+}
+
+#logout-button:hover {
+    background: #c0392b;
+    transition: background 0.3s ease;
 }
 
 /* 🛠️ Contenu principal */
 .main-content {
-    flex-grow: 1;
+    flex: 1;
     padding: 20px;
-    margin-left: 250px;
+    background: #f5f5f5;
+    min-height: 100vh;
+    box-sizing: border-box;
+    width: calc(100% - 200px); /* Adjust for sidebar width */
 }
 
 /* 📢 En-tête */
@@ -202,21 +222,176 @@ button:hover {
 form {
     display: flex;
     flex-direction: column;
+    gap: 15px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
 }
 
 form label {
-    margin-top: 10px;
+    font-weight: bold;
+    color: #2c3e50;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.password-input-container {
+    position: relative;
+    display: flex;
+    align-items: center;
 }
 
 form input {
-    padding: 10px;
-    border: 1px solid #ccc;
-    border-radius: 5px;
+    padding: 12px;
+    border: 2px solid #ddd;
+    border-radius: 8px;
     width: 100%;
+    font-size: 14px;
+    transition: border-color 0.3s ease;
 }
 
-form button {
-    margin-top: 10px;
+form input:focus {
+    border-color: #3498db;
+    outline: none;
+}
+
+.toggle-password {
+    position: absolute;
+    right: 10px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #666;
+    font-size: 14px;
+    padding: 5px;
+}
+
+.toggle-password:hover {
+    color: #3498db;
+}
+
+.password-strength {
+    font-size: 12px;
+    padding: 5px 0;
+    font-weight: bold;
+}
+
+.password-strength.weak {
+    color: #e74c3c;
+}
+
+.password-strength.medium {
+    color: #f39c12;
+}
+
+.password-strength.strong {
+    color: #27ae60;
+}
+
+.form-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 20px;
+}
+
+.cancel-btn {
+    padding: 12px 20px;
+    background-color: #95a5a6;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.3s ease;
+}
+
+.cancel-btn:hover {
+    background-color: #7f8c8d;
+}
+
+.submit-btn {
+    padding: 12px 20px;
+    background-color: #3498db;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.3s ease;
+}
+
+.submit-btn:hover {
+    background-color: #2980b9;
+}
+
+.submit-btn:disabled {
+    background-color: #bdc3c7;
+    cursor: not-allowed;
+}
+
+/* Toast notification styles */
+.toast {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    transform: translateX(400px);
+    transition: transform 0.3s ease;
+    max-width: 400px;
+}
+
+.toast.show {
+    transform: translateX(0);
+}
+
+.toast.success {
+    border-left: 4px solid #27ae60;
+}
+
+.toast.error {
+    border-left: 4px solid #e74c3c;
+}
+
+.toast-content {
+    display: flex;
+    align-items: center;
+    padding: 15px;
+    gap: 10px;
+}
+
+.toast.success #toast-icon {
+    color: #27ae60;
+}
+
+.toast.error #toast-icon {
+    color: #e74c3c;
+}
+
+#toast-message {
+    flex: 1;
+    color: #2c3e50;
+    font-weight: 500;
+}
+
+.close-toast {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #7f8c8d;
+    font-size: 14px;
+    padding: 5px;
+}
+
+.close-toast:hover {
+    color: #2c3e50;
 }
 
 /* Logout button styling */
@@ -233,5 +408,117 @@ form button {
 
 #logout-button:hover {
     background-color: #e53935;
+}
+
+/* 🔒 Modal Styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(2px);
+}
+
+.modal-content {
+    background-color: white;
+    margin: 5% auto;
+    padding: 30px;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    position: relative;
+    animation: modalSlideIn 0.3s ease;
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-50px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.close-modal {
+    color: #aaa;
+    float: right;
+    font-size: 24px;
+    font-weight: bold;
+    cursor: pointer;
+    position: absolute;
+    right: 20px;
+    top: 15px;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.3s ease;
+}
+
+.close-modal:hover {
+    color: #000;
+    background-color: #f0f0f0;
+}
+
+.modal-content h2 {
+    color: #2c3e50;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.modal-content .form-group {
+    margin-bottom: 20px;
+}
+
+.modal-content .form-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 30px;
+}
+
+.modal-content .cancel-btn {
+    background-color: #95a5a6;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background-color 0.3s ease;
+}
+
+.modal-content .cancel-btn:hover {
+    background-color: #7f8c8d;
+}
+
+.modal-content .submit-btn {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background-color 0.3s ease;
+}
+
+.modal-content .submit-btn:hover {
+    background-color: #2980b9;
 }
 

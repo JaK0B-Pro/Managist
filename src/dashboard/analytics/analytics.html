@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics - Managist</title>
+    <link rel="stylesheet" href="../style.css">
+    <link rel="stylesheet" href="analytics.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <h2><i class="fas fa-cogs"></i>Managist</h2>
+            <ul>
+                <li><a href="../index.html"><i class="fas fa-home"></i> Dashboard</a></li>
+                <li><a href="../salaire/salaire.html"><i class="fas fa-wallet"></i> Salary</a></li>
+                <li><a href="../projects/project.html"><i class="fas fa-tasks"></i> Projects</a></li>
+                <li class="active"><a href="./analytics.html"><i class="fas fa-chart-bar"></i> Analytics</a></li>
+                <li><a href="../settings/setting.html"><i class="fas fa-cog"></i> Settings</a></li>
+            </ul>
+            <button id="logout-button">Logout</button>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header>
+                <h1>Analytics</h1>
+            </header>
+
+            <!-- Analytics Cards -->
+            <section class="analytics-cards">
+                <div class="card">
+                    <h3>Project Performance</h3>
+                    <p class="big-number" id="performance-score">Loading...</p>
+                    <span class="trend positive"><i class="fas fa-arrow-up"></i> +5.2%</span>
+                </div>
+                <div class="card">
+                    <h3>Completion Rate</h3>
+                    <p class="big-number" id="completion-rate">Loading...</p>
+                    <span class="trend positive"><i class="fas fa-arrow-up"></i> +12%</span>
+                </div>
+                <div class="card">
+                    <h3>Active Employees</h3>
+                    <p class="big-number" id="active-employees">Loading...</p>
+                    <span class="trend neutral"><i class="fas fa-minus"></i> 0%</span>
+                </div>
+                <div class="card">
+                    <h3>Monthly Revenue</h3>
+                    <p class="big-number" id="monthly-revenue">Loading...</p>
+                    <span class="trend positive"><i class="fas fa-arrow-up"></i> +8.7%</span>
+                </div>
+            </section>
+
+            <!-- Charts Section -->
+            <section class="charts-section">
+                <div class="chart-container">
+                    <h3>Project Progress Over Time</h3>
+                    <canvas id="progressChart"></canvas>
+                </div>                <div class="chart-container">
+                    <h3>Employee Salary Distribution</h3>
+                    <canvas id="employeeChart"></canvas>
+                </div>
+            </section>
+
+            <!-- Data Tables Section -->
+            <section class="data-tables">
+                <div class="table-container">
+                    <h3>Top Performing Projects</h3>                    <table class="analytics-table">                        <thead>
+                            <tr>
+                                <th>Project Name</th>
+                                <th>Progress</th>
+                                <th>Apartments</th>
+                                <th>Total Price</th>
+                                <th>Price Paid</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="top-projects">
+                            <!-- Data will be populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="analytics.js"></script>
+</body>
+</html>

@@ -4,6 +4,7 @@ use sqlx::Row;
 use sqlx::PgPool;
 use rust_decimal::Decimal;
 use chrono::NaiveDate;
+use std::env;
 
 // Structure to represent the Employee
 #[derive(Serialize, Deserialize, Debug)]
@@ -724,12 +725,179 @@ async fn get_project_bloc_count(pool: tauri::State<'_, PgPool>, project_id: i32)
     Ok(bloc_count)
 }
 
+// Structure to represent dashboard statistics
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DashboardStats {
+    total_projects: i32,
+    total_apartments: i32,
+    average_progress: f64,
+}
+
+// Function to get dashboard statistics
+#[tauri::command]
+async fn get_dashboard_stats(pool: tauri::State<'_, PgPool>) -> Result<DashboardStats, String> {
+    // Get total projects count
+    let total_projects_row = sqlx::query("SELECT COUNT(*) as count FROM projects")
+        .fetch_one(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    let total_projects: i64 = total_projects_row.try_get("count").map_err(|e| e.to_string())?;
+
+    // Get total apartments and calculate average progress
+    let projects_data = sqlx::query("SELECT nombre_des_appartement, nda_vendus FROM projects")
+        .fetch_all(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut total_apartments = 0i32;
+    let mut total_progress = 0.0f64;
+    let project_count = projects_data.len();
+
+    for row in projects_data {
+        let apartments: i32 = row.try_get("nombre_des_appartement").map_err(|e| e.to_string())?;
+        let sold: i32 = row.try_get("nda_vendus").map_err(|e| e.to_string())?;
+        
+        total_apartments += apartments;
+        
+        // Calculate progress for this project (avoid division by zero)
+        if apartments > 0 {
+            let project_progress = (sold as f64 / apartments as f64) * 100.0;
+            total_progress += project_progress;
+        }
+    }
+
+    // Calculate average progress across all projects
+    let average_progress = if project_count > 0 {
+        total_progress / project_count as f64
+    } else {
+        0.0
+    };
+
+    Ok(DashboardStats {
+        total_projects: total_projects as i32,
+        total_apartments,
+        average_progress,
+    })
+}
+
+// Function to ensure database exists and create it if not
+async fn ensure_database_exists(base_url: &str, db_name: &str) -> Result<(), String> {
+    // Connect to the default postgres database to check if our target database exists
+    let admin_url = format!("{}postgres", base_url);
+    
+    match PgPool::connect(&admin_url).await {
+        Ok(admin_pool) => {
+            // Check if database exists
+            let exists = sqlx::query("SELECT 1 FROM pg_database WHERE datname = $1")
+                .bind(db_name)
+                .fetch_optional(&admin_pool)
+                .await
+                .map_err(|e| e.to_string())?;
+            
+            if exists.is_none() {
+                // Database doesn't exist, create it
+                println!("Creating database '{}'...", db_name);
+                let create_db_query = format!("CREATE DATABASE \"{}\"", db_name);
+                sqlx::query(&create_db_query)
+                    .execute(&admin_pool)
+                    .await
+                    .map_err(|e| format!("Failed to create database '{}': {}", db_name, e))?;
+                println!("Database '{}' created successfully!", db_name);
+            } else {
+                println!("Database '{}' already exists.", db_name);
+            }
+            
+            admin_pool.close().await;
+            Ok(())
+        }
+        Err(e) => {
+            eprintln!("Warning: Could not connect to PostgreSQL admin database: {}", e);
+            eprintln!("This might be because:");
+            eprintln!("1. PostgreSQL is not running");
+            eprintln!("2. Connection credentials are incorrect");
+            eprintln!("3. PostgreSQL is not installed");
+            eprintln!("\nContinuing with the assumption that the database exists...");
+            Ok(())
+        }
+    }
+}
+
+// Function to parse database URL and extract components
+fn parse_database_url(url: &str) -> Result<(String, String), String> {
+    // Expected format: postgres://user:password@host:port/database
+    if let Some(db_part) = url.strip_prefix("postgres://") {
+        if let Some(slash_pos) = db_part.rfind('/') {
+            let base_url = format!("postgres://{}/", &db_part[..slash_pos]);
+            let db_name = &db_part[slash_pos + 1..];
+            return Ok((base_url, db_name.to_string()));
+        }
+    }
+    Err("Invalid database URL format. Expected: postgres://user:password@host:port/database".to_string())
+}
+
+// Function to create default admin user if no users exist
+async fn create_default_admin_user(pool: &PgPool) -> Result<(), String> {
+    // Check if any users exist
+    let user_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    if user_count == 0 {
+        println!("No users found. Creating default admin user...");
+        
+        // Create default admin user
+        sqlx::query("INSERT INTO users (name, password, admin) VALUES ($1, $2, $3)")
+            .bind("admin")
+            .bind("admin123")
+            .bind("1")
+            .execute(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+        
+        println!("Default admin user created:");
+        println!("  Username: admin");
+        println!("  Password: admin123");
+        println!("  Please change this password after first login!");
+    }
+    
+    Ok(())
+}
+
 // Main function
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() -> Result<(), String> {
-    let pool = tauri::async_runtime::block_on(async {
-        let pool = PgPool::connect("postgres://postgres:test@localhost:5432/database").await
-            .map_err(|e| e.to_string())?;
+    // Load environment variables from .env file if it exists
+    dotenvy::dotenv().ok();    let pool = tauri::async_runtime::block_on(async {
+        // Get database URL from environment variable or use default
+        let database_url = env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://postgres:test@localhost:5432/database".to_string());
+        
+        println!("Initializing database connection...");
+        println!("Database URL: {}", database_url);
+        
+        // Try to ensure database exists before connecting
+        if let Ok((base_url, db_name)) = parse_database_url(&database_url) {
+            println!("Checking if database '{}' exists...", db_name);
+            ensure_database_exists(&base_url, &db_name).await?;
+        }
+        
+        // Now try to connect to the target database
+        println!("Connecting to database...");
+        let pool = PgPool::connect(&database_url).await
+            .map_err(|e| {
+                eprintln!("Database connection failed with URL: {}", database_url);
+                eprintln!("Error: {}", e);
+                eprintln!("\nTroubleshooting tips:");
+                eprintln!("1. Ensure PostgreSQL is running");
+                eprintln!("2. Check your DATABASE_URL in the .env file");
+                eprintln!("3. Verify database credentials are correct");
+                eprintln!("4. Make sure PostgreSQL is installed and accessible");
+                format!("Failed to connect to database: {}. Please ensure PostgreSQL is running and accessible.", e)
+            })?;
+        
+        println!("Successfully connected to database!");
+        println!("Setting up database tables...");
         
         // Create users table if it doesn't exist
         sqlx::query(
@@ -804,11 +972,18 @@ pub fn run() -> Result<(), String> {
         )
         .execute(&pool)
         .await
-        .map_err(|e| e.to_string())?;
-
-        // Run migration to ensure table structure is up to date
+        .map_err(|e| e.to_string())?;        // Run migration to ensure table structure is up to date
         // This handles converting logt_num from integer to varchar and adding new columns
         migrate_buyers_table_internal(&pool).await?;
+
+        println!("Database tables created successfully!");
+        
+        // Create default admin user if no users exist
+        println!("Checking for default admin user...");
+        create_default_admin_user(&pool).await?;
+        
+        println!("Database initialization completed successfully!");
+        println!("Application is ready to use!");
 
         Ok::<PgPool, String>(pool)
     })?;
@@ -816,7 +991,7 @@ pub fn run() -> Result<(), String> {
     tauri::Builder::default()
         .manage(pool)
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![login, signup_proccess, update_user_password, get_employee_by_name, insert_employee, get_all_employees, delete_employee, update_employee, get_project_names, get_projects, add_project_to_the_database, delete_project_from_database, add_buyer_to_database, get_buyers_by_project, delete_buyer_from_database, edit_buyer_in_database, update_buyer_payments, migrate_buyers_table, get_project_bloc_count])
+        .invoke_handler(tauri::generate_handler![login, signup_proccess, update_user_password, get_employee_by_name, insert_employee, get_all_employees, delete_employee, update_employee, get_project_names, get_projects, add_project_to_the_database, delete_project_from_database, add_buyer_to_database, get_buyers_by_project, delete_buyer_from_database, edit_buyer_in_database, update_buyer_payments, migrate_buyers_table, get_project_bloc_count, get_dashboard_stats])
         .run(tauri::generate_context!())
         .map_err(|e| e.to_string())?;
 

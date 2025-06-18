@@ -423,10 +423,9 @@ document.addEventListener('DOMContentLoaded', function () {
                         renderBuyerRow(newRow, buyer, buyersInNiveau, index, niveau);
                         tbody.appendChild(newRow);
                     });
-                });
-            }
+                });            }
             
-            updateBuyerCount(filteredBuyers.length);
+            updateBuyerCount(buyers.length);
         } catch (error) {
             console.error('Error loading buyers:', error);
             tbody.innerHTML = `

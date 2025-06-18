@@ -1,8 +1,8 @@
 [package]
-name = "my-application"
+name = "Managist"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "A Tauri Entreprise Managment App"
+authors = ["Fezzaa Lamri Yaakoub, Bouhara Yahia Abderraouf"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -30,6 +30,7 @@ sqlx = {version = "0.7", default-features = false, features = ["postgres", "runt
 rust_decimal = { version = "1.32", features = ["serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 num-traits = "0.2"
+dotenvy = "0.15"
 
 
 

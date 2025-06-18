@@ -7,22 +7,16 @@
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
-<body>
-    <div class="container">
+<body>    <div class="container">
         <aside class="sidebar">
-            <h2>Managist</h2>
-            <nav>
-                <div class="container">
-                    <aside class="sidebar">
-            <ul>
-                <li><a href="../index.html">Dashboard</a></li>
-                <li><a href="./salaire.html">Salary</a></li>
-                <li><a href="../projects/project.html">Projects</a></li>
-                <li><a href="../settings/setting.html">Settings</a></li>
+            <h2><i class="fas fa-cogs"></i>Managist</h2>
+            <ul>                <li><a href="../index.html"><i class="fas fa-home"></i> Dashboard</a></li>
+                <li class="active"><a href="./salaire.html"><i class="fas fa-wallet"></i> Salary</a></li>
+                <li><a href="../projects/project.html"><i class="fas fa-tasks"></i> Projects</a></li>
+                <li><a href="../analytics/analytics.html"><i class="fas fa-chart-bar"></i> Analytics</a></li>
+                <li><a href="../settings/setting.html"><i class="fas fa-cog"></i> Settings</a></li>
             </ul>
             <button id="logout-button">Logout</button>
-
-            </nav>        
         </aside>
 
         <main class="content">
@@ -32,15 +26,17 @@
                 <div class="search-container">
                     <input type="text" id="search" placeholder="Rechercher">
                     <button id="search-button" class="search-btn"><i class="fas fa-search"></i></button>
-                </div>
-                <div class="button-group">
+                </div>                <div class="button-group">
                     <button type="submit" id="ajouter-un-emploee-button">Ajouter un employee</button>
                     <select id="project-selector" class="project-dropdown">
                         <option value="administration" selected>Administration</option>
                         <!-- Projects will be loaded here dynamically -->
                     </select>
                     <button type="submit" id="mode-de-saisir-button">Mode de saisier</button>
-                </div>  
+                    <button type="button" id="generate-pdf-button" class="pdf-btn">
+                        <i class="fas fa-file-pdf"></i> Generate PDF Report
+                    </button>
+                </div>
                 <table>
                         <thead>
                         <tr>
@@ -306,10 +302,11 @@
             </div>
             <div class="modal-footer">
                 <button class="success-ok-btn" id="successOk">OK</button>
-            </div>
-        </div>
+            </div>        </div>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
     <script type="module" src="index.js" defer></script>
 </body>
 </html>

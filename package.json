@@ -2,12 +2,16 @@
   "name": "my-application",
   "private": true,
   "version": "0.1.0",
-  "type": "module",
-  "scripts": {
+  "type": "module",  "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "setup": "node -e \"console.log('Please run setup.bat on Windows or setup.sh on Linux/macOS')\"",
+    "db:setup": "psql -f database_setup.sql",
+    "clean": "rm -rf node_modules target && npm install"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

@@ -3,6 +3,23 @@
 version = 4
 
 [[package]]
+name = "Managist"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "dotenvy",
+ "num-traits",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-opener",
+ "tokio",
+]
+
+[[package]]
 name = "addr2line"
 version = "0.24.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2383,22 +2400,6 @@ dependencies = [
  "serde",
  "thiserror 2.0.12",
  "windows-sys 0.59.0",
-]
-
-[[package]]
-name = "my-application"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "num-traits",
- "rust_decimal",
- "serde",
- "serde_json",
- "sqlx",
- "tauri",
- "tauri-build",
- "tauri-plugin-opener",
- "tokio",
 ]
 
 [[package]]
