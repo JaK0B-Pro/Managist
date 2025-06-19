@@ -125,17 +125,24 @@
                     <i class="fas fa-times"></i>
                 </button>
             </div>
-        </div>    </div>    <script>
-        function openSection(section) {
+        </div>    </div>    <script>        function openSection(section) {
             if (section === 'password') {
                 // Open password modal instead of section
                 document.getElementById("password-modal").style.display = "block";
             } else {
-                // Handle other sections normally
+                // Handle toggle functionality for chat and language sections
+                const targetSection = document.getElementById(section + "-section");
+                const isCurrentlyHidden = targetSection.classList.contains("hidden");
+                
+                // Hide all sections first
                 document.getElementById("chat-section").classList.add("hidden");
                 document.getElementById("language-section").classList.add("hidden");
-
-                document.getElementById(section + "-section").classList.remove("hidden");
+                
+                // If the section was hidden, show it (toggle open)
+                if (isCurrentlyHidden) {
+                    targetSection.classList.remove("hidden");
+                }
+                // If it was visible, it stays hidden (toggle close)
             }
         }
 

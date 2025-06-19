@@ -2,6 +2,32 @@ const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
 const { getCurrentWindow } = window.__TAURI__.window;
 
+// Role-based access control check
+function checkPageAccess() {
+    const storedUser = localStorage.getItem('currentUser');
+    if (storedUser) {
+        try {
+            const userObject = JSON.parse(storedUser);
+            const role = userObject.role || '0';
+            
+            // Only admin (role 1) can access salary page
+            if (role !== '1') {
+                alert('Access denied. You do not have permission to view this page.');
+                window.location.href = '../index.html';
+                return false;
+            }
+        } catch (error) {
+            console.error('Error checking user role:', error);
+            window.location.href = '../index.html';
+            return false;
+        }
+    } else {
+        window.location.href = '../index.html';
+        return false;
+    }
+    return true;
+}
+
 // Utility functions (embedded to avoid import issues)
 async function resizeWindow(width, height) {
   const appWindow = await getCurrentWindow();
@@ -25,6 +51,13 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 document.addEventListener('DOMContentLoaded', async function() {
+    // Check access control
+    const hasAccess = checkPageAccess();
+    if (!hasAccess) return;
+    
+    // Display current user name in header
+    displayCurrentUserName();
+    
     // Set initial amount to 0
     document.querySelector('.amount').textContent = '0,00';
     // Get modal elements
@@ -1052,3 +1085,35 @@ function showPDFSuccessMessage() {
         style.remove();
     }, 4000);
 }
+
+// Function to get current user from localStorage
+function getCurrentUser() {
+    const storedUser = localStorage.getItem('currentUser');
+    if (storedUser) {
+        try {
+            // Try to parse as JSON first
+            const userObject = JSON.parse(storedUser);
+            return userObject;
+        } catch (error) {
+            // If it's not JSON, assume it's just a username string
+            return { username: storedUser };
+        }
+    }
+    return null;
+}
+
+// Function to display current user name in the header
+function displayCurrentUserName() {
+    const currentUserElement = document.getElementById('current-user');
+    if (currentUserElement) {
+        const user = getCurrentUser();
+        if (user && user.username) {
+            currentUserElement.textContent = user.username;
+        } else {
+            currentUserElement.textContent = 'Utilisateur';
+        }
+    }
+}
+
+// Call displayCurrentUserName on page load
+document.addEventListener('DOMContentLoaded', displayCurrentUserName);

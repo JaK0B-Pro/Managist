@@ -83,8 +83,38 @@ function updateUserDisplay() {
     }
 }
 
+// Role-based access control (inline to avoid import issues)
+function getCurrentUserRole() {
+    const storedUser = localStorage.getItem('currentUser');
+    if (storedUser) {
+        try {
+            const userObject = JSON.parse(storedUser);
+            return userObject.role || '0';
+        } catch (error) {
+            return '0';
+        }
+    }
+    return '0';
+}
+
+function setupRoleBasedNavigation() {
+    const role = getCurrentUserRole();
+    
+    // Hide salary link for role 2 (Manager)
+    if (role === '2') {
+        const salaryLinks = document.querySelectorAll('a[href*="salaire"]');
+        salaryLinks.forEach(link => {
+            const listItem = link.closest('li');
+            if (listItem) {
+                listItem.style.display = 'none';
+            }
+        });
+    }
+}
+
 // Call functions when the page loads
 window.addEventListener('DOMContentLoaded', () => {
     updateUserDisplay();
     loadDashboardStats();
+    setupRoleBasedNavigation();
 });

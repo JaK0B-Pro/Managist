@@ -34,11 +34,19 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
-  },
+  },  
   "plugins": {
     "window": {
       "all": true,
       "center": true
+    },
+          "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/yourusername/Managist/releases/latest/download/{{target}}-{{arch}}-{{version}}"
+      ],
+      "dialog": true,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJFRUVFNDcxOTFENjlBMTIKUldRU210YVJjZ1R1TGxUdG9SaitUYnJxQURMTlFZUll6cEtoWVNqZ0gvOVNSdmNZZ045N2QySkwK"
     }
   }
 }

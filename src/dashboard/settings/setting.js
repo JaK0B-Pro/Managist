@@ -1,6 +1,35 @@
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
 
+// Role-based access control (inline to avoid import issues)
+function getCurrentUserRole() {
+    const storedUser = localStorage.getItem('currentUser');
+    if (storedUser) {
+        try {
+            const userObject = JSON.parse(storedUser);
+            return userObject.role || '0';
+        } catch (error) {
+            return '0';
+        }
+    }
+    return '0';
+}
+
+function setupRoleBasedNavigation() {
+    const role = getCurrentUserRole();
+    
+    // Hide salary link for role 2 (Manager)
+    if (role === '2') {
+        const salaryLinks = document.querySelectorAll('a[href*="salaire"]');
+        salaryLinks.forEach(link => {
+            const listItem = link.closest('li');
+            if (listItem) {
+                listItem.style.display = 'none';
+            }
+        });
+    }
+}
+
 // Utility functions (embedded to avoid import issues)
 async function resizeWindow(width, height) {
     const { getCurrentWindow } = window.__TAURI__.window;
@@ -13,6 +42,8 @@ function clearCurrentUser() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    setupRoleBasedNavigation(); // Setup role-based navigation first
+    
     // Logout functionality
     const logoutButton = document.getElementById("logout-button");
     if (logoutButton) {
@@ -24,19 +55,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Password change functionality
-    initPasswordChangeSystem();
-
-    // Chat and language features (placeholder)
-    document.addEventListener('click', function(e) {
-        if (e.target.closest('.settings-card')) {
-            const section = e.target.closest('.settings-card').getAttribute('onclick');
-            if (section && section.includes('chat')) {
-                alert('💬 Chat feature coming soon!');
-            } else if (section && section.includes('language')) {
-                alert('🌍 Language change feature coming soon!');
-            }
-        }
-    });
+    initPasswordChangeSystem();    // Chat and language features - popups removed
+    // The openSection function in HTML will handle the section opening directly
+    setupRoleBasedNavigation();
 });
 
 function initPasswordChangeSystem() {

@@ -905,7 +905,7 @@ pub fn run() -> Result<(), String> {
                 id SERIAL PRIMARY KEY,
                 name VARCHAR(255) NOT NULL UNIQUE,
                 password VARCHAR(255) NOT NULL,
-                admin VARCHAR(10) DEFAULT '0'
+                admin VARCHAR(10) DEFAULT '0' -- Role: 0=User, 1=Admin, 2=Manager
             )"
         )
         .execute(&pool)
@@ -986,11 +986,12 @@ pub fn run() -> Result<(), String> {
         println!("Application is ready to use!");
 
         Ok::<PgPool, String>(pool)
-    })?;
-
+    })?;    
+    
     tauri::Builder::default()
         .manage(pool)
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![login, signup_proccess, update_user_password, get_employee_by_name, insert_employee, get_all_employees, delete_employee, update_employee, get_project_names, get_projects, add_project_to_the_database, delete_project_from_database, add_buyer_to_database, get_buyers_by_project, delete_buyer_from_database, edit_buyer_in_database, update_buyer_payments, migrate_buyers_table, get_project_bloc_count, get_dashboard_stats])
         .run(tauri::generate_context!())
         .map_err(|e| e.to_string())?;

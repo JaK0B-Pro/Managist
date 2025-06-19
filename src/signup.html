@@ -53,9 +53,13 @@
             <div class="input-group">
                 <input type="password" placeholder="Confirm Password" id="togglePassword">
                 <!-- <img src="assets/setShowPassword.png" alt="Show Confirm Password Icon" id="toggleConfirmPassword">-->
-            </div>
-            <div class="input-group">
-                <input type="number" placeholder="Admin.. 1/0" max="1" min="0" id="checkAdmin">
+            </div>            <div class="input-group">
+                <select id="checkAdmin" required>
+                    <option value="">Select Role</option>
+                    <option value="0">User (Role 0)</option>
+                    <option value="1">Admin (Role 1)</option>
+                    <option value="2">Manager (Role 2)</option>
+                </select>
             </div>
 
             <button class="signup-button" id="signUpButton"> Sign Up</button>

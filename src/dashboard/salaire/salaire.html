@@ -19,14 +19,16 @@
             <button id="logout-button">Logout</button>
         </aside>
 
-        <main class="content">
+        <main class="content">            
             <header>
-                <h1>Bienvenue, [Utilisateur]</h1>
-            </header>            <section class="transactions">
+                <h1>Bienvenue, <span id="current-user">Utilisateur</span></h1>
+            </header>
+            <section class="transactions">
                 <div class="search-container">
                     <input type="text" id="search" placeholder="Rechercher">
                     <button id="search-button" class="search-btn"><i class="fas fa-search"></i></button>
-                </div>                <div class="button-group">
+                </div>
+                <div class="button-group">
                     <button type="submit" id="ajouter-un-emploee-button">Ajouter un employee</button>
                     <select id="project-selector" class="project-dropdown">
                         <option value="administration" selected>Administration</option>

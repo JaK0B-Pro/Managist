@@ -3,6 +3,7 @@ const { listen } = window.__TAURI__.event;
 const { getCurrentWindow, LogicalSize } = window.__TAURI__.window;
 // const { event, window: tauriWindow, path } = window.__TAURI__.;
 import { setCurrentUser } from './utils/userState.js';
+import { setCurrentUser as setCurrentUserWithRole } from './utils/roleManager.js';
 
 let greetInputEl;
 let greetMsgEl;
@@ -21,20 +22,22 @@ async function login() {
     console.log(password);
 
     await listen("login-result", (event) => {
-      const response = event.payload;
-
-      if (response.startsWith("LoggedIn:")) {
-        setCurrentUser(user);
-        divMessage.textContent = "You are successfully logged in!";
-        divMessage.style.color = "green";
-        
-        // Get admin value
+      const response = event.payload;      if (response.startsWith("LoggedIn:")) {
+        // Get admin value (role)
         const adminValue = response.split(":")[1];
         
-        // Redirect based on admin value
+        // Set user with role information
+        setCurrentUser(user); // Keep for backward compatibility
+        setCurrentUserWithRole(user, adminValue); // New role-based storage
+        
+        divMessage.textContent = "You are successfully logged in!";
+        divMessage.style.color = "green";
+          // Redirect based on admin value
         setTimeout(() => {
           if (adminValue === "1") {
             showAdminPage();
+          } else if (adminValue === "2") {
+            showManagerPage();
           } else {
             showEmployeePage();
           }
@@ -59,6 +62,15 @@ async function login() {
 
 // Function to show admin dashboard
 async function showAdminPage() {
+  const appWindow = await getCurrentWindow();
+  await appWindow.setSize({ type: 'Logical', width: 1080, height: 720 });
+  await appWindow.center();
+
+  globalThis.window.location.href = './dashboard/index.html';
+}
+
+// Function to show manager dashboard (role 2)
+async function showManagerPage() {
   const appWindow = await getCurrentWindow();
   await appWindow.setSize({ type: 'Logical', width: 1080, height: 720 });
   await appWindow.center();
