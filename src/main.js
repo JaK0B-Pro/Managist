@@ -120,5 +120,4 @@ window.addEventListener("DOMContentLoaded", () => {
 
 //   console.log(username);
 //   console.log(password);
-  
 // });

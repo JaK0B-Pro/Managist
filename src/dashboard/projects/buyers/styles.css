@@ -1088,3 +1088,118 @@ td[rowspan] {
 .bloc-separator {
     animation: fadeInUp 0.4s ease-out;
 }
+
+/* Readonly field styling for auto-filled fields */
+.form-group input[readonly] {
+    background-color: #f8f9fa !important;
+    border-color: #dee2e6 !important;
+    color: #495057;
+    cursor: not-allowed;
+}
+
+.form-group .field-note {
+    display: block;
+    margin-top: 4px;
+    color: #6c757d;
+    font-size: 0.8rem;
+    font-style: italic;
+}
+
+.form-group .field-note i {
+    color: #007bff;
+    margin-right: 4px;
+}
+
+/* Animation for auto-filled field updates */
+.form-group input.updated {
+    background-color: #e8f5e8 !important;
+    border-color: #28a745 !important;
+    transition: all 0.3s ease;
+}
+
+/* Tranche row styling with date inputs */
+.tranche-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+
+.tranche-row label {
+    min-width: 30px;
+    font-weight: bold;
+    color: #333;
+}
+
+.tranche-row input[type="number"] {
+    flex: 2;
+    min-width: 120px;
+}
+
+.tranche-row input[type="date"] {
+    flex: 1;
+    min-width: 140px;
+    font-size: 14px;
+}
+
+.tranche-row select {
+    flex: 1;
+    min-width: 100px;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    background: white;
+    color: #333;
+}
+
+.tranche-row select:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+}
+
+.tranche-row .btn-remove-tranche {
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 25px;
+    height: 25px;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tranche-row .btn-remove-tranche:hover {
+    background: #c82333;
+}
+
+/* Payment type indicators */
+.tranche-cell {
+    position: relative;
+}
+
+.payment-type-indicator {
+    font-size: 12px;
+    margin-left: 4px;
+    opacity: 0.7;
+}
+
+.payment-cash {
+    background: rgba(255, 193, 7, 0.1);
+}
+
+.payment-bank {
+    background: rgba(0, 123, 255, 0.1);
+}
+
+.tranche-cell:hover .payment-type-indicator {
+    opacity: 1;
+    transform: scale(1.2);
+    transition: all 0.2s ease;
+}

@@ -108,10 +108,12 @@ async function afficherProjets() {
           <div class="info-row">
               <div><strong>Total:</strong> ${projet.nombre_des_appartement} appartements</div>
               <div><strong>Vendus:</strong> ${projet.nda_vendus}</div>
-          </div>
-          <div class="info-row">
+          </div>          <div class="info-row">
               <div><strong>Début:</strong> ${dateDebut}</div>
               <div><strong>Fin:</strong> ${dateFin}</div>
+          </div>
+          <div class="info-row">
+              <div><strong>Types:</strong> ${projet.types_appartements || 'Non spécifié'}</div>
           </div>
           <div class="progress-info">
               <span>Progress</span>
@@ -204,8 +206,7 @@ document.addEventListener('click', function(event) {
 
 // Gestion du formulaire
 document.getElementById('projectForm').addEventListener('submit', async function (e) {
-  e.preventDefault();
-  const project = {
+  e.preventDefault();  const project = {
     project_name: document.getElementById('nomProjet').value,
     project_location: document.getElementById('location').value,
     nombre_des_bloc: parseInt(document.getElementById('nmbrDesBlocs').value, 10),
@@ -215,6 +216,8 @@ document.getElementById('projectForm').addEventListener('submit', async function
     nda_vendus: 0, // Initially no apartments are sold
     project_start_date: document.getElementById('dateDeDebut').value,
     project_end_date: document.getElementById('dateDeFin').value,
+    types_appartements: document.getElementById('types').value,
+    surfaces_appartements: document.getElementById('surfaces').value,
   };
   try {
     await invoke('add_project_to_the_database', { project });
@@ -242,15 +245,20 @@ function calculateTotalApartments() {
   
   const totalApartments = nmbrDesBlocs * nmbrDesEtages * nmbrDesAppartementsDansChaqueBloc;
   
-  // Update the total apartments field
+  // Update the total apartments field only if it's empty or if user wants auto-calculation
   const totalField = document.getElementById('nmbrDesAppartementsTotal');
-  totalField.value = totalApartments;
   
-  // Add visual feedback with a subtle animation
-  totalField.style.backgroundColor = '#e8f5e8';
-  setTimeout(() => {
-    totalField.style.backgroundColor = '';
-  }, 1000);
+  // Only auto-fill if the field is empty or has the calculated value
+  if (!totalField.value || totalField.dataset.autoCalculated === 'true') {
+    totalField.value = totalApartments;
+    totalField.dataset.autoCalculated = 'true';
+    
+    // Add visual feedback with a subtle animation
+    totalField.style.backgroundColor = '#e8f5e8';
+    setTimeout(() => {
+      totalField.style.backgroundColor = '';
+    }, 1000);
+  }
 }
 
 // Add event listeners for automatic calculation
@@ -263,12 +271,43 @@ calcFields.forEach(fieldId => {
   }
 });
 
-// Make total apartments field read-only to prevent manual editing
+// Allow manual editing of total apartments field
 const totalField = document.getElementById('nmbrDesAppartementsTotal');
 if (totalField) {
-  totalField.setAttribute('readonly', true);
-  totalField.style.backgroundColor = '#f5f5f5';
-  totalField.title = 'Ce champ est calculé automatiquement';
+  // Remove readonly attribute to allow manual editing
+  totalField.removeAttribute('readonly');
+  totalField.style.backgroundColor = '';
+  totalField.title = 'Auto-calculé ou saisissez manuellement';
+  
+  // When user manually edits, mark it as manually edited
+  totalField.addEventListener('input', function() {
+    if (this.value) {
+      this.dataset.autoCalculated = 'false';
+    }
+  });
+  
+  // Add a button to recalculate if needed
+  const recalcButton = document.createElement('button');
+  recalcButton.type = 'button';
+  recalcButton.innerHTML = '<i class="fas fa-calculator"></i> Recalculer';
+  recalcButton.className = 'recalc-btn';
+  recalcButton.style.cssText = `
+    margin-left: 10px;
+    padding: 5px 10px;
+    background: #4a90e2;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+  `;
+  recalcButton.addEventListener('click', function() {
+    totalField.dataset.autoCalculated = 'true';
+    calculateTotalApartments();
+  });
+  
+  // Insert the button after the total field
+  totalField.parentNode.appendChild(recalcButton);
 }
 
 // Function to delete a project
@@ -416,3 +455,247 @@ document.getElementById('projectList').addEventListener('mouseout', function(e) 
 
 // Call setupRoleBasedNavigation on DOMContentLoaded to apply role-based settings
 document.addEventListener('DOMContentLoaded', setupRoleBasedNavigation);
+
+// Initialize on DOMContentLoaded for better performance
+document.addEventListener('DOMContentLoaded', function() {
+  // Affichage initial
+  afficherProjets();
+});
+
+// Project Parameters Management
+let currentEditingInfoId = null;
+let currentSelectedProjectId = null;
+
+// Show project parameters modal
+document.getElementById('projectParamsBtn').addEventListener('click', function() {
+  const modal = document.getElementById('projectParamsModal');
+  modal.classList.add('show');
+  loadProjectsGrid();
+});
+
+// Close project parameters modal
+document.getElementById('projectParamsClose').addEventListener('click', function() {
+  const modal = document.getElementById('projectParamsModal');
+  modal.classList.remove('show');
+  resetForm();
+  showProjectsGrid();
+});
+
+// Back to projects button
+document.addEventListener('DOMContentLoaded', function() {
+  const backBtn = document.getElementById('backToProjects');
+  if (backBtn) {
+    backBtn.addEventListener('click', showProjectsGrid);
+  }
+});
+
+// Load projects as grid cards
+async function loadProjectsGrid() {
+  try {
+    const projects = await invoke('get_projects');
+    const container = document.getElementById('projectsList');
+    
+    if (projects.length === 0) {
+      container.innerHTML = '<div class="empty-state">Aucun projet disponible</div>';
+      return;
+    }
+    
+    container.innerHTML = projects.map(project => `
+      <div class="project-card" data-project-id="${project.id}" data-project-name="${project.project_name}">
+        <i class="fas fa-building"></i>
+        <h4>${project.project_name}</h4>
+        <p>${project.project_location}</p>
+      </div>
+    `).join('');
+    
+    // Add click event listeners to project cards
+    container.querySelectorAll('.project-card').forEach(card => {
+      card.addEventListener('click', function() {
+        const projectId = parseInt(this.dataset.projectId);
+        const projectName = this.dataset.projectName;
+        selectProject(projectId, projectName);
+      });
+    });
+  } catch (error) {
+    console.error('Error loading projects:', error);
+    alert('Erreur lors du chargement des projets');
+  }
+}
+
+// Show projects grid (hide apartment types section)
+function showProjectsGrid() {
+  document.getElementById('apartmentTypesSection').style.display = 'none';
+  document.querySelector('.projects-list').style.display = 'block';
+  currentSelectedProjectId = null;
+}
+
+// Select a project and show its apartment types
+function selectProject(projectId, projectName) {
+  currentSelectedProjectId = projectId;
+  document.getElementById('selectedProjectName').textContent = `Types d'appartements - ${projectName}`;
+  document.querySelector('.projects-list').style.display = 'none';
+  document.getElementById('apartmentTypesSection').style.display = 'block';
+  loadApartmentTypes(projectId);
+}
+
+// Load apartment types for selected project
+async function loadApartmentTypes(projectId) {
+  try {
+    const apartmentTypes = await invoke('get_project_info', { projectId });
+    displayApartmentTypes(apartmentTypes);
+  } catch (error) {
+    console.error('Error loading apartment types:', error);
+    alert('Erreur lors du chargement des types d\'appartements');
+  }
+}
+
+// Display apartment types
+function displayApartmentTypes(apartmentTypes) {
+  const container = document.getElementById('apartmentTypesList');
+  
+  if (apartmentTypes.length === 0) {
+    container.innerHTML = '<div class="empty-state">Aucun type d\'appartement défini pour ce projet</div>';
+    return;
+  }
+  
+  container.innerHTML = '';
+  apartmentTypes.forEach(apartmentType => {
+    const item = document.createElement('div');
+    item.className = 'apartment-type-item';
+    item.innerHTML = `
+      <div class="apartment-type-info">
+        <h4>${apartmentType.type_of_appartement}</h4>
+        <p>Surface: ${apartmentType.surface}m² | Prix: ${formatPrice(apartmentType.price)} DA</p>
+      </div>
+      <div class="apartment-type-actions">
+        <button class="btn-edit" data-id="${apartmentType.id}" data-type="${apartmentType.type_of_appartement}" data-surface="${apartmentType.surface}" data-price="${apartmentType.price}">
+          <i class="fas fa-edit"></i> Modifier
+        </button>
+        <button class="btn-delete" data-id="${apartmentType.id}">
+          <i class="fas fa-trash"></i> Supprimer
+        </button>
+      </div>
+    `;
+    container.appendChild(item);
+  });
+  
+  // Add event listeners to the newly created buttons
+  container.querySelectorAll('.btn-edit').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const id = parseInt(this.dataset.id);
+      const type = this.dataset.type;
+      const surface = parseFloat(this.dataset.surface);
+      const price = parseFloat(this.dataset.price);
+      editApartmentType(id, type, surface, price);
+    });
+  });
+  
+  container.querySelectorAll('.btn-delete').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const id = parseInt(this.dataset.id);
+      deleteApartmentType(id);
+    });
+  });
+}
+
+// Format price with thousands separator
+function formatPrice(price) {
+  return new Intl.NumberFormat('fr-FR').format(price);
+}
+
+// Show add apartment type form
+document.getElementById('addApartmentTypeBtn').addEventListener('click', function() {
+  resetForm();
+  document.getElementById('formTitle').textContent = 'Ajouter un type d\'appartement';
+  document.getElementById('apartmentTypeForm').style.display = 'block';
+});
+
+// Edit apartment type
+function editApartmentType(id, type, surface, price) {
+  currentEditingInfoId = id;
+  document.getElementById('formTitle').textContent = 'Modifier le type d\'appartement';
+  document.getElementById('apartmentType').value = type;
+  document.getElementById('apartmentSurface').value = surface;
+  document.getElementById('apartmentPrice').value = price;
+  document.getElementById('apartmentTypeForm').style.display = 'block';
+}
+
+// Save apartment type (add or update)
+document.getElementById('saveApartmentType').addEventListener('click', async function() {
+  const type = document.getElementById('apartmentType').value.trim();
+  const surface = parseFloat(document.getElementById('apartmentSurface').value);
+  const price = parseFloat(document.getElementById('apartmentPrice').value);
+  
+  if (!type || !surface || !price) {
+    alert('Veuillez remplir tous les champs');
+    return;
+  }
+  
+  if (!currentSelectedProjectId) {
+    alert('Aucun projet sélectionné');
+    return;
+  }
+  
+  try {
+    const projectInfo = {
+      project_id: currentSelectedProjectId,
+      type_of_appartement: type,
+      surface: surface,
+      price: price
+    };
+    
+    if (currentEditingInfoId) {
+      // Update existing
+      await invoke('update_project_info', { infoId: currentEditingInfoId, projectInfo });
+    } else {
+      // Add new
+      await invoke('add_project_info', { projectInfo });
+    }
+    
+    // Reload the list
+    await loadApartmentTypes(currentSelectedProjectId);
+    resetForm();
+    
+  } catch (error) {
+    console.error('Error saving apartment type:', error);
+    alert('Erreur lors de la sauvegarde');
+  }
+});
+
+// Cancel form
+document.getElementById('cancelApartmentType').addEventListener('click', function() {
+  resetForm();
+});
+
+// Delete apartment type
+async function deleteApartmentType(id) {
+  if (!confirm('Êtes-vous sûr de vouloir supprimer ce type d\'appartement ?')) {
+    return;
+  }
+  
+  try {
+    await invoke('delete_project_info', { infoId: id });
+    await loadApartmentTypes(currentSelectedProjectId);
+  } catch (error) {
+    console.error('Error deleting apartment type:', error);
+    alert('Erreur lors de la suppression');
+  }
+}
+
+// Reset form
+function resetForm() {
+  currentEditingInfoId = null;
+  document.getElementById('apartmentTypeForm').style.display = 'none';
+  document.getElementById('apartmentType').value = '';
+  document.getElementById('apartmentSurface').value = '';
+  document.getElementById('apartmentPrice').value = '';
+}
+
+// Close modal when clicking outside
+document.getElementById('projectParamsModal').addEventListener('click', function(e) {
+  if (e.target === this) {
+    this.classList.remove('show');
+    resetForm();
+    showProjectsGrid();
+  }
+});

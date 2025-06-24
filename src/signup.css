@@ -58,8 +58,75 @@
     color: #000;
     flex: 1; /* Fill the remaining space */
     }
-    .input-group input::placeholder {
-    color: #888; /* Subtle placeholder color */
+    
+    /* Select dropdown styling to match input fields */
+    .input-group select {
+    border: none;
+    background: none;
+    outline: none;
+    font-size: 1em;
+    color: #000;
+    flex: 1; /* Fill the remaining space */
+    cursor: pointer;
+    appearance: none; /* Remove default styling */
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    padding-right: 20px; /* Space for custom arrow */
+    }
+    
+    /* Custom dropdown arrow */
+    .input-group select {
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 16px;
+    }
+      /* Style for select options */
+    .input-group select option {
+    background-color: #f4f4f4;
+    color: #000;
+    padding: 10px;
+    font-size: 1em;
+    }
+    
+    /* First option (placeholder) styling */
+    .input-group select option[value=""] {
+    color: #888;
+    font-style: italic;
+    }
+    
+    /* Different colors for different roles */
+    .input-group select option[value="0"] {
+    color: #2563eb; /* Blue for User */
+    }
+    
+    .input-group select option[value="1"] {
+    color: #dc2626; /* Red for Admin */
+    font-weight: bold;
+    }
+    
+    .input-group select option[value="2"] {
+    color: #059669; /* Green for Manager */
+    font-weight: 600;
+    }
+    
+    /* Special styling for role selection input group */
+    .role-selection {
+    border: 2px solid transparent;
+    transition: border-color 0.3s ease;
+    }
+    
+    .role-selection:hover {
+    border-color: rgba(90, 60, 255, 0.5);
+    }
+    
+    .role-selection:focus-within {
+    border-color: #5a3cff;
+    }
+    
+    /* Add a subtle role icon styling */
+    .role-selection select {
+    font-weight: 500;
     }
 
     /* Sign up button */
@@ -80,4 +147,21 @@
     .have-account {
     font-size: 0.9em;
     margin-top: 15px;
-}
+    }
+
+    /* Hover and focus effects for input fields */
+    .input-group:hover {
+    background-color: #eeeeee;
+    transition: background-color 0.3s ease;
+    }
+    
+    .input-group:focus-within {
+    background-color: #e8e8e8;
+    box-shadow: 0 0 0 2px rgba(90, 60, 255, 0.3);
+    transition: all 0.3s ease;
+    }
+    
+    /* Specific focus styling for select */
+    .input-group select:focus {
+    color: #000;
+    }

@@ -63,11 +63,14 @@
 
         <!-- 🌐 Section Langue -->
         <div id="language-section" class="hidden">
-            <h2><i class="fas fa-globe"></i> Select Language</h2>            <select id="language-select">
+            <h2><i class="fas fa-globe"></i> Select Language</h2>            
+            <select id="language-select">
                 <option value="fr">Français</option>
                 <option value="en">English</option>
             </select>
-        </div>        <!-- 🔒 Password Change Modal -->
+        </div>
+
+        <!-- 🔒 Password Change Modal -->
         <div id="password-modal" class="modal">
             <div class="modal-content">
                 <span class="close-modal" id="close-password-modal">&times;</span>
@@ -125,7 +128,9 @@
                     <i class="fas fa-times"></i>
                 </button>
             </div>
-        </div>    </div>    <script>        function openSection(section) {
+        </div>    
+        </div>    
+        <script> function openSection(section) {
             if (section === 'password') {
                 // Open password modal instead of section
                 document.getElementById("password-modal").style.display = "block";

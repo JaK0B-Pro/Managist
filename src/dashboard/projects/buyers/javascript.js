@@ -101,13 +101,16 @@ function addTranche() {
         alert('Maximum 10 tranches allowed');
         return;
     }
-    
-    const trancheRow = document.createElement('div');
-    trancheRow.className = 'tranche-row';
-    trancheRow.innerHTML = `
+      const trancheRow = document.createElement('div');
+    trancheRow.className = 'tranche-row';    trancheRow.innerHTML = `
         <label>T${trancheCount}:</label>
         <input type="number" step="0.01" min="0" name="tranche_${trancheCount}" 
                placeholder="Enter amount for T${trancheCount}" oninput="calculateTotalPaid()">
+        <input type="date" name="tranche_date_${trancheCount}" title="Payment date for T${trancheCount}">
+        <select name="tranche_type_${trancheCount}" title="Payment type for T${trancheCount}">
+            <option value="versement">Versement</option>
+            <option value="espece">Espèce</option>
+        </select>
         <button type="button" class="btn-remove-tranche" onclick="removeTranche(this)">×</button>
     `;
     
@@ -135,10 +138,18 @@ function updateTrancheLabels() {
     const tranchesContainer = document.getElementById('tranchesContainer');
     Array.from(tranchesContainer.children).forEach((row, index) => {
         const label = row.querySelector('label');
-        const input = row.querySelector('input');
+        const amountInput = row.querySelector('input[type="number"]');
+        const dateInput = row.querySelector('input[type="date"]');
+        const typeSelect = row.querySelector('select');
         label.textContent = `T${index}:`;
-        input.name = `tranche_${index}`;
-        input.placeholder = `Enter amount for T${index}`;
+        amountInput.name = `tranche_${index}`;
+        amountInput.placeholder = `Enter amount for T${index}`;
+        dateInput.name = `tranche_date_${index}`;
+        dateInput.title = `Payment date for T${index}`;
+        if (typeSelect) {
+            typeSelect.name = `tranche_type_${index}`;
+            typeSelect.title = `Payment type for T${index}`;
+        }
     });
 }
 
@@ -151,11 +162,15 @@ function updateAddTrancheButtonVisibility() {
 function calculateTotalPaid() {
     // Calculate total paid from tranches
     const tranchesContainer = document.getElementById('tranchesContainer');
+    if (!tranchesContainer) return;
+    
     let totalPaid = 0;
     
     Array.from(tranchesContainer.children).forEach(row => {
         const input = row.querySelector('input[type="number"]');
-        totalPaid += parseFloat(input.value) || 0;
+        if (input) {
+            totalPaid += parseFloat(input.value) || 0;
+        }
     });
     
     // Update total paid display
@@ -461,12 +476,31 @@ document.addEventListener('DOMContentLoaded', function () {
             <td>${buyer.date}</td>
             <td>${formatCurrency(buyer.prix_totale || 0)}</td>
             <td>${formatCurrency(buyer.remise || 0)}</td>
-        `;
-        
-        // Add tranche columns dynamically (T0, T1, T2, etc.)
+        `;          // Add tranche columns dynamically (T0, T1, T2, etc.)
         for (let i = 0; i <= maxTranches; i++) {
-            const trancheValue = formatCurrency(payments[`T${i}`] || 0);
-            rowHTML += `<td class="tranche-cell">${trancheValue}</td>`;
+            let trancheAmount = 0;
+            let paymentType = 'versement';
+            const trancheData = payments[`T${i}`];
+            
+            // Handle both old format (just amount) and new format (amount + date + type)
+            if (typeof trancheData === 'object' && trancheData !== null) {
+                // New format: {amount: x, date: 'yyyy-mm-dd', type: 'versement|espece'}
+                trancheAmount = trancheData.amount || 0;
+                paymentType = trancheData.type || 'versement';
+            } else {
+                // Old format: just a number
+                trancheAmount = trancheData || 0;
+                paymentType = 'versement';
+            }
+            
+            const trancheValue = formatCurrency(trancheAmount);
+            const typeIndicator = paymentType === 'espece' ? '💵' : '🏦';
+            const typeClass = paymentType === 'espece' ? 'payment-cash' : 'payment-bank';
+            
+            // Show payment type indicator for all tranches (including 0 amounts)
+            rowHTML += `<td class="tranche-cell ${typeClass}" title="${paymentType === 'espece' ? 'Espèce' : 'Versement'}: ${trancheValue}">
+                ${trancheValue} <span class="payment-type-indicator">${typeIndicator}</span>
+            </td>`;
         }
         
         // Add final columns
@@ -597,9 +631,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Initialize page
     loadProjectInfo();
-    loadBuyers();
-
-    // Open modal when Add New Buyer button is clicked
+    loadBuyers();    // Open modal when Add New Buyer button is clicked
     addBtn.addEventListener('click', async function() {
         // Reset form for new buyer
         form.reset();
@@ -610,13 +642,19 @@ document.addEventListener('DOMContentLoaded', function () {
         // Populate bloc dropdown
         await populateBlocDropdown();
         
-        // Reset tranches to just T0
+        // Populate apartment type dropdown from project_info
+        await populateApartmentTypeDropdown();          // Reset tranches to just T0
         const tranchesContainer = document.getElementById('tranchesContainer');
         tranchesContainer.innerHTML = `
             <div class="tranche-row">
                 <label>T0:</label>
                 <input type="number" step="0.01" min="0" name="tranche_0" 
                        placeholder="Enter amount for T0" oninput="calculateTotalPaid()">
+                <input type="date" name="tranche_date_0" title="Payment date for T0">
+                <select name="tranche_type_0" title="Payment type for T0">
+                    <option value="versement">Versement</option>
+                    <option value="espece">Espèce</option>
+                </select>
                 <button type="button" class="btn-remove-tranche" onclick="removeTranche(this)" style="display: none;">×</button>
             </div>
         `;
@@ -668,17 +706,25 @@ document.addEventListener('DOMContentLoaded', function () {
         try {
             // Show loading state on submit button
             submitBtn.innerHTML = '<div class="loading-spinner"></div> ' + (isEdit ? 'Updating...' : 'Adding...');
-            submitBtn.disabled = true;
-
-            // Collect tranches data
+            submitBtn.disabled = true;            // Collect tranches data
             const tranchesContainer = document.getElementById('tranchesContainer');
             const tranches = {};
+            let totalPaidAmount = 0;
             
             Array.from(tranchesContainer.children).forEach((row, index) => {
-                const input = row.querySelector('input[type="number"]');
-                const value = parseFloat(input.value) || 0;
+                const amountInput = row.querySelector('input[type="number"]');
+                const dateInput = row.querySelector('input[type="date"]');
+                const typeSelect = row.querySelector('select');
+                const value = parseFloat(amountInput.value) || 0;
+                const date = dateInput.value || null;
+                const type = typeSelect ? typeSelect.value : 'versement';
                 if (value > 0) {
-                    tranches[`T${index}`] = value;
+                    tranches[`T${index}`] = {
+                        amount: value,
+                        date: date,
+                        type: type
+                    };
+                    totalPaidAmount += value;
                 }
             });
 
@@ -695,6 +741,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 date: document.getElementById('date').value,
                 prix_totale: parseFloat(document.getElementById('prixTotale').value) || 0,
                 remise: parseFloat(document.getElementById('remise').value) || 0,
+                total_paid: totalPaidAmount,
                 payments: tranches
             };
 
@@ -777,15 +824,118 @@ document.addEventListener('DOMContentLoaded', function () {
         if (this.value === '') {
             this.style.borderColor = '#ddd';
         }
-    });
-
-    // Add event listeners for price and remise changes (for display purposes)
+    });    // Add event listeners for price and remise changes (for display purposes)
     document.getElementById('prixTotale').addEventListener('input', calculateTotalPaid);
     document.getElementById('remise').addEventListener('input', calculateTotalPaid);
+    
+    // Add event listener for apartment type selection
+    document.getElementById('typeLogt').addEventListener('change', handleApartmentTypeChange);
     
     // Add event listener for add tranche button
     document.getElementById('addTrancheBtn').addEventListener('click', addTranche);
 });
+
+// Fetch apartment types from project_info table
+async function fetchProjectApartmentTypes(projectId) {
+    try {
+        console.log('Fetching apartment types for project ID:', projectId);
+        const apartmentTypes = await invoke('get_project_info', { projectId });
+        console.log('Fetched apartment types:', apartmentTypes);
+        return apartmentTypes;
+    } catch (error) {
+        console.error('Error fetching apartment types:', error);
+        return [];
+    }
+}
+
+// Populate apartment type dropdown
+async function populateApartmentTypeDropdown() {
+    const typeSelect = document.getElementById('typeLogt');
+    if (!typeSelect) return;
+    
+    console.log('Populating apartment type dropdown...');
+    
+    // Clear existing options except the first placeholder
+    typeSelect.innerHTML = '<option value="">Select Apartment Type</option>';
+    
+    try {
+        const apartmentTypes = await fetchProjectApartmentTypes(PROJECT_ID);
+        console.log('Apartment types received:', apartmentTypes);
+        
+        if (apartmentTypes.length === 0) {
+            console.log('No apartment types found for project');
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = 'No apartment types configured for this project';
+            option.disabled = true;
+            typeSelect.appendChild(option);
+            return;
+        }
+          // Add apartment type options
+        apartmentTypes.forEach(apt => {
+            console.log('Adding apartment type option:', apt);
+            const option = document.createElement('option');
+            option.value = apt.type_of_appartement;
+            option.textContent = `${apt.type_of_appartement} - ${apt.surface}m² - ${apt.price} DA`;
+            option.dataset.surface = apt.surface;
+            option.dataset.price = apt.price;
+            typeSelect.appendChild(option);
+        });
+        
+        console.log('Apartment type dropdown populated successfully');
+        
+    } catch (error) {
+        console.error('Error populating apartment type dropdown:', error);
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'Error loading apartment types';
+        option.disabled = true;
+        typeSelect.appendChild(option);
+    }
+}
+
+// Handle apartment type selection change
+function handleApartmentTypeChange() {
+    const typeSelect = document.getElementById('typeLogt');
+    const surfaceInput = document.getElementById('surface');
+    const priceInput = document.getElementById('prixTotale');
+    
+    if (!typeSelect || !surfaceInput || !priceInput) return;
+    
+    const selectedOption = typeSelect.options[typeSelect.selectedIndex];
+    
+    if (selectedOption && selectedOption.value) {
+        // Check if this is a predefined apartment type (has dataset values)
+        if (selectedOption.dataset.surface && selectedOption.dataset.price) {
+            // Auto-fill surface and price from selected apartment type
+            const surface = selectedOption.dataset.surface;
+            const price = selectedOption.dataset.price;
+            
+            surfaceInput.value = surface;
+            priceInput.value = price;
+            
+            // Make fields readonly for predefined types
+            surfaceInput.readOnly = true;
+            priceInput.readOnly = true;
+            
+            // Add visual feedback for auto-filled fields
+            [surfaceInput, priceInput].forEach(input => {
+                input.classList.add('updated');
+                setTimeout(() => input.classList.remove('updated'), 1000);
+            });
+        } else {
+            // Custom apartment type - allow manual editing
+            surfaceInput.readOnly = false;
+            priceInput.readOnly = false;
+        }
+    } else {
+        // No apartment type selected - clear fields and make them readonly
+        surfaceInput.value = '';
+        priceInput.value = '';
+        surfaceInput.readOnly = true;
+        priceInput.readOnly = true;
+    }
+}
 
 // Delete buyer function (global scope for onclick)
 async function deleteBuyer(button, buyerId) {
@@ -907,18 +1057,43 @@ async function editBuyer(buyerId) {
             alert('Buyer not found');
             return;
         }
-        
-        // Populate form with current data
+          // Populate form with current data
         await populateBlocDropdown();
+        await populateApartmentTypeDropdown();
+        
         document.getElementById('bloc').value = buyer.bloc || 'A';
         document.getElementById('niveau').value = buyer.niveau || '';
         document.getElementById('logtNum').value = buyer.logt_num || '';
         document.getElementById('nom').value = buyer.nom || '';
         document.getElementById('prenom').value = buyer.prenom || '';
-        document.getElementById('typeLogt').value = buyer.type_logt || '';
+        
+        // For editing, we need to handle apartment type differently
+        // First select the apartment type, then manually set surface and price if needed
+        const typeSelect = document.getElementById('typeLogt');
+        if (buyer.type_logt) {            // Try to find matching apartment type in dropdown
+            let matchFound = false;
+            for (let option of typeSelect.options) {
+                if (option.value === buyer.type_logt) {
+                    typeSelect.value = buyer.type_logt;
+                    matchFound = true;
+                    break;
+                }
+            }
+            
+            // If exact match not found, allow custom value for existing data
+            if (!matchFound) {
+                const customOption = document.createElement('option');
+                customOption.value = buyer.type_logt;
+                customOption.textContent = `${buyer.type_logt} (Custom)`;
+                typeSelect.appendChild(customOption);
+                typeSelect.value = buyer.type_logt;
+            }
+        }
+        
+        // Set surface and price (will be readonly for new apartment types, editable for custom ones)
         document.getElementById('surface').value = buyer.surface || '';
-        document.getElementById('date').value = buyer.date || '';
         document.getElementById('prixTotale').value = buyer.prix_totale || '';
+        document.getElementById('date').value = buyer.date || '';
         document.getElementById('remise').value = buyer.remise || '';
         
         // Parse and populate payments
@@ -945,22 +1120,41 @@ async function editBuyer(buyerId) {
         if (trancheKeys.length === 0) {
             trancheKeys.push('T0');
             payments['T0'] = 0;
-        }
-        
-        trancheKeys.forEach((key, index) => {
+        }          trancheKeys.forEach((key, index) => {
             const trancheRow = document.createElement('div');
             trancheRow.className = 'tranche-row';
-            trancheRow.innerHTML = `
+            
+            // Handle both old format (just amount) and new format (amount + date + type)
+            let amount = 0;
+            let date = '';
+            let type = 'versement';
+            
+            if (typeof payments[key] === 'object' && payments[key] !== null) {
+                // New format: {amount: x, date: 'yyyy-mm-dd', type: 'versement|espece'}
+                amount = payments[key].amount || 0;
+                date = payments[key].date || '';
+                type = payments[key].type || 'versement';
+            } else {
+                // Old format: just a number
+                amount = payments[key] || 0;
+                date = '';
+                type = 'versement';
+            }
+              trancheRow.innerHTML = `
                 <label>T${index}:</label>
                 <input type="number" step="0.01" min="0" name="tranche_${index}" 
-                       value="${payments[key] || 0}" placeholder="Enter amount for T${index}" 
+                       value="${amount}" placeholder="Enter amount for T${index}" 
                        oninput="calculateTotalPaid()">
+                <input type="date" name="tranche_date_${index}" value="${date}" title="Payment date for T${index}">
+                <select name="tranche_type_${index}" title="Payment type for T${index}">
+                    <option value="versement" ${type === 'versement' ? 'selected' : ''}>Versement</option>
+                    <option value="espece" ${type === 'espece' ? 'selected' : ''}>Espèce</option>
+                </select>
                 <button type="button" class="btn-remove-tranche" onclick="removeTranche(this)">×</button>
             `;
             tranchesContainer.appendChild(trancheRow);
         });
-        
-        updateAddTrancheButtonVisibility();
+          updateAddTrancheButtonVisibility();
         calculateTotalPaid();
         
         // Update modal title and button
@@ -1021,10 +1215,20 @@ async function editTranches(buyerId) {
         for (let i = currentMaxTranche + 1; i <= Math.min(currentMaxTranche + 2, 9); i++) {
             allTranches.push(`T${i}`);
         }
-        
-        let tranchesHTML = '';
+          let tranchesHTML = '';
         allTranches.forEach(key => {
-            const value = payments[key] || 0;
+            let value = 0;
+            const trancheData = payments[key];
+            
+            // Handle both old format (just amount) and new format (amount + date)
+            if (typeof trancheData === 'object' && trancheData !== null) {
+                // New format: {amount: x, date: 'yyyy-mm-dd'}
+                value = trancheData.amount || 0;
+            } else {
+                // Old format: just a number
+                value = trancheData || 0;
+            }
+            
             tranchesHTML += `
                 <div class="tranche-row">
                     <label>${key}:</label>
@@ -1093,4 +1297,7 @@ async function editTranches(buyerId) {
 window.editTranches = editTranches;
 window.deleteBuyer = deleteBuyer;
 window.removeTranche = removeTranche;
+
+// Add event listener for apartment type change
+document.getElementById('typeLogt').addEventListener('change', handleApartmentTypeChange);
 

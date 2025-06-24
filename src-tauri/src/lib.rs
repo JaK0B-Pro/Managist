@@ -1,10 +1,12 @@
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, State, Manager};
 use serde::{Serialize, Deserialize};
 use sqlx::Row;
 use sqlx::PgPool;
 use rust_decimal::Decimal;
 use chrono::NaiveDate;
 use std::env;
+use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 // Structure to represent the Employee
 #[derive(Serialize, Deserialize, Debug)]
@@ -46,7 +48,27 @@ pub struct Project {
     nombre_des_etages: i32,
     nombre_des_appartement: i32,
     nda_dans_chaque_etage: i32,
-    nda_vendus: i32
+    nda_vendus: i32,
+    types_appartements: Option<String>,
+    surfaces_appartements: Option<String>
+}
+
+// Structure to represent project info (apartment types and prices)
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ProjectInfo {
+    id: i32,
+    project_id: i32,
+    type_of_appartement: String,
+    surface: Decimal,
+    price: Decimal,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ProjectInfoInput {
+    project_id: i32,
+    type_of_appartement: String,
+    surface: f64,
+    price: f64,
 }
 
 // Structure to represent a buyer
@@ -103,6 +125,8 @@ pub struct ProjectInput {
     nombre_des_appartement: i32,
     nda_dans_chaque_etage: i32,
     nda_vendus: i32,
+    types_appartements: Option<String>,
+    surfaces_appartements: Option<String>,
 }
 
 // Function to handle login process
@@ -289,8 +313,7 @@ async fn get_projects(pool: tauri::State<'_, PgPool>) -> Result<Vec<Project>, St
         .map_err(|e| e.to_string())?;
 
     let mut projects = Vec::new();
-    for row in rows {
-        projects.push(Project {
+    for row in rows {        projects.push(Project {
             id: row.try_get("id").map_err(|e| e.to_string())?,
             project_name: row.try_get("project_name").map_err(|e| e.to_string())?,
             project_location: row.try_get("project_location").map_err(|e| e.to_string())?,
@@ -300,7 +323,9 @@ async fn get_projects(pool: tauri::State<'_, PgPool>) -> Result<Vec<Project>, St
             nombre_des_etages: row.try_get("nombre_des_etages").map_err(|e| e.to_string())?,
             nombre_des_appartement: row.try_get("nombre_des_appartement").map_err(|e| e.to_string())?,
             nda_dans_chaque_etage: row.try_get("nda_dans_chaque_etage").map_err(|e| e.to_string())?,
-            nda_vendus: row.try_get("nda_vendus").map_err(|e| e.to_string())?
+            nda_vendus: row.try_get("nda_vendus").map_err(|e| e.to_string())?,
+            types_appartements: row.try_get("types_appartements").ok(),
+            surfaces_appartements: row.try_get("surfaces_appartements").ok()
         });
     }
     Ok(projects)
@@ -315,9 +340,7 @@ async fn add_project_to_the_database(pool: tauri::State<'_, PgPool>, project: Pr
     let start_date = NaiveDate::parse_from_str(&project.project_start_date, "%Y-%m-%d")
         .map_err(|e| format!("Invalid start date format: {}", e))?;
     let end_date = NaiveDate::parse_from_str(&project.project_end_date, "%Y-%m-%d")
-        .map_err(|e| format!("Invalid end date format: {}", e))?;
-
-    let query = "INSERT INTO projects (project_name, project_location, project_start_date, project_end_date, nombre_des_bloc, nombre_des_etages, nombre_des_appartement, nda_dans_chaque_etage, nda_vendus) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)";
+        .map_err(|e| format!("Invalid end date format: {}", e))?;    let query = "INSERT INTO projects (project_name, project_location, project_start_date, project_end_date, nombre_des_bloc, nombre_des_etages, nombre_des_appartement, nda_dans_chaque_etage, nda_vendus, types_appartements, surfaces_appartements) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)";
 
     sqlx::query(query)
         .bind(&project.project_name)
@@ -329,6 +352,8 @@ async fn add_project_to_the_database(pool: tauri::State<'_, PgPool>, project: Pr
         .bind(&project.nombre_des_appartement)
         .bind(&project.nda_dans_chaque_etage)
         .bind(&project.nda_vendus)
+        .bind(&project.types_appartements)
+        .bind(&project.surfaces_appartements)
         .execute(&*pool)
         .await
         .map_err(|e| e.to_string())?;
@@ -355,7 +380,16 @@ async fn delete_project_from_database(pool: tauri::State<'_, PgPool>, project_id
 fn calculate_total_paid(payments: &serde_json::Value) -> f64 {
     if let Some(obj) = payments.as_object() {
         obj.values()
-            .filter_map(|v| v.as_f64())
+            .filter_map(|v| {
+                // Handle both old format (direct number) and new format (object with amount)
+                if let Some(amount) = v.as_f64() {
+                    Some(amount)
+                } else if let Some(tranche_obj) = v.as_object() {
+                    tranche_obj.get("amount").and_then(|a| a.as_f64())
+                } else {
+                    None
+                }
+            })
             .sum()
     } else {
         0.0
@@ -725,6 +759,78 @@ async fn get_project_bloc_count(pool: tauri::State<'_, PgPool>, project_id: i32)
     Ok(bloc_count)
 }
 
+// Functions for managing project info (apartment types and prices)
+
+// Function to get all project info for a specific project
+#[tauri::command]
+async fn get_project_info(pool: tauri::State<'_, PgPool>, project_id: i32) -> Result<Vec<ProjectInfo>, String> {
+    let rows = sqlx::query("SELECT * FROM project_info WHERE project_id = $1 ORDER BY id ASC")
+        .bind(project_id)
+        .fetch_all(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut project_infos = Vec::new();
+    for row in rows {
+        project_infos.push(ProjectInfo {
+            id: row.try_get("id").map_err(|e| e.to_string())?,
+            project_id: row.try_get("project_id").map_err(|e| e.to_string())?,
+            type_of_appartement: row.try_get("type_of_appartement").map_err(|e| e.to_string())?,
+            surface: row.try_get("surface").map_err(|e| e.to_string())?,
+            price: row.try_get("price").map_err(|e| e.to_string())?,
+        });
+    }
+    Ok(project_infos)
+}
+
+// Function to add project info
+#[tauri::command]
+async fn add_project_info(pool: tauri::State<'_, PgPool>, project_info: ProjectInfoInput) -> Result<(), String> {
+    let query = "INSERT INTO project_info (project_id, type_of_appartement, surface, price) VALUES ($1, $2, $3, $4)";
+
+    sqlx::query(query)
+        .bind(&project_info.project_id)
+        .bind(&project_info.type_of_appartement)
+        .bind(Decimal::from_f64_retain(project_info.surface).unwrap_or_default())
+        .bind(Decimal::from_f64_retain(project_info.price).unwrap_or_default())
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+// Function to update project info
+#[tauri::command]
+async fn update_project_info(pool: tauri::State<'_, PgPool>, info_id: i32, project_info: ProjectInfoInput) -> Result<(), String> {
+    let query = "UPDATE project_info SET type_of_appartement = $1, surface = $2, price = $3 WHERE id = $4";
+
+    sqlx::query(query)
+        .bind(&project_info.type_of_appartement)
+        .bind(Decimal::from_f64_retain(project_info.surface).unwrap_or_default())
+        .bind(Decimal::from_f64_retain(project_info.price).unwrap_or_default())
+        .bind(info_id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+// Function to delete project info
+#[tauri::command]
+async fn delete_project_info(pool: tauri::State<'_, PgPool>, info_id: i32) -> Result<(), String> {
+    let query = "DELETE FROM project_info WHERE id = $1";
+
+    sqlx::query(query)
+        .bind(info_id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 // Structure to represent dashboard statistics
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DashboardStats {
@@ -864,137 +970,493 @@ async fn create_default_admin_user(pool: &PgPool) -> Result<(), String> {
     Ok(())
 }
 
+// PostgreSQL Service Management
+static POSTGRES_STARTED_BY_APP: AtomicBool = AtomicBool::new(false);
+
+// Function to check if PostgreSQL service is running
+fn is_postgres_running() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        let output = Command::new("sc")
+            .args(&["query", "postgresql-x64-16"]) // Adjust service name as needed
+            .output();
+        
+        match output {
+            Ok(output) => {
+                let output_str = String::from_utf8_lossy(&output.stdout);
+                output_str.contains("RUNNING")
+            }
+            Err(_) => {
+                // Try alternative service names
+                let alternative_names = [
+                    "postgresql-x64-15",
+                    "postgresql-x64-14", 
+                    "postgresql-x64-13",
+                    "PostgreSQL",
+                    "postgres"
+                ];
+                
+                for name in &alternative_names {
+                    let output = Command::new("sc")
+                        .args(&["query", name])
+                        .output();
+                    
+                    if let Ok(output) = output {
+                        let output_str = String::from_utf8_lossy(&output.stdout);
+                        if output_str.contains("RUNNING") {
+                            return true;
+                        }
+                    }
+                }
+                false
+            }
+        }
+    }
+    
+    #[cfg(not(target_os = "windows"))]
+    {
+        let output = Command::new("systemctl")
+            .args(&["is-active", "postgresql"])
+            .output();
+        
+        match output {
+            Ok(output) => output.status.success(),
+            Err(_) => {
+                // Try alternative methods for non-systemd systems
+                let output = Command::new("service")
+                    .args(&["postgresql", "status"])
+                    .output();
+                
+                match output {
+                    Ok(output) => output.status.success(),
+                    Err(_) => false
+                }
+            }
+        }
+    }
+}
+
+// Function to start PostgreSQL service
+fn start_postgres_service() -> Result<(), String> {
+    println!("Attempting to start PostgreSQL service...");
+    
+    #[cfg(target_os = "windows")]
+    {
+        let service_names = [
+            "postgresql-x64-16",
+            "postgresql-x64-15", 
+            "postgresql-x64-14",
+            "postgresql-x64-13",
+            "PostgreSQL",
+            "postgres"
+        ];
+        
+        for service_name in &service_names {
+            let output = Command::new("net")
+                .args(&["start", service_name])
+                .output();
+            
+            match output {
+                Ok(output) => {
+                    if output.status.success() {
+                        println!("PostgreSQL service '{}' started successfully!", service_name);
+                        POSTGRES_STARTED_BY_APP.store(true, Ordering::Relaxed);
+                        return Ok(());
+                    }
+                }
+                Err(_) => continue,
+            }
+        }
+        
+        return Err("Failed to start PostgreSQL service. Please ensure PostgreSQL is installed and the service name is correct.".to_string());
+    }
+    
+    #[cfg(not(target_os = "windows"))]
+    {
+        let output = Command::new("sudo")
+            .args(&["systemctl", "start", "postgresql"])
+            .output();
+        
+        match output {
+            Ok(output) => {
+                if output.status.success() {
+                    println!("PostgreSQL service started successfully!");
+                    POSTGRES_STARTED_BY_APP.store(true, Ordering::Relaxed);
+                    Ok(())
+                } else {
+                    Err("Failed to start PostgreSQL service".to_string())
+                }
+            }
+            Err(e) => Err(format!("Failed to start PostgreSQL service: {}", e))
+        }
+    }
+}
+
+// Function to stop PostgreSQL service (only if we started it)
+fn stop_postgres_service() -> Result<(), String> {
+    if !POSTGRES_STARTED_BY_APP.load(Ordering::Relaxed) {
+        println!("PostgreSQL was not started by this application, leaving it running.");
+        return Ok(());
+    }
+    
+    println!("Stopping PostgreSQL service (started by this application)...");
+    
+    #[cfg(target_os = "windows")]
+    {
+        let service_names = [
+            "postgresql-x64-16",
+            "postgresql-x64-15",
+            "postgresql-x64-14", 
+            "postgresql-x64-13",
+            "PostgreSQL",
+            "postgres"
+        ];
+        
+        for service_name in &service_names {
+            let output = Command::new("net")
+                .args(&["stop", service_name])
+                .output();
+            
+            match output {
+                Ok(output) => {
+                    if output.status.success() {
+                        println!("PostgreSQL service '{}' stopped successfully!", service_name);
+                        return Ok(());
+                    }
+                }
+                Err(_) => continue,
+            }
+        }
+        
+        return Err("Failed to stop PostgreSQL service".to_string());
+    }
+    
+    #[cfg(not(target_os = "windows"))]
+    {
+        let output = Command::new("sudo")
+            .args(&["systemctl", "stop", "postgresql"])
+            .output();
+        
+        match output {
+            Ok(output) => {
+                if output.status.success() {
+                    println!("PostgreSQL service stopped successfully!");
+                    Ok(())
+                } else {
+                    Err("Failed to stop PostgreSQL service".to_string())
+                }
+            }
+            Err(e) => Err(format!("Failed to stop PostgreSQL service: {}", e))
+        }
+    }
+}
+
+// Function to ensure PostgreSQL is running (start if needed)
+async fn ensure_postgres_running() -> Result<(), String> {
+    if is_postgres_running() {
+        println!("PostgreSQL is already running.");
+        return Ok(());
+    }
+    
+    println!("PostgreSQL is not running. Starting it now...");
+    start_postgres_service()?;
+    
+    // Wait a bit for the service to fully start
+    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+    
+    // Verify it's actually running
+    if is_postgres_running() {
+        println!("PostgreSQL started successfully and is now running.");
+        Ok(())
+    } else {
+        Err("PostgreSQL service was started but is not responding. Please check the service manually.".to_string())
+    }
+}
+
 // Main function
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() -> Result<(), String> {
     // Load environment variables from .env file if it exists
-    dotenvy::dotenv().ok();    let pool = tauri::async_runtime::block_on(async {
-        // Get database URL from environment variable or use default
-        let database_url = env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "postgres://postgres:test@localhost:5432/database".to_string());
-        
-        println!("Initializing database connection...");
-        println!("Database URL: {}", database_url);
-        
-        // Try to ensure database exists before connecting
-        if let Ok((base_url, db_name)) = parse_database_url(&database_url) {
-            println!("Checking if database '{}' exists...", db_name);
-            ensure_database_exists(&base_url, &db_name).await?;
-        }
-        
-        // Now try to connect to the target database
-        println!("Connecting to database...");
-        let pool = PgPool::connect(&database_url).await
-            .map_err(|e| {
-                eprintln!("Database connection failed with URL: {}", database_url);
-                eprintln!("Error: {}", e);
-                eprintln!("\nTroubleshooting tips:");
-                eprintln!("1. Ensure PostgreSQL is running");
-                eprintln!("2. Check your DATABASE_URL in the .env file");
-                eprintln!("3. Verify database credentials are correct");
-                eprintln!("4. Make sure PostgreSQL is installed and accessible");
-                format!("Failed to connect to database: {}. Please ensure PostgreSQL is running and accessible.", e)
-            })?;
-        
-        println!("Successfully connected to database!");
-        println!("Setting up database tables...");
-        
-        // Create users table if it doesn't exist
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(255) NOT NULL UNIQUE,
-                password VARCHAR(255) NOT NULL,
-                admin VARCHAR(10) DEFAULT '0' -- Role: 0=User, 1=Admin, 2=Manager
-            )"
-        )
-        .execute(&pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-        // Create employees table if it doesn't exist
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS employees (
-                id SERIAL PRIMARY KEY,
-                nom_et_prenom VARCHAR(255) NOT NULL,
-                prix_jour NUMERIC(10, 2) NOT NULL,
-                prix_hour NUMERIC(10, 2) NOT NULL,
-                nombre_des_jours INTEGER NOT NULL,
-                traveaux_attache NUMERIC(10, 2) DEFAULT 0,
-                salaire NUMERIC(10, 2) NOT NULL,
-                acompte NUMERIC(10, 2) DEFAULT 0,
-                net_a_payer NUMERIC(10, 2) NOT NULL,
-                observation TEXT
-            )"
-        )
-        .execute(&pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-        // Create projects table if it doesn't exist
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS projects (
-                id SERIAL PRIMARY KEY,
-                project_name VARCHAR(255) NOT NULL,
-                project_location VARCHAR(255) NOT NULL,
-                project_start_date DATE NOT NULL,
-                project_end_date DATE NOT NULL,
-                nombre_des_bloc INTEGER NOT NULL,
-                nombre_des_etages INTEGER NOT NULL,
-                nombre_des_appartement INTEGER NOT NULL,
-                nda_dans_chaque_etage INTEGER NOT NULL,
-                nda_vendus INTEGER NOT NULL
-            )"
-        )
-        .execute(&pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-        // Create buyers table if it doesn't exist
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS buyers (
-                id SERIAL PRIMARY KEY,
-                project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-                niveau VARCHAR(50),
-                logt_num VARCHAR(50),
-                nom VARCHAR(255),
-                prenom VARCHAR(255),
-                type_logt VARCHAR(100),
-                surface VARCHAR(50),
-                date DATE,
-                prix_totale NUMERIC(15, 2),
-                remise NUMERIC(15, 2),
-                payments JSONB DEFAULT '{}',
-                payment_status VARCHAR(20) DEFAULT 'unpaid',
-                total_paid NUMERIC(15, 2) DEFAULT 0,
-                is_sold BOOLEAN DEFAULT FALSE
-            )"
-        )
-        .execute(&pool)
-        .await
-        .map_err(|e| e.to_string())?;        // Run migration to ensure table structure is up to date
-        // This handles converting logt_num from integer to varchar and adding new columns
-        migrate_buyers_table_internal(&pool).await?;
-
-        println!("Database tables created successfully!");
-        
-        // Create default admin user if no users exist
-        println!("Checking for default admin user...");
-        create_default_admin_user(&pool).await?;
-        
-        println!("Database initialization completed successfully!");
-        println!("Application is ready to use!");
-
-        Ok::<PgPool, String>(pool)
-    })?;    
+    dotenvy::dotenv().ok();
     
-    tauri::Builder::default()
-        .manage(pool)
+    // Setup Tauri with loading screen
+    let result = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![login, signup_proccess, update_user_password, get_employee_by_name, insert_employee, get_all_employees, delete_employee, update_employee, get_project_names, get_projects, add_project_to_the_database, delete_project_from_database, add_buyer_to_database, get_buyers_by_project, delete_buyer_from_database, edit_buyer_in_database, update_buyer_payments, migrate_buyers_table, get_project_bloc_count, get_dashboard_stats])
-        .run(tauri::generate_context!())
-        .map_err(|e| e.to_string())?;
+        .invoke_handler(tauri::generate_handler![
+            login, 
+            signup_proccess, 
+            update_user_password, 
+            get_employee_by_name, 
+            insert_employee, 
+            get_all_employees, 
+            delete_employee, 
+            update_employee, 
+            get_project_names, 
+            get_projects, 
+            add_project_to_the_database, 
+            delete_project_from_database, 
+            add_buyer_to_database, 
+            get_buyers_by_project, 
+            delete_buyer_from_database, 
+            edit_buyer_in_database, 
+            update_buyer_payments, 
+            migrate_buyers_table, 
+            get_project_bloc_count, 
+            get_dashboard_stats,
+            show_main_window,
+            retry_initialization,
+            get_project_info,
+            add_project_info,
+            update_project_info,
+            delete_project_info
+        ])
+        .setup(|app| {
+            let app_handle = app.handle().clone();
+            
+            // Start initialization in background
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = initialize_with_progress(app_handle).await {
+                    eprintln!("Initialization failed: {}", e);
+                }
+            });
+            
+            // Setup panic handler as backup
+            std::panic::set_hook(Box::new(|_| {
+                if let Err(e) = stop_postgres_service() {
+                    eprintln!("Failed to stop PostgreSQL service on panic: {}", e);
+                }
+            }));
+            Ok(())
+        })
+        .on_window_event(|_window, event| match event {
+            tauri::WindowEvent::CloseRequested { .. } => {
+                println!("Application window is closing...");
+                if let Err(e) = stop_postgres_service() {
+                    eprintln!("Failed to stop PostgreSQL service on window close: {}", e);
+                } else {
+                    println!("PostgreSQL service management completed.");
+                }
+            }
+            _ => {}        })
+        .run(tauri::generate_context!());
+    
+    // Stop PostgreSQL service if we started it (normal exit)
+    if let Err(e) = stop_postgres_service() {
+        eprintln!("Failed to stop PostgreSQL service on exit: {}", e);
+    }
+    
+    result.map_err(|e| e.to_string())?;
+    
+    Ok(())
+}
 
+// Loading screen management
+#[tauri::command]
+async fn show_main_window(app: AppHandle) -> Result<(), String> {
+    if let Some(loading_window) = app.get_webview_window("loading") {
+        loading_window.close().map_err(|e| e.to_string())?;
+    }
+    
+    if let Some(main_window) = app.get_webview_window("main") {
+        main_window.show().map_err(|e| e.to_string())?;
+        main_window.set_focus().map_err(|e| e.to_string())?;
+        main_window.set_size(tauri::LogicalSize::new(1080, 720)).map_err(|e| e.to_string())?;
+        main_window.center().map_err(|e| e.to_string())?;
+    }
+    
+    Ok(())
+}
+
+#[tauri::command]
+async fn retry_initialization(app: AppHandle) -> Result<(), String> {
+    // Restart the initialization process
+    initialize_with_progress(app).await
+}
+
+// Function to emit loading progress
+fn emit_loading_progress(app: &AppHandle, step: i32, message: &str, progress: i32) {
+    if let Err(e) = app.emit_to("loading", "loading-progress", serde_json::json!({
+        "step": step,
+        "message": message,
+        "progress": progress
+    })) {
+        eprintln!("Failed to emit loading progress: {}", e);
+    }
+}
+
+// Function to emit loading completion
+fn emit_loading_complete(app: &AppHandle) {
+    if let Err(e) = app.emit_to("loading", "loading-complete", ()) {
+        eprintln!("Failed to emit loading complete: {}", e);
+    }
+}
+
+// Function to emit loading error
+fn emit_loading_error(app: &AppHandle, message: &str) {
+    if let Err(e) = app.emit_to("loading", "loading-error", serde_json::json!({
+        "message": message
+    })) {
+        eprintln!("Failed to emit loading error: {}", e);
+    }
+}
+
+// Initialize application with progress updates
+async fn initialize_with_progress(app: AppHandle) -> Result<(), String> {
+    // Step 1: Initialize application
+    emit_loading_progress(&app, 0, "Initializing application...", 15);
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    
+    // Step 2: Start PostgreSQL
+    emit_loading_progress(&app, 1, "Starting database services...", 35);
+    match ensure_postgres_running().await {
+        Ok(()) => {
+            emit_loading_progress(&app, 1, "Database services started successfully", 40);
+        }
+        Err(e) => {
+            emit_loading_progress(&app, 1, &format!("Database services warning: {}", e), 40);
+        }
+    }
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    
+    // Step 3: Connect to database
+    emit_loading_progress(&app, 2, "Connecting to database...", 60);
+    
+    // Get database URL
+    let database_url = env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://postgres:test@localhost:5432/managist_db".to_string());
+    
+    // Try to ensure database exists
+    if let Ok((base_url, db_name)) = parse_database_url(&database_url) {
+        ensure_database_exists(&base_url, &db_name).await?;
+    }
+    
+    // Connect to database
+    let pool = PgPool::connect(&database_url).await
+        .map_err(|e| {
+            emit_loading_error(&app, &format!("Database connection failed: {}", e));
+            e.to_string()
+        })?;
+    
+    emit_loading_progress(&app, 2, "Database connected successfully", 65);
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    
+    // Step 4: Setup tables
+    emit_loading_progress(&app, 3, "Setting up database tables...", 80);
+    
+    // Create tables (existing code)
+    setup_database_tables(&pool).await?;
+    
+    emit_loading_progress(&app, 3, "Database tables ready", 85);
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    
+    // Step 5: Finalize
+    emit_loading_progress(&app, 4, "Loading user interface...", 100);
+    tokio::time::sleep(tokio::time::Duration::from_millis(800)).await;
+    
+    // Store pool in app state
+    app.manage(pool);
+    
+    // Emit completion
+    emit_loading_complete(&app);
+    
+    Ok(())
+}
+
+// Extract database setup logic
+async fn setup_database_tables(pool: &PgPool) -> Result<(), String> {
+    // Users table
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(255) NOT NULL UNIQUE,
+            password VARCHAR(255) NOT NULL,
+            admin VARCHAR(10) DEFAULT '0' -- Role: 0=User, 1=Admin, 2=Manager
+        )"
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;    // Employees table
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS employees (
+            id SERIAL PRIMARY KEY,
+            nom_et_prenom VARCHAR(255) NOT NULL,
+            prix_jour NUMERIC(10, 2),
+            prix_hour NUMERIC(10, 2),
+            nombre_des_jours INTEGER,
+            traveaux_attache NUMERIC(10, 2),
+            salaire NUMERIC(10, 2),
+            acompte NUMERIC(10, 2),
+            net_a_payer NUMERIC(10, 2),
+            observation TEXT
+        )"
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;// Projects table
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS projects (
+            id SERIAL PRIMARY KEY,
+            project_name VARCHAR(255) NOT NULL,
+            project_location VARCHAR(255),
+            project_start_date DATE,
+            project_end_date DATE,
+            nombre_des_bloc INTEGER,
+            nombre_des_etages INTEGER,
+            nombre_des_appartement INTEGER,
+            nda_dans_chaque_etage INTEGER,
+            types_appartements TEXT,
+            surfaces_appartements TEXT,
+            nda_vendus INTEGER DEFAULT 0
+        )"
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // Buyers table
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS buyers (
+            id SERIAL PRIMARY KEY,
+            project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            niveau VARCHAR(50),
+            logt_num VARCHAR(50),
+            nom VARCHAR(255),
+            prenom VARCHAR(255),
+            type_logt VARCHAR(100),
+            surface VARCHAR(50),
+            date DATE,
+            prix_totale NUMERIC(15, 2),
+            remise NUMERIC(15, 2),
+            payments JSONB DEFAULT '{}',
+            payment_status VARCHAR(20) DEFAULT 'unpaid',
+            total_paid NUMERIC(15, 2) DEFAULT 0,
+            is_sold BOOLEAN DEFAULT FALSE
+        )"
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // Project info table (apartment types and prices)
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS project_info (
+            id SERIAL PRIMARY KEY,
+            project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            type_of_appartement TEXT NOT NULL,
+            surface NUMERIC(10, 2) NOT NULL,
+            price NUMERIC(15, 2) NOT NULL
+        )"
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // Run migrations
+    migrate_buyers_table_internal(pool).await?;
+    
+    // Create default admin user
+    create_default_admin_user(pool).await?;
+    
     Ok(())
 }
