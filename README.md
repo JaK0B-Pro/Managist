@@ -173,4 +173,4 @@ If you encounter issues:
 
 ## License
 
-[Add your license information here]
+All rights reserved to its owners
