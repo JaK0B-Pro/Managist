@@ -21,6 +21,32 @@ document.addEventListener('DOMContentLoaded', function() {
             window.location.href = "../../";
         });
     }
+    
+    // Settings button click
+    const settingsBtn = document.getElementById('settingsButton');
+    if (settingsBtn) {
+        settingsBtn.addEventListener('click', openSettingsModal);
+    }
+    
+    // Close settings modal when clicking outside
+    const settingsModal = document.getElementById('settingsModal');
+    if (settingsModal) {
+        settingsModal.addEventListener('click', function(event) {
+            if (event.target === settingsModal) {
+                closeSettingsModal();
+            }
+        });
+    }
+    
+    // Close modal with Escape key
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') {
+            const modal = document.getElementById('settingsModal');
+            if (modal && modal.style.display === 'block') {
+                closeSettingsModal();
+            }
+        }
+    });
 });
 
 // Get project ID from URL parameters
@@ -37,9 +63,31 @@ let currentBloc = 'all';
 // Project bloc count for dynamic tabs
 let projectBlocCount = 0;
 
+// Prix unitaire for validation calculations
+let currentPrixUnitaire = 0;
+
 // Helper function to convert number to letter (1=A, 2=B, etc.)
-function numberToLetter(num) {
-    return String.fromCharCode(65 + num - 1); // 65 is ASCII for 'A'
+function numberToLetter(num) {    return String.fromCharCode(65 + num - 1); // 65 is ASCII for 'A'
+}
+
+// Load prix unitaire for validation calculations
+async function loadPrixUnitaire() {
+    try {
+        console.log('🔍 Loading prix unitaire for project ID:', PROJECT_ID);
+        const prixData = await invoke('get_prix_unitaire', { projectId: PROJECT_ID });
+        currentPrixUnitaire = prixData?.prix_unitaire || 0;
+        
+        // Also store it globally for the validation system
+        window.currentPrixUnitaire = currentPrixUnitaire;
+        
+        console.log('✅ Prix unitaire loaded:', currentPrixUnitaire, 'DA/m²');
+        return currentPrixUnitaire;
+    } catch (error) {
+        console.error('❌ Error loading prix unitaire:', error);
+        currentPrixUnitaire = 0;
+        window.currentPrixUnitaire = 0;
+        return 0;
+    }
 }
 
 // Helper function to get bloc color
@@ -55,8 +103,132 @@ function getBlocColor(bloc) {
         'H': '#e67e22', // Dark Orange
         'I': '#16a085', // Dark Teal
         'J': '#8e44ad'  // Dark Purple
-    };
-    return colors[bloc] || '#7f8c8d'; // Default gray for unknown blocs
+    };    return colors[bloc] || '#7f8c8d'; // Default gray for unknown blocs
+}
+
+// Validate all loaded buyers and highlight issues
+async function validateAllLoadedBuyers(buyers) {
+    if (!buyers || buyers.length === 0) return;
+    
+    console.log('\n🔍 VALIDATING ALL LOADED BUYERS...');
+    
+    buyers.forEach((buyer, index) => {
+        const buyerRow = document.querySelector(`tr[data-buyer-id="${buyer.id}"]`);
+        if (!buyerRow) return;
+        
+        // Parse payments
+        let payments = {};
+        try {
+            payments = typeof buyer.payments === 'string' ? JSON.parse(buyer.payments) : buyer.payments || {};
+        } catch (e) {
+            console.warn('Error parsing payments for buyer', buyer.id, e);
+            return;
+        }
+          // Calculate limits
+        const prixUnitaire = currentPrixUnitaire || 0;
+        const surface = parseFloat(buyer.surface) || 0;
+        const prixTotale = parseFloat(buyer.prix_totale) || 0;
+        const remise = parseFloat(buyer.remise) || 0;
+        
+        // Calculate the reduced total price after remise (discount)
+        const reducedTotalPrice = prixTotale - remise;
+        
+        const maxVersement = prixUnitaire * surface;
+        const maxEspece = reducedTotalPrice - maxVersement;
+        
+        // Calculate actual amounts
+        let actualVersement = 0;
+        let actualEspece = 0;
+        const exceededTranches = [];
+        
+        Object.keys(payments).forEach(trancheKey => {
+            const trancheData = payments[trancheKey];
+            let amount = 0;
+            let type = 'versement';
+            
+            if (typeof trancheData === 'object' && trancheData !== null) {
+                amount = parseFloat(trancheData.amount) || 0;
+                type = trancheData.type || 'versement';
+            } else {
+                amount = parseFloat(trancheData) || 0;
+                type = 'versement';
+            }
+            
+            if (amount > 0) {
+                if (type === 'versement') {
+                    actualVersement += amount;
+                } else if (type === 'espece') {
+                    actualEspece += amount;
+                }
+            }
+        });
+        
+        // Check for violations and highlight
+        const versementExceeded = actualVersement > maxVersement;
+        const especeExceeded = actualEspece > maxEspece;
+        
+        if (versementExceeded || especeExceeded) {
+            // Add warning class to the entire row
+            buyerRow.classList.add('validation-warning');
+            
+            // Add visual indicator
+            const statusCell = buyerRow.querySelector('.status-cell');
+            if (statusCell) {
+                let warningIcon = statusCell.querySelector('.validation-warning-icon');
+                if (!warningIcon) {
+                    warningIcon = document.createElement('span');
+                    warningIcon.className = 'validation-warning-icon';
+                    warningIcon.innerHTML = '⚠️';
+                    warningIcon.title = 'Payment validation warning';
+                    statusCell.appendChild(warningIcon);
+                }
+            }
+            
+            // Highlight individual tranche cells
+            const trancheCells = buyerRow.querySelectorAll('.tranche-cell');
+            Object.keys(payments).forEach((trancheKey, trancheIndex) => {
+                const trancheData = payments[trancheKey];
+                let amount = 0;
+                let type = 'versement';
+                
+                if (typeof trancheData === 'object' && trancheData !== null) {
+                    amount = parseFloat(trancheData.amount) || 0;
+                    type = trancheData.type || 'versement';
+                } else {
+                    amount = parseFloat(trancheData) || 0;
+                    type = 'versement';
+                }
+                
+                // Check if this specific tranche contributes to the violation
+                if (amount > 0) {
+                    const isViolation = (type === 'versement' && versementExceeded) || 
+                                      (type === 'espece' && especeExceeded);
+                    
+                    if (isViolation && trancheCells[trancheIndex]) {
+                        trancheCells[trancheIndex].classList.add('tranche-exceeded');
+                    }
+                }
+            });
+            
+            console.log(`🚨 VALIDATION ISSUE - Buyer ${buyer.id} (${buyer.nom} ${buyer.prenom}):`);
+            if (versementExceeded) {
+                console.log(`   🏦 Versement exceeded: ${actualVersement.toLocaleString()} > ${maxVersement.toLocaleString()}`);
+            }
+            if (especeExceeded) {
+                console.log(`   💸 Espèce exceeded: ${actualEspece.toLocaleString()} > ${maxEspece.toLocaleString()}`);
+            }
+        } else {
+            // Remove any existing warning classes
+            buyerRow.classList.remove('validation-warning');
+            const warningIcon = buyerRow.querySelector('.validation-warning-icon');
+            if (warningIcon) warningIcon.remove();
+            
+            const trancheCells = buyerRow.querySelectorAll('.tranche-cell');
+            trancheCells.forEach(cell => cell.classList.remove('tranche-exceeded'));
+        }
+    });
+    
+    console.log('✅ Validation check completed for all buyers\n');
 }
 
 // Populate bloc dropdown in form (global scope)
@@ -100,22 +272,61 @@ function addTranche() {
     if (trancheCount >= 10) {
         alert('Maximum 10 tranches allowed');
         return;
-    }
-      const trancheRow = document.createElement('div');
-    trancheRow.className = 'tranche-row';    trancheRow.innerHTML = `
+    }    // Check if espèce limit is already reached
+    const surface = parseFloat(document.getElementById('surface').value) || 0;
+    const prixTotale = parseFloat(document.getElementById('prixTotale').value) || 0;
+    const remise = parseFloat(document.getElementById('remise').value) || 0;
+    const prixUnitaire = currentPrixUnitaire || 0;
+    
+    // Calculate the reduced total price after remise (discount)
+    const reducedTotalPrice = prixTotale - remise;
+    
+    // Calculate max versement (unchanged)
+    const maxVersement = prixUnitaire * surface;
+    
+    // Calculate max espèce from the reduced total price
+    const maxEspece = reducedTotalPrice - maxVersement;
+    
+    // Calculate current espèce total
+    let currentEspeceTotal = 0;
+    Array.from(tranchesContainer.children).forEach(row => {
+        const amountInput = row.querySelector('input[type="number"]');
+        const typeSelect = row.querySelector('select');
+        const value = parseFloat(amountInput.value) || 0;
+        const type = typeSelect ? typeSelect.value : 'versement';
+        
+        if (type === 'espece' && value > 0) {
+            currentEspeceTotal += value;
+        }
+    });
+    
+    // Determine default type for new tranche
+    const defaultType = currentEspeceTotal >= maxEspece ? 'versement' : 'espece';
+    const defaultSelected = defaultType === 'espece' ? 'selected' : '';
+    const versementSelected = defaultType === 'versement' ? 'selected' : '';
+
+    const trancheRow = document.createElement('div');
+    trancheRow.className = 'tranche-row';
+    trancheRow.innerHTML = `
         <label>T${trancheCount}:</label>
         <input type="number" step="0.01" min="0" name="tranche_${trancheCount}" 
-               placeholder="Enter amount for T${trancheCount}" oninput="calculateTotalPaid()">
-        <input type="date" name="tranche_date_${trancheCount}" title="Payment date for T${trancheCount}">
-        <select name="tranche_type_${trancheCount}" title="Payment type for T${trancheCount}">
-            <option value="versement">Versement</option>
-            <option value="espece">Espèce</option>
+               placeholder="Enter amount for T${trancheCount}" oninput="handleTrancheInput(this)">
+        <input type="date" name="tranche_date_${trancheCount}" title="Payment date for T${trancheCount}" onchange="triggerDebouncedValidation()">
+        <select name="tranche_type_${trancheCount}" title="Payment type for T${trancheCount}" onchange="handleTrancheTypeChange(this)">
+            <option value="espece" ${defaultSelected}>Espèce</option>
+            <option value="versement" ${versementSelected}>Versement</option>
         </select>
+        <button type="button" class="btn-print-tranche" onclick="printOrdreVersement(${trancheCount})" title="Print Ordre de Versement">
+            <i class="fas fa-print"></i>
+        </button>
         <button type="button" class="btn-remove-tranche" onclick="removeTranche(this)">×</button>
     `;
     
     tranchesContainer.appendChild(trancheRow);
     updateAddTrancheButtonVisibility();
+    
+    // Update all tranche type options after adding new tranche
+    updateTrancheTypeOptions();
 }
 
 function removeTranche(button) {
@@ -179,6 +390,21 @@ function calculateTotalPaid() {
         totalPaidEl.textContent = `${totalPaid.toLocaleString()} DA`;
     }
 }
+
+function validateTrancheAmount(input) {
+    // Add a small delay to allow for rapid typing
+    clearTimeout(window.validationTimeout);
+    window.validationTimeout = setTimeout(() => {
+        validateEspeceAmount(input);
+    }, 500);
+}
+
+// Make validateTrancheAmount globally accessible
+window.validateTrancheAmount = validateTrancheAmount;
+window.calculateTotalPaid = calculateTotalPaid;
+window.handleTrancheInput = handleTrancheInput;
+window.handleTrancheTypeChange = handleTrancheTypeChange;
+window.updateTrancheTypeOptions = updateTrancheTypeOptions;
 
 function formatCurrency(amount) {
     return parseFloat(amount || 0).toLocaleString() + ' DA';
@@ -313,12 +539,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 </td>
             </tr>
         `;
-    }
-
-    // Load buyers from database
+    }    // Load buyers from database
     async function loadBuyers() {
         try {
             showLoading();
+            
+            // 🐛 DEBUG: Load prix unitaire first for validation calculations
+            await loadPrixUnitaire();
+            
             const buyers = await invoke('get_buyers_by_project', { projectId: PROJECT_ID });
             
             tbody.innerHTML = '';
@@ -439,8 +667,50 @@ document.addEventListener('DOMContentLoaded', function () {
                         tbody.appendChild(newRow);
                     });
                 });            }
+              updateBuyerCount(buyers.length);
             
-            updateBuyerCount(buyers.length);
+            // 🔍 Trigger validation for all loaded buyers to show warnings
+            await validateAllLoadedBuyers(filteredBuyers);
+            
+              // 🐛 DEBUG: Summary statistics for all buyers
+            if (filteredBuyers.length > 0) {
+                const prixUnitaire = currentPrixUnitaire || window.currentPrixUnitaire || 0;
+                let totalMaxVersement = 0;
+                let totalMaxEspece = 0;
+                let totalSurface = 0;
+                let totalPrixTotale = 0;
+                  filteredBuyers.forEach(buyer => {
+                    const surface = parseFloat(buyer.surface) || 0;
+                    const prixTotale = parseFloat(buyer.prix_totale) || 0;
+                    const remise = parseFloat(buyer.remise) || 0;
+                    
+                    // Calculate the reduced total price after remise (discount)
+                    const reducedTotalPrice = prixTotale - remise;
+                    
+                    const maxVersement = prixUnitaire * surface;
+                    const maxEspece = reducedTotalPrice - maxVersement;
+                    
+                    totalMaxVersement += maxVersement;
+                    totalMaxEspece += maxEspece;
+                    totalSurface += surface;
+                    totalPrixTotale += prixTotale;
+                });
+                
+                console.log(`\n📊 VALIDATION LIMITS SUMMARY (${filteredBuyers.length} buyers):`);
+                console.log(`   🏗️  Total Surface: ${totalSurface.toLocaleString()}m²`);
+                console.log(`   💰 Prix Unitaire: ${prixUnitaire.toLocaleString()} DA/m² (${prixUnitaire === 0 ? '❌ NOT LOADED!' : '✅ loaded'})`);
+                console.log(`   💵 Total Prix Totale: ${totalPrixTotale.toLocaleString()} DA`);
+                console.log(`   🏦 Total Max Versement: ${totalMaxVersement.toLocaleString()} DA`);
+                console.log(`   💸 Total Max Espèce: ${totalMaxEspece.toLocaleString()} DA`);
+                
+                if (prixUnitaire === 0) {
+                    console.error(`   🚨 CRITICAL: Prix unitaire is 0! All max versement calculations will be 0!`);
+                    console.error(`   🔧 Check: 1) Database has prix_unitaire for project ${PROJECT_ID}`);
+                    console.error(`   🔧 Check: 2) get_prix_unitaire Tauri command is working`);
+                }
+                
+                console.log(`   ═══════════════════════════════════════════════════════════`);
+            }
         } catch (error) {
             console.error('Error loading buyers:', error);
             tbody.innerHTML = `
@@ -448,13 +718,13 @@ document.addEventListener('DOMContentLoaded', function () {
                     <td colspan="${totalColumns}" style="text-align: center; padding: 2rem; color: #e74c3c;">
                         <i class="fas fa-exclamation-triangle"></i>
                         <p style="margin-top: 1rem;">Error loading buyers. Please try again.</p>
-                    </td>
-                </tr>
+                    </td>                </tr>
             `;
         }
     }
 
-    // Helper function to render a buyer row
+    // Make loadBuyers globally accessible
+    window.loadBuyers = loadBuyers;// Helper function to render a buyer row
     function renderBuyerRow(newRow, buyer, buyersInNiveau, index, niveau) {
         // Parse payments safely
         let payments = {};
@@ -463,7 +733,91 @@ document.addEventListener('DOMContentLoaded', function () {
         } catch (e) {
             console.warn('Error parsing payments for buyer', buyer.id, e);
             payments = {};
+        }        // 🐛 DEBUG: Calculate and display maximum validation limits for this buyer
+        const prixUnitaire = currentPrixUnitaire || window.currentPrixUnitaire || 0;
+        const surface = parseFloat(buyer.surface) || 0;
+        const prixTotale = parseFloat(buyer.prix_totale) || 0;
+        const remise = parseFloat(buyer.remise) || 0;
+        
+        // Calculate the reduced total price after remise (discount)
+        const reducedTotalPrice = prixTotale - remise;
+        
+        // Calculate maximum versement (prix unitaire × surface)
+        const maxVersement = prixUnitaire * surface;
+        
+        // Calculate maximum espèce (reduced total price - max versement)
+        const maxEspece = reducedTotalPrice - maxVersement;
+        
+        // 🔍 Calculate actual amounts from tranches
+        let actualVersement = 0;
+        let actualEspece = 0;
+        const trancheDetails = [];
+        
+        Object.keys(payments).forEach(trancheKey => {
+            const trancheData = payments[trancheKey];
+            let amount = 0;
+            let type = 'versement';
+            
+            if (typeof trancheData === 'object' && trancheData !== null) {
+                amount = parseFloat(trancheData.amount) || 0;
+                type = trancheData.type || 'versement';
+            } else {
+                amount = parseFloat(trancheData) || 0;
+                type = 'versement';
+            }
+            
+            if (amount > 0) {
+                trancheDetails.push(`${trancheKey}: ${amount.toLocaleString()} DA (${type})`);
+                if (type === 'versement') {
+                    actualVersement += amount;
+                } else if (type === 'espece') {
+                    actualEspece += amount;
+                }
+            }
+        });
+        
+        // Debug output for each buyer with detailed validation
+        console.log(`🏠 BUYER DEBUG [ID: ${buyer.id}] - ${buyer.nom} ${buyer.prenom}:`);
+        console.log(`   📐 Surface: ${surface}m² (raw: "${buyer.surface}")`);
+        console.log(`   💰 Prix Unitaire: ${prixUnitaire.toLocaleString()} DA/m² (source: ${prixUnitaire === currentPrixUnitaire ? 'local' : 'window'})`);
+        console.log(`   💵 Prix Totale: ${prixTotale.toLocaleString()} DA (raw: "${buyer.prix_totale}")`);
+        console.log(`   🧮 Calculation: ${prixUnitaire} × ${surface} = ${maxVersement}`);
+        console.log(`   📊 LIMITS:`);
+        console.log(`       🏦 Max Versement: ${maxVersement.toLocaleString()} DA (prix unitaire × surface)`);
+        console.log(`       💸 Max Espèce: ${maxEspece.toLocaleString()} DA (prix totale - max versement)`);
+        console.log(`   💳 ACTUAL AMOUNTS:`);
+        console.log(`       🏦 Actual Versement: ${actualVersement.toLocaleString()} DA`);
+        console.log(`       💸 Actual Espèce: ${actualEspece.toLocaleString()} DA`);
+        console.log(`   📋 TRANCHES: ${trancheDetails.length > 0 ? trancheDetails.join(', ') : 'No tranches'}`);
+        
+        // 🚨 Validation checks and warnings
+        const versementExceeded = actualVersement > maxVersement;
+        const especeExceeded = actualEspece > maxEspece;
+        
+        if (versementExceeded) {
+            console.error(`   🚨 VERSEMENT EXCEEDED! ${actualVersement.toLocaleString()} > ${maxVersement.toLocaleString()} (over by ${(actualVersement - maxVersement).toLocaleString()} DA)`);
+        } else {
+            console.log(`   ✅ Versement OK: ${actualVersement.toLocaleString()} ≤ ${maxVersement.toLocaleString()}`);
         }
+        
+        if (especeExceeded) {
+            console.error(`   🚨 ESPÈCE EXCEEDED! ${actualEspece.toLocaleString()} > ${maxEspece.toLocaleString()} (over by ${(actualEspece - maxEspece).toLocaleString()} DA)`);
+        } else {
+            console.log(`   ✅ Espèce OK: ${actualEspece.toLocaleString()} ≤ ${maxEspece.toLocaleString()}`);
+        }
+        
+        // Validation warnings
+        if (prixUnitaire === 0) {
+            console.warn(`   ⚠️  WARNING: Prix unitaire is 0! Cannot calculate proper validation limits.`);
+        }
+        if (surface === 0) {
+            console.warn(`   ⚠️  WARNING: Surface is 0! Check buyer data.`);
+        }
+        if (maxVersement === 0) {
+            console.warn(`   ⚠️  WARNING: Max versement is 0! Validation will not work properly.`);
+        }
+        
+        console.log(`   ─────────────────────────────────────────────────────`);
         
         // Build the base columns - only show NIVEAU for the first buyer in the group
         let rowHTML = `
@@ -643,17 +997,17 @@ document.addEventListener('DOMContentLoaded', function () {
         await populateBlocDropdown();
         
         // Populate apartment type dropdown from project_info
-        await populateApartmentTypeDropdown();          // Reset tranches to just T0
+        await populateApartmentTypeDropdown();        // Reset tranches to just T0
         const tranchesContainer = document.getElementById('tranchesContainer');
         tranchesContainer.innerHTML = `
             <div class="tranche-row">
                 <label>T0:</label>
                 <input type="number" step="0.01" min="0" name="tranche_0" 
-                       placeholder="Enter amount for T0" oninput="calculateTotalPaid()">
+                       placeholder="Enter amount for T0" oninput="calculateTotalPaid(); validateTrancheAmount(this)">
                 <input type="date" name="tranche_date_0" title="Payment date for T0">
                 <select name="tranche_type_0" title="Payment type for T0">
+                    <option value="espece" selected>Espèce</option>
                     <option value="versement">Versement</option>
-                    <option value="espece">Espèce</option>
                 </select>
                 <button type="button" class="btn-remove-tranche" onclick="removeTranche(this)" style="display: none;">×</button>
             </div>
@@ -725,8 +1079,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         type: type
                     };
                     totalPaidAmount += value;
-                }
-            });
+                }            });
 
             // Prepare buyer data
             const buyerData = {
@@ -743,7 +1096,67 @@ document.addEventListener('DOMContentLoaded', function () {
                 remise: parseFloat(document.getElementById('remise').value) || 0,
                 total_paid: totalPaidAmount,
                 payments: tranches
-            };
+            };            // Validate espèce amounts before submission
+            const surface = parseFloat(document.getElementById('surface').value) || 0;
+            const prixTotale = parseFloat(document.getElementById('prixTotale').value) || 0;
+            const remise = parseFloat(document.getElementById('remise').value) || 0;
+            const prixUnitaire = currentPrixUnitaire || 0;
+            
+            // Calculate the reduced total price after remise (discount)
+            const reducedTotalPrice = prixTotale - remise;
+            
+            // Calculate max versement (unchanged)
+            const maxVersement = prixUnitaire * surface;
+            
+            // Calculate max espèce from the reduced total price
+            const maxEspece = reducedTotalPrice - maxVersement;            // Calculate espèce amounts and find which tranche causes the violation
+            let totalEspeceAmount = 0;
+            let violatingTrancheInput = null;
+            let violatingTrancheAmount = 0;
+            let previousEspeceTotal = 0;
+            
+            Array.from(tranchesContainer.children).forEach((row, index) => {
+                const amountInput = row.querySelector('input[type="number"]');
+                const typeSelect = row.querySelector('select');
+                const value = parseFloat(amountInput.value) || 0;
+                const type = typeSelect ? typeSelect.value : 'versement';
+                
+                if (type === 'espece' && value > 0) {
+                    const previousTotal = totalEspeceAmount;
+                    totalEspeceAmount += value;
+                    
+                    // Check if this tranche causes the violation
+                    if (previousTotal <= maxEspece && totalEspeceAmount > maxEspece) {
+                        violatingTrancheInput = amountInput;
+                        violatingTrancheAmount = value;
+                        previousEspeceTotal = previousTotal;
+                    }
+                }
+            });            // Check if total espèce exceeds the limit
+            if (totalEspeceAmount > maxEspece && totalEspeceAmount > 0 && violatingTrancheInput) {
+                // Calculate how much espèce room is left for the violating tranche
+                const availableEspeceRoom = maxEspece - previousEspeceTotal;
+                const excessAmount = violatingTrancheAmount - availableEspeceRoom;                // Store pending data for the modal
+                pendingEspeceData = {
+                    trancheInput: violatingTrancheInput,
+                    enteredAmount: violatingTrancheAmount, // The amount in the violating tranche
+                    maxEspece: availableEspeceRoom, // Available room for this tranche
+                    acceptedEspece: availableEspeceRoom, // Max this tranche can take
+                    remainingVersement: excessAmount, // Amount that should become versement
+                    formData: buyerData,
+                    isEdit: isEdit,
+                    buyerId: buyerId,
+                    submitBtn: submitBtn,
+                    originalText: originalText
+                };
+                
+                // Reset submit button state                submitBtn.textContent = originalText;
+                submitBtn.disabled = false;
+                
+                // Show the modal and stop form submission
+                showEspeceWarningModal();
+                return;
+            }
 
             // Add or update buyer in database
             if (isEdit) {
@@ -825,8 +1238,19 @@ document.addEventListener('DOMContentLoaded', function () {
             this.style.borderColor = '#ddd';
         }
     });    // Add event listeners for price and remise changes (for display purposes)
-    document.getElementById('prixTotale').addEventListener('input', calculateTotalPaid);
-    document.getElementById('remise').addEventListener('input', calculateTotalPaid);
+    document.getElementById('prixTotale').addEventListener('input', function() {
+        calculateTotalPaid();
+        updateTrancheTypeOptions();
+    });
+    document.getElementById('remise').addEventListener('input', function() {
+        calculateTotalPaid();
+        updateTrancheTypeOptions();
+    });
+    
+    // Add event listener for surface changes
+    document.getElementById('surface').addEventListener('input', function() {
+        updateTrancheTypeOptions();
+    });
     
     // Add event listener for apartment type selection
     document.getElementById('typeLogt').addEventListener('change', handleApartmentTypeChange);
@@ -917,8 +1341,7 @@ function handleApartmentTypeChange() {
             // Make fields readonly for predefined types
             surfaceInput.readOnly = true;
             priceInput.readOnly = true;
-            
-            // Add visual feedback for auto-filled fields
+              // Add visual feedback for auto-filled fields
             [surfaceInput, priceInput].forEach(input => {
                 input.classList.add('updated');
                 setTimeout(() => input.classList.remove('updated'), 1000);
@@ -935,6 +1358,9 @@ function handleApartmentTypeChange() {
         surfaceInput.readOnly = true;
         priceInput.readOnly = true;
     }
+    
+    // Update tranche type options when surface/price changes
+    updateTrancheTypeOptions();
 }
 
 // Delete buyer function (global scope for onclick)
@@ -1145,10 +1571,9 @@ async function editBuyer(buyerId) {
                 <input type="number" step="0.01" min="0" name="tranche_${index}" 
                        value="${amount}" placeholder="Enter amount for T${index}" 
                        oninput="calculateTotalPaid()">
-                <input type="date" name="tranche_date_${index}" value="${date}" title="Payment date for T${index}">
-                <select name="tranche_type_${index}" title="Payment type for T${index}">
-                    <option value="versement" ${type === 'versement' ? 'selected' : ''}>Versement</option>
+                <input type="date" name="tranche_date_${index}" value="${date}" title="Payment date for T${index}">                <select name="tranche_type_${index}" title="Payment type for T${index}">
                     <option value="espece" ${type === 'espece' ? 'selected' : ''}>Espèce</option>
+                    <option value="versement" ${type === 'versement' ? 'selected' : ''}>Versement</option>
                 </select>
                 <button type="button" class="btn-remove-tranche" onclick="removeTranche(this)">×</button>
             `;
@@ -1297,7 +1722,996 @@ async function editTranches(buyerId) {
 window.editTranches = editTranches;
 window.deleteBuyer = deleteBuyer;
 window.removeTranche = removeTranche;
+window.printOrdreVersement = printOrdreVersement;
+
+// Print Ordre de Versement function
+async function printOrdreVersement(trancheIndex) {
+    try {
+        // Get form data
+        const form = document.getElementById('addBuyerForm');
+        if (!form) {
+            alert('No form found');
+            return;
+        }
+        
+        const formData = new FormData(form);
+        const buyerName = formData.get('nom') || 'N/A';
+        const prenom = formData.get('prenom') || '';
+        const trancheAmount = formData.get(`tranche_${trancheIndex}`) || '0';
+        const trancheDate = formData.get(`tranche_date_${trancheIndex}`) || new Date().toISOString().split('T')[0];
+        const trancheType = formData.get(`tranche_type_${trancheIndex}`) || 'versement';
+        
+        if (!trancheAmount || parseFloat(trancheAmount) <= 0) {
+            alert('Please enter a valid amount for this tranche before printing');
+            return;
+        }
+        
+        // Get current project info
+        const projectTitle = document.getElementById('pageTitle')?.textContent || 'Project';
+        
+        // Create PDF using the DocumentGenerator from utils if available
+        if (window.DocumentGenerator) {
+            const docGenerator = new window.DocumentGenerator();
+            const buyerData = {
+                nom: buyerName,
+                prenom: prenom,
+                bloc: formData.get('bloc') || '',
+                niveau: formData.get('niveau') || '',
+                logt_num: formData.get('logtNum') || '',
+                type_logt: formData.get('typeLogt') || ''
+            };
+            
+            const trancheData = {
+                index: trancheIndex,
+                amount: parseFloat(trancheAmount),
+                date: trancheDate,
+                type: trancheType
+            };
+            
+            await docGenerator.generateOrdreVersement(buyerData, trancheData);
+        } else {
+            // Fallback to simple print functionality
+            generateSimpleOrdreVersement(buyerName, prenom, trancheIndex, trancheAmount, trancheDate, trancheType);
+        }
+        
+    } catch (error) {
+        console.error('Error generating Ordre de Versement:', error);
+        alert('Error generating Ordre de Versement: ' + error.message);
+    }
+}
+
+// Simple ordre de versement generation fallback
+function generateSimpleOrdreVersement(buyerName, prenom, trancheIndex, amount, date, type) {
+    const printWindow = window.open('', '_blank');
+    
+    const currentDate = new Date().toLocaleDateString('fr-FR');
+    const paymentDate = date ? new Date(date).toLocaleDateString('fr-FR') : currentDate;
+    
+    const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Ordre de Versement - T${trancheIndex}</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 20px; }
+                .header { text-align: center; margin-bottom: 30px; }
+                .title { font-size: 24px; font-weight: bold; margin-bottom: 10px; }
+                .subtitle { font-size: 16px; color: #666; }
+                .content { margin: 30px 0; }
+                .buyer-info { margin-bottom: 20px; }
+                .info-row { margin: 8px 0; }
+                .amount-section { border: 2px solid #333; padding: 15px; margin: 20px 0; text-align: center; }
+                .amount { font-size: 20px; font-weight: bold; }
+                .amount-words { font-style: italic; margin-top: 10px; }
+                .footer { margin-top: 50px; }
+                .signature { text-align: right; margin-top: 40px; }
+                @media print { body { margin: 0; } }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <div class="title">ORDRE DE VERSEMENT</div>
+                <div class="subtitle">Tranche T${trancheIndex} - ${type.charAt(0).toUpperCase() + type.slice(1)}</div>
+            </div>
+            
+            <div class="content">
+                <div class="buyer-info">
+                    <div class="info-row"><strong>Client:</strong> ${prenom} ${buyerName}</div>
+                    <div class="info-row"><strong>Date de versement:</strong> ${paymentDate}</div>
+                    <div class="info-row"><strong>Type de paiement:</strong> ${type}</div>
+                </div>
+                
+                <div class="amount-section">
+                    <div class="amount">Montant: ${parseFloat(amount).toFixed(2)} DA</div>
+                    <div class="amount-words">${numberToWords(parseFloat(amount))} dinars algériens</div>
+                </div>
+                
+                <div class="footer">
+                    <p>Ce document certifie le versement de la tranche T${trancheIndex} pour le logement mentionné ci-dessus.</p>
+                    <p>Date d'émission: ${currentDate}</p>
+                </div>
+                
+                <div class="signature">
+                    <p>Signature et cachet de l'entreprise</p>
+                    <br><br>
+                    <p>_________________________</p>
+                </div>
+            </div>
+        </body>
+        </html>
+    `;
+    
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+    
+    // Wait for content to load then print
+    printWindow.onload = function() {
+        printWindow.print();
+        printWindow.close();
+    };
+}
+
+// Helper function to convert numbers to words (French)
+function numberToWords(num) {
+    const ones = ['', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf'];
+    const teens = ['dix', 'onze', 'douze', 'treize', 'quatorze', 'quinze', 'seize', 'dix-sept', 'dix-huit', 'dix-neuf'];
+    const tens = ['', '', 'vingt', 'trente', 'quarante', 'cinquante', 'soixante', 'soixante-dix', 'quatre-vingt', 'quatre-vingt-dix'];
+    
+    if (num === 0) return 'zéro';
+    
+    let result = '';
+    let thousandCounter = 0;
+    
+    while (num > 0) {
+        let chunk = num % 1000;
+        if (chunk !== 0) {
+            let chunkText = '';
+            
+            // Hundreds
+            if (chunk >= 100) {
+                if (Math.floor(chunk / 100) === 1) {
+                    chunkText += 'cent ';
+                } else {
+                    chunkText += ones[Math.floor(chunk / 100)] + ' cent ';
+                }
+                chunk %= 100;
+            }
+            
+            // Tens and ones
+            if (chunk >= 20) {
+                chunkText += tens[Math.floor(chunk / 10)];
+                if (chunk % 10 !== 0) {
+                    chunkText += '-' + ones[chunk % 10];
+                }
+            } else if (chunk >= 10) {
+                chunkText += teens[chunk - 10];
+            } else if (chunk > 0) {
+                chunkText += ones[chunk];
+            }
+            
+            // Add thousand multiplier
+            if (thousandCounter > 0 && chunk > 0) {
+                if (thousandCounter === 1) {
+                    chunkText += ' mille';
+                } else if (thousandCounter === 2) {
+                    chunkText += ' millions';
+                }
+            }
+            
+            result = chunkText + ' ' + result;
+        }
+        
+        num = Math.floor(num / 1000);
+        thousandCounter++;
+    }
+    
+    return result.trim();
+}
 
 // Add event listener for apartment type change
+
 document.getElementById('typeLogt').addEventListener('change', handleApartmentTypeChange);
+
+// ⚙️ Settings Modal Functions
+function openSettingsModal() {
+    const modal = document.getElementById('settingsModal');
+    const currentValueSpan = document.getElementById('currentPrixUnitaire');
+    const prixUnitaireInput = document.getElementById('prixUnitaireInput');
+    
+    // Display current prix unitaire
+    currentValueSpan.textContent = currentPrixUnitaire ? currentPrixUnitaire.toLocaleString() : '0';
+    
+    // Pre-fill the input with current value
+    prixUnitaireInput.value = currentPrixUnitaire || '';
+    
+    // Show modal with animation
+    modal.style.display = 'block';
+    modal.classList.add('show');
+    document.body.style.overflow = 'hidden'; // Prevent scrolling
+    
+    // Focus on input after animation
+    setTimeout(() => {
+        prixUnitaireInput.focus();
+        prixUnitaireInput.select();
+    }, 300);
+}
+
+function closeSettingsModal() {
+    const modal = document.getElementById('settingsModal');
+    
+    // Hide modal
+    modal.classList.remove('show');
+    modal.style.display = 'none';
+    
+    document.body.style.overflow = 'auto'; // Restore scrolling
+    
+    // Reset button states
+    const saveBtn = document.querySelector('.btn-save');
+    if (saveBtn) {
+        saveBtn.classList.remove('loading', 'success');
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save';
+    }
+}
+
+async function savePrixUnitaire() {
+    const prixUnitaireInput = document.getElementById('prixUnitaireInput');
+    const newPrixUnitaire = parseFloat(prixUnitaireInput.value);
+    
+    // Validate input
+    if (isNaN(newPrixUnitaire) || newPrixUnitaire < 0) {
+        alert('Please enter a valid positive number for Prix Unitaire.');
+        prixUnitaireInput.focus();
+        return;
+    }
+    
+    const saveBtn = document.querySelector('.btn-save');
+    
+    try {
+        // Show loading state
+        saveBtn.classList.add('loading');
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving...';
+        
+        console.log('🔄 Saving prix unitaire:', newPrixUnitaire);
+        
+        // Save to database
+        await invoke('update_prix_unitaire', { 
+            projectId: PROJECT_ID, 
+            prixUnitaire: newPrixUnitaire 
+        });
+        
+        // Update local variables
+        currentPrixUnitaire = newPrixUnitaire;
+        window.currentPrixUnitaire = newPrixUnitaire;
+        
+        console.log('✅ Prix unitaire saved successfully');
+        
+        // Update the current value display
+        document.getElementById('currentPrixUnitaire').textContent = newPrixUnitaire.toLocaleString();
+        
+        // Show success state
+        saveBtn.classList.remove('loading');
+        saveBtn.classList.add('success');
+        saveBtn.textContent = 'Saved!';
+        
+        console.log('✅ Prix unitaire updated successfully:', newPrixUnitaire);
+        
+        // Close modal and reload after a brief delay
+        setTimeout(async () => {
+            closeSettingsModal();
+            
+            try {
+                console.log('🔄 Reloading buyers with new prix unitaire...');
+                await loadBuyers();
+                console.log('✅ Buyers reloaded successfully');
+            } catch (reloadError) {
+                console.error('❌ Error reloading buyers:', reloadError);
+                // Don't show alert for reload error, just log it
+            }
+        }, 1200);
+        
+    } catch (error) {
+        console.error('❌ Error saving prix unitaire:', error);
+        
+        // Show user-friendly error message
+        let errorMessage = 'Error saving prix unitaire';
+        if (error.message) {
+            errorMessage += ': ' + error.message;
+        } else if (typeof error === 'string') {
+            errorMessage += ': ' + error;
+        }
+        
+        alert(errorMessage);
+        
+        // Reset button state
+        saveBtn.classList.remove('loading', 'success');
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save';
+        prixUnitaireInput.focus();
+    }
+}
+
+// Make functions globally accessible
+window.openSettingsModal = openSettingsModal;
+window.closeSettingsModal = closeSettingsModal;
+window.savePrixUnitaire = savePrixUnitaire;
+
+// 🚨 Espèce Warning Modal Functions
+let pendingEspeceData = null;
+
+function validateEspeceAmount(trancheInput) {
+    const amount = parseFloat(trancheInput.value) || 0;
+    const type = trancheInput.closest('.tranche-row').querySelector('select').value;
+    
+    // Only validate if it's espèce type
+    if (type !== 'espece' || amount <= 0) return true;
+    
+    // Calculate validation limits
+    const prixUnitaire = currentPrixUnitaire || 0;
+    const surface = parseFloat(document.getElementById('surface').value) || 0;
+    const prixTotale = parseFloat(document.getElementById('prixTotale').value) || 0;
+    const remise = parseFloat(document.getElementById('remise').value) || 0;
+    
+    // Calculate the reduced total price after remise (discount)
+    const reducedTotalPrice = prixTotale - remise;
+    
+    // Calculate max versement (unchanged)
+    const maxVersement = prixUnitaire * surface;
+    
+    // Calculate max espèce from the reduced total price
+    const maxEspece = reducedTotalPrice - maxVersement;
+    
+    if (amount > maxEspece) {
+        // Store the pending data
+        pendingEspeceData = {
+            trancheInput: trancheInput,
+            enteredAmount: amount,
+            maxEspece: maxEspece,
+            acceptedEspece: maxEspece,
+            remainingVersement: amount - maxEspece
+        };
+        
+        showEspeceWarningModal();
+        return false;
+    }
+    
+    return true;
+}
+
+function showEspeceWarningModal() {
+    if (!pendingEspeceData) return;
+    
+    const modal = document.getElementById('especeWarningModal');
+    
+    // Calculate total maximum espèce for display
+    const prixUnitaire = currentPrixUnitaire || 0;
+    const surface = parseFloat(document.getElementById('surface').value) || 0;
+    const prixTotale = parseFloat(document.getElementById('prixTotale').value) || 0;
+    const remise = parseFloat(document.getElementById('remise').value) || 0;
+    
+    const reducedTotalPrice = prixTotale - remise;
+    const maxVersement = prixUnitaire * surface;
+    const totalMaxEspece = reducedTotalPrice - maxVersement;
+    
+    // Update modal content with actual values
+    document.getElementById('enteredEspeceAmount').textContent = pendingEspeceData.enteredAmount.toLocaleString() + ' DA';
+    document.getElementById('maxEspeceAllowed').textContent = totalMaxEspece.toLocaleString() + ' DA';
+    document.getElementById('acceptedEspeceAmount').textContent = pendingEspeceData.acceptedEspece.toLocaleString() + ' DA';
+    document.getElementById('remainingVersementAmount').textContent = pendingEspeceData.remainingVersement.toLocaleString() + ' DA';
+    
+    // Show modal
+    modal.style.display = 'block';
+    modal.classList.add('show');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeEspeceWarningModal() {
+    const modal = document.getElementById('especeWarningModal');
+    modal.classList.remove('show');
+    modal.style.display = 'none';
+    document.body.style.overflow = 'auto';
+    
+    // Reset the input to the original entered value (don't change user's input)
+    if (pendingEspeceData && pendingEspeceData.trancheInput) {
+        // Keep the user's original amount - they can adjust it manually if needed
+        // Don't force change their input value
+        calculateTotalPaid();
+    }
+    
+    pendingEspeceData = null;
+}
+
+function acceptEspeceAdjustment() {
+    if (!pendingEspeceData) return;
+    
+    // Store the original amount entered by user
+    const originalAmount = pendingEspeceData.enteredAmount;
+    const maxEspeceAllowed = pendingEspeceData.acceptedEspece;
+    const remainingAmount = originalAmount - maxEspeceAllowed;
+    
+    // Set the current tranche to max espèce amount allowed
+    pendingEspeceData.trancheInput.value = maxEspeceAllowed;
+    
+    // Only create new tranche if there's remaining amount
+    if (remainingAmount > 0) {
+        // Create new tranche for remaining versement amount
+        addTranche();
+        const tranchesContainer = document.getElementById('tranchesContainer');
+        const newTranche = tranchesContainer.lastElementChild;
+        
+        // Set the new tranche values
+        const newAmountInput = newTranche.querySelector('input[type="number"]');
+        const newTypeSelect = newTranche.querySelector('select');
+        const newDateInput = newTranche.querySelector('input[type="date"]');
+        
+        newAmountInput.value = remainingAmount;
+        newTypeSelect.value = 'versement';
+        
+        // Set today's date for the new tranche
+        const today = new Date().toISOString().split('T')[0];
+        newDateInput.value = today;
+        
+        console.log(`✅ Split: ${maxEspeceAllowed.toLocaleString()} DA (espèce) + ${remainingAmount.toLocaleString()} DA (versement)`);
+    }
+    
+    calculateTotalPaid();
+    closeEspeceWarningModal();
+    
+    // Show the versement order modal
+    showVersementOrderModal();
+    
+    // Complete the form submission after modal is closed
+    completeFormSubmission();
+    
+    console.log('✅ Espèce adjustment accepted - Amount properly split');
+}
+
+function acceptEspeceAndPrintRecu() {
+    if (!pendingEspeceData) return;
+    
+    // Print the reçu - this function now handles the complete flow
+    printRecuVersement();
+}
+
+async function completeFormSubmission() {
+    if (!pendingEspeceData) return;
+    
+    const { formData, isEdit, buyerId, submitBtn, originalText } = pendingEspeceData;
+    
+    try {
+        // Show loading state on submit button
+        submitBtn.innerHTML = '<div class="loading-spinner"></div> ' + (isEdit ? 'Updating...' : 'Adding...');
+        submitBtn.disabled = true;
+        
+        // Recalculate tranches data after adjustment
+        const tranchesContainer = document.getElementById('tranchesContainer');
+        const tranches = {};
+        let totalPaidAmount = 0;
+        
+        Array.from(tranchesContainer.children).forEach((row, index) => {
+            const amountInput = row.querySelector('input[type="number"]');
+            const dateInput = row.querySelector('input[type="date"]');
+            const typeSelect = row.querySelector('select');
+            const value = parseFloat(amountInput.value) || 0;
+            const date = dateInput.value || null;
+            const type = typeSelect ? typeSelect.value : 'versement';
+            
+            if (value > 0) {
+                tranches[`T${index}`] = {
+                    amount: value,
+                    date: date,
+                    type: type
+                };
+                totalPaidAmount += value;
+            }
+        });
+        
+        // Update formData with new tranche information
+        formData.payments = tranches;
+        formData.total_paid = totalPaidAmount;
+        
+        // Add or update buyer in database
+        if (isEdit) {
+            await invoke('edit_buyer_in_database', { buyerId: parseInt(buyerId), buyer: formData });
+        } else {
+            await invoke('add_buyer_to_database', { buyer: formData });
+        }
+        
+        // Reset form and close modal
+        const form = document.getElementById('addBuyerForm');
+        form.reset();
+        form.removeAttribute('data-buyer-id');
+        const modal = document.getElementById('buyerModal');
+        modal.style.display = 'none';
+        
+        // Show success modal
+        const successModal = document.getElementById('successModal');
+        successModal.style.display = 'block';
+        
+        // Reload buyers list
+        await loadBuyers();
+        
+    } catch (error) {
+        console.error('Error saving buyer:', error);
+        alert('Error saving buyer: ' + error);
+    } finally {
+        // Reset submit button
+        submitBtn.textContent = originalText;
+        submitBtn.disabled = false;
+        
+        // Clear pending data
+        pendingEspeceData = null;
+    }
+}
+
+function showVersementOrderModal() {
+    if (!pendingEspeceData) return;
+    
+    const modal = document.getElementById('versementOrderModal');
+    if (!modal) {
+        console.error('Versement order modal not found');
+        return;
+    }
+    
+    // Update modal content with versement amount
+    const versementAmountEl = document.getElementById('versementOrderAmount');
+    if (versementAmountEl) {
+        versementAmountEl.textContent = pendingEspeceData.remainingVersement.toLocaleString() + ' DA';
+    }
+    
+    // Show modal
+    modal.style.display = 'block';
+    modal.classList.add('show');
+}
+
+function closeVersementOrderModal() {
+    const modal = document.getElementById('versementOrderModal');
+    if (modal) {
+        modal.classList.remove('show');
+        modal.style.display = 'none';
+    }
+    
+    // Clear pending data since operation is complete
+    pendingEspeceData = null;
+}
+
+function printVersementOrderFromModal() {
+    if (!pendingEspeceData) return;
+    
+    console.log('🖨️ Printing Ordre de Versement for versement amount');
+    
+    // TODO: Implement French versement order printing logic
+    alert('Printing Ordre de Versement for ' + pendingEspeceData.remainingVersement.toLocaleString() + ' DA');
+    
+    // Close the modal after printing
+    closeVersementOrderModal();
+}
+
+function skipPrintVersementOrder() {
+    console.log('User chose not to print Ordre de Versement');
+    closeVersementOrderModal();
+}
+
+function printRecuVersement() {
+    if (!pendingEspeceData) return;
+    
+    console.log('🖨️ Printing Reçu de Versement (Arabic receipt)');
+    
+    // Get buyer data for the receipt
+    const surface = parseFloat(document.getElementById('surface').value) || 0;
+    const nom = document.getElementById('nom').value || '';
+    const prenom = document.getElementById('prenom').value || '';
+    const bloc = document.getElementById('bloc').value || '';
+    const logtNum = document.getElementById('logtNum').value || '';
+    
+    // Create and show printable receipt document
+    const receiptWindow = window.open('', '_blank', 'width=800,height=600');
+    receiptWindow.document.write(`
+        <!DOCTYPE html>
+        <html dir="rtl" lang="ar">
+        <head>
+            <meta charset="UTF-8">
+            <title>وصل استلام - Reçu de Versement</title>
+            <style>
+                body { font-family: Arial, sans-serif; padding: 20px; direction: rtl; }
+                .header { text-align: center; margin-bottom: 30px; }
+                .amount { font-size: 24px; font-weight: bold; color: #2c3e50; }
+                .details { margin: 20px 0; }
+                .signature { margin-top: 50px; text-align: left; }
+                @media print { body { margin: 0; } }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h2>وصل استلام نقدي</h2>
+                <h3>Reçu de Versement en Espèce</h3>
+            </div>
+            <div class="details">
+                <p><strong>المبلغ / Montant:</strong> <span class="amount">${pendingEspeceData.acceptedEspece.toLocaleString()} DA</span></p>
+                <p><strong>الاسم / Nom:</strong> ${nom} ${prenom}</p>
+                <p><strong>الكتلة / Bloc:</strong> ${bloc}</p>
+                <p><strong>رقم السكن / N° Logement:</strong> ${logtNum}</p>
+                <p><strong>المساحة / Surface:</strong> ${surface} m²</p>
+                <p><strong>التاريخ / Date:</strong> ${new Date().toLocaleDateString('fr-FR')}</p>
+            </div>            <div class="signature">                <p>التوقيع / Signature: ____________________</p>
+            </div>
+            <script>
+                let printTriggered = false;
+                
+                window.onload = function() {
+                    printTriggered = true;
+                    window.print();
+                }
+                
+                window.onafterprint = function() {
+                    // Close window after 200ms delay (whether printed or cancelled)
+                    setTimeout(() => {
+                        window.close();
+                    }, 200);
+                }
+                
+                window.onbeforeunload = function() {
+                    // Also close if user navigates away or closes manually
+                    if (printTriggered) {
+                        window.close();
+                    }
+                }
+            </script>
+        </body>
+        </html>
+    `);
+    receiptWindow.document.close();
+    
+    // After showing the receipt, check if there's remaining versement amount
+    setTimeout(() => {
+        if (pendingEspeceData.remainingVersement > 0) {
+            // Show proper modal asking if user wants to print ordre de versement
+            showOrdreVersementConfirmModal();
+        } else {
+            // No remaining amount, just proceed with the adjustment
+            acceptEspeceAdjustment();
+        }
+    }, 1000);
+}
+
+function printOrdreVersementForEspece() {
+    if (!pendingEspeceData) return;
+    
+    console.log('🖨️ Printing Ordre de Versement (French order)');
+    
+    // TODO: Implement French order printing logic  
+    alert('Printing Ordre de Versement for ' + pendingEspeceData.remainingVersement.toLocaleString() + ' DA');
+}
+
+// Confirmation modal for printing ordre de versement
+function showOrdreVersementConfirmModal() {
+    if (!pendingEspeceData) return;
+    
+    // Create a simple modal for ordre de versement confirmation
+    const modalHTML = `
+        <div id="ordreVersementConfirmModal" class="modal" style="display: block;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3><i class="fas fa-print"></i> Impression Ordre de Versement</h3>
+                </div>
+                <div class="modal-body">
+                    <p>Voulez-vous imprimer l'<strong>Ordre de Versement</strong> pour le montant restant?</p>
+                    <div class="amount-display">
+                        <strong>${pendingEspeceData.remainingVersement.toLocaleString()} DA</strong>
+                        <br><small>Montant à convertir en versement</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" onclick="confirmPrintOrdreVersement()">
+                        <i class="fas fa-print"></i> Oui, Imprimer
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="skipOrdreVersementPrint()">
+                        <i class="fas fa-times"></i> Non, Continuer
+                    </button>
+                </div>
+            </div>
+        </div>
+        <style>
+            #ordreVersementConfirmModal {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.5);
+                z-index: 10001;
+            }
+            
+            #ordreVersementConfirmModal .modal-content {
+                background: white;
+                max-width: 450px;
+                margin: 15% auto;
+                border-radius: 8px;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            }
+            
+            #ordreVersementConfirmModal .modal-header {
+                padding: 20px;
+                border-bottom: 1px solid #eee;
+                background: #f8f9fa;
+                border-radius: 8px 8px 0 0;
+            }
+            
+            #ordreVersementConfirmModal .modal-header h3 {
+                margin: 0;
+                color: #2c3e50;
+                font-size: 18px;
+            }
+            
+            #ordreVersementConfirmModal .modal-body {
+                padding: 20px;
+                text-align: center;
+            }
+            
+            #ordreVersementConfirmModal .amount-display {
+                background: #e3f2fd;
+                padding: 15px;
+                border-radius: 6px;
+                margin: 15px 0;
+                border: 1px solid #bbdefb;
+            }
+            
+            #ordreVersementConfirmModal .amount-display strong {
+                font-size: 20px;
+                color: #1976d2;
+            }
+            
+            #ordreVersementConfirmModal .modal-footer {
+                padding: 20px;
+                text-align: center;
+                border-top: 1px solid #eee;
+                background: #f8f9fa;
+                border-radius: 0 0 8px 8px;
+            }
+            
+            #ordreVersementConfirmModal .btn {
+                padding: 10px 20px;
+                margin: 0 5px;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 14px;
+            }
+            
+            #ordreVersementConfirmModal .btn-primary {
+                background: #007bff;
+                color: white;
+            }
+            
+            #ordreVersementConfirmModal .btn-primary:hover {
+                background: #0056b3;
+            }
+            
+            #ordreVersementConfirmModal .btn-secondary {
+                background: #6c757d;
+                color: white;
+            }
+            
+            #ordreVersementConfirmModal .btn-secondary:hover {
+                background: #545b62;
+            }
+        </style>
+    `;
+    
+    // Add modal to body
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    document.body.style.overflow = 'hidden';
+}
+
+function confirmPrintOrdreVersement() {
+    // Remove the confirmation modal
+    const modal = document.getElementById('ordreVersementConfirmModal');
+    if (modal) modal.remove();
+    document.body.style.overflow = 'auto';
+    
+    // Print the ordre de versement
+    printOrdreVersementForRemaining();
+}
+
+function skipOrdreVersementPrint() {
+    // Remove the confirmation modal
+    const modal = document.getElementById('ordreVersementConfirmModal');
+    if (modal) modal.remove();
+    document.body.style.overflow = 'auto';
+    
+    // Proceed without printing
+    acceptEspeceAdjustment();
+}
+
+function printOrdreVersementForRemaining() {
+    if (!pendingEspeceData) return;
+    
+    console.log('🖨️ Printing Ordre de Versement for remaining amount');
+    
+    // Get buyer data for the order
+    const surface = parseFloat(document.getElementById('surface').value) || 0;
+    const nom = document.getElementById('nom').value || '';
+    const prenom = document.getElementById('prenom').value || '';
+    const bloc = document.getElementById('bloc').value || '';
+    const logtNum = document.getElementById('logtNum').value || '';
+    
+    // Create and show printable order document
+    const orderWindow = window.open('', '_blank', 'width=800,height=600');
+    orderWindow.document.write(`
+        <!DOCTYPE html>
+        <html lang="fr">
+        <head>
+            <meta charset="UTF-8">
+            <title>Ordre de Versement</title>
+            <style>
+                body { font-family: Arial, sans-serif; padding: 20px; }
+                .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #2c3e50; padding-bottom: 20px; }
+                .amount { font-size: 24px; font-weight: bold; color: #c0392b; background: #ecf0f1; padding: 10px; border-radius: 5px; }
+                .details { margin: 20px 0; line-height: 1.6; }
+                .footer { margin-top: 50px; display: flex; justify-content: space-between; }
+                @media print { body { margin: 0; } }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h2>ORDRE DE VERSEMENT</h2>
+                <p>Paiement par Versement Bancaire</p>
+            </div>
+            <div class="details">
+                <p><strong>Montant à Verser:</strong> <span class="amount">${pendingEspeceData.remainingVersement.toLocaleString()} DA</span></p>
+                <p><strong>Bénéficiaire:</strong> ${nom} ${prenom}</p>
+                <p><strong>Bloc:</strong> ${bloc}</p>
+                <p><strong>N° Logement:</strong> ${logtNum}</p>
+                <p><strong>Surface:</strong> ${surface} m²</p>
+                <p><strong>Date d'émission:</strong> ${new Date().toLocaleDateString('fr-FR')}</p>
+                <p><strong>Modalité:</strong> Versement bancaire (complément après dépassement limite espèce)</p>
+            </div>            <div class="footer">
+                <div>
+                    <p>Signature du Client:</p>
+                    <p>____________________</p>
+                </div>
+                <div>                    <p>Cachet et Signature:</p>
+                    <p>____________________</p>
+                </div>
+            </div>
+            <script>
+                let printTriggered = false;
+                
+                window.onload = function() {
+                    printTriggered = true;
+                    window.print();
+                }
+                
+                window.onafterprint = function() {
+                    // Close window after 200ms delay (whether printed or cancelled)
+                    setTimeout(() => {
+                        window.close();
+                    }, 200);
+                }
+                
+                window.onbeforeunload = function() {
+                    // Also close if user navigates away or closes manually
+                    if (printTriggered) {
+                        window.close();
+                    }
+                }
+            </script>
+        </body>
+        </html>
+    `);
+    orderWindow.document.close();
+    
+    // After showing the order, proceed with the adjustment
+    setTimeout(() => {
+        acceptEspeceAdjustment();
+    }, 1000);
+}
+
+// Make espèce functions globally accessible
+window.closeEspeceWarningModal = closeEspeceWarningModal;
+window.acceptEspeceAdjustment = acceptEspeceAdjustment;
+window.acceptEspeceAndPrintRecu = acceptEspeceAndPrintRecu;
+window.printRecuVersement = printRecuVersement;
+window.printOrdreVersementForEspece = printOrdreVersementForEspece;
+window.showOrdreVersementConfirmModal = showOrdreVersementConfirmModal;
+window.confirmPrintOrdreVersement = confirmPrintOrdreVersement;
+window.skipOrdreVersementPrint = skipOrdreVersementPrint;
+window.printOrdreVersementForRemaining = printOrdreVersementForRemaining;
+window.printOrdreVersementForRemaining = printOrdreVersementForRemaining;
+window.showVersementOrderModal = showVersementOrderModal;
+window.closeVersementOrderModal = closeVersementOrderModal;
+window.printVersementOrderFromModal = printVersementOrderFromModal;
+window.skipPrintVersementOrder = skipPrintVersementOrder;
+window.completeFormSubmission = completeFormSubmission;
+
+// Handle tranche input changes
+function handleTrancheInput(inputElement) {
+    // Calculate total and validate
+    calculateTotalPaid();
+    validateTrancheAmount(inputElement);
+    
+    // Check espèce limits and update dropdown options
+    updateTrancheTypeOptions();
+}
+
+// Handle tranche type changes
+function handleTrancheTypeChange(selectElement) {
+    calculateTotalPaid();
+    
+    // Trigger validation when type changes
+    const trancheRow = selectElement.closest('.tranche-row');
+    const amountInput = trancheRow.querySelector('input[type="number"]');
+    if (amountInput) {
+        validateTrancheAmount(amountInput);
+    }
+    
+    // Update all tranche type options based on current limits
+    updateTrancheTypeOptions();
+}
+
+// Update tranche type dropdown options based on espèce limits
+function updateTrancheTypeOptions() {
+    const surface = parseFloat(document.getElementById('surface').value) || 0;
+    const prixTotale = parseFloat(document.getElementById('prixTotale').value) || 0;
+    const remise = parseFloat(document.getElementById('remise').value) || 0;
+    const prixUnitaire = currentPrixUnitaire || 0;
+    
+    // Calculate the reduced total price after remise (discount)
+    const reducedTotalPrice = prixTotale - remise;
+    
+    // Calculate max versement (unchanged)
+    const maxVersement = prixUnitaire * surface;
+    
+    // Calculate max espèce from the reduced total price
+    const maxEspece = reducedTotalPrice - maxVersement;
+    
+    // Calculate current total espèce amount
+    let currentEspeceTotal = 0;
+    const tranchesContainer = document.getElementById('tranchesContainer');
+    
+    Array.from(tranchesContainer.children).forEach(row => {
+        const amountInput = row.querySelector('input[type="number"]');
+        const typeSelect = row.querySelector('select');
+        const value = parseFloat(amountInput.value) || 0;
+        const type = typeSelect ? typeSelect.value : 'versement';
+        
+        if (type === 'espece' && value > 0) {
+            currentEspeceTotal += value;
+        }
+    });
+    
+    // Calculate remaining espèce available
+    const remainingEspece = maxEspece - currentEspeceTotal;
+    
+    // Debug output
+    console.log(`🔍 ESPÈCE VALIDATION DEBUG:
+    📊 Prix Totale: ${prixTotale.toLocaleString()} DA
+    💸 Remise: ${remise.toLocaleString()} DA
+    🏠 Reduced Total: ${reducedTotalPrice.toLocaleString()} DA
+    🏦 Max Versement: ${maxVersement.toLocaleString()} DA
+    💵 Max Espèce: ${maxEspece.toLocaleString()} DA
+    💰 Current Espèce Total: ${currentEspeceTotal.toLocaleString()} DA
+    ✅ Remaining Espèce: ${remainingEspece.toLocaleString()} DA
+    🚫 Should Disable: ${remainingEspece <= 0}`);
+    
+    // Only disable espèce option if there's no remaining espèce available
+    const especeLimitReached = remainingEspece <= 0;
+    
+    // Update all select dropdowns
+    Array.from(tranchesContainer.children).forEach(row => {
+        const typeSelect = row.querySelector('select');
+        
+        if (typeSelect) {
+            const especeOption = typeSelect.querySelector('option[value="espece"]');
+            
+            // Only disable espèce option when there's no room left
+            if (especeLimitReached) {
+                especeOption.disabled = true;
+            } else {
+                especeOption.disabled = false;
+            }
+        }
+    });
+}
 

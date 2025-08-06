@@ -14,6 +14,10 @@ edition = "2021"
 name = "my_application_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[[bin]]
+name = "Managist"
+path = "src/main.rs"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -32,6 +36,16 @@ rust_decimal = { version = "1.32", features = ["serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 num-traits = "0.2"
 dotenvy = "0.15"
+
+# Windows-specific configuration to prevent console window
+[target.'cfg(windows)'.dependencies]
+
+# Profile configuration to ensure console is hidden in release builds
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+panic = "abort"
 
 
 

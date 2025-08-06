@@ -16,7 +16,8 @@
 
   <!-- Sidebar -->
   <div class="sidebar">
-    <h2><i class="fas fa-cogs"></i>Managist</h2>    <ul>
+    <h2><i class="fas fa-cogs"></i>Managist</h2>
+    <ul>
       <li><a href="../index.html"><i class="fas fa-home"></i> Dashboard</a></li>
       <li><a href="../salaire/salaire.html"><i class="fas fa-wallet"></i> Salary</a></li>
       <li class="active"><a href="project.html"><i class="fas fa-tasks"></i> Projects</a></li>
@@ -159,6 +160,53 @@
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Project Modal -->
+  <div id="editProjectModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2><i class="fas fa-edit"></i> Modifier le projet</h2>
+        <span class="close" id="editProjectClose">&times;</span>
+      </div>
+      <div class="modal-body">
+        <form id="editProjectForm">
+          <input type="hidden" id="editProjectId">
+          <input type="text" id="editNomProjet" placeholder="Nom de Projet..." required>
+          <input type="text" id="editLocation" placeholder="Location..." required>
+          <input type="number" id="editNmbrDesBlocs" placeholder="Nombre des blocs" required>
+          <input type="number" id="editNmbrDesEtages" placeholder="Nombre des Etages dans chaque bloc" required>
+          <input type="number" id="editNmbrDesAppartementsDansChaqueBloc" placeholder="Nombre des Apartments dans chaque Etage" required>
+          <input type="text" id="editTypes" placeholder="Type des Appartements (F2, F3, F4)..." required>
+          <input type="text" id="editSurfaces" placeholder="Surfaces des Appartements (75m², 90m², 120m²)..." required>
+          <div class="calculated-field">
+            <input type="number" id="editNmbrDesAppartementsTotal" placeholder="Nombre des Apartments Total">
+            <small class="field-note"><i class="fas fa-calculator"></i> Auto-calculé</small>
+          </div>
+          <input type="date" id="editDateDeDebut" required>
+          <input type="date" id="editDateDeFin" required>
+          <div class="form-buttons">
+            <button type="submit" class="ajouter-projet-button">Sauvegarder les modifications</button>
+            <button type="button" class="cancel-btn" id="editProjectCancel">Annuler</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Success Modal for Project Update -->
+  <div id="updateProjectSuccessModal" class="modal">
+    <div class="modal-content success-modal">
+      <div class="modal-header success-header">
+        <h2><i class="fas fa-check-circle"></i> Projet modifié avec succès</h2>
+      </div>
+      <div class="modal-body">
+        <p>Les modifications de votre projet ont été enregistrées avec succès.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="ok-btn" id="updateProjectSuccessOk">OK</button>
       </div>
     </div>
   </div>

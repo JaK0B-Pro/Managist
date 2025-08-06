@@ -8,6 +8,25 @@ use std::env;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+// Macro to conditionally print only in debug builds
+#[cfg(debug_assertions)]
+macro_rules! debug_println {
+    ($($arg:tt)*) => {
+        println!($($arg)*);
+    };
+}
+
+#[cfg(not(debug_assertions))]
+macro_rules! debug_println {
+    ($($arg:tt)*) => {};
+}
+
 // Structure to represent the Employee
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Employee {
@@ -69,6 +88,20 @@ pub struct ProjectInfoInput {
     type_of_appartement: String,
     surface: f64,
     price: f64,
+}
+
+// Structure to represent Prix Unitaire
+#[derive(Serialize, Deserialize, Debug)]
+pub struct PrixUnitaire {
+    id: i32,
+    project_id: i32,
+    prix_unitaire: Decimal,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct PrixUnitaireInput {
+    project_id: i32,
+    prix_unitaire: f64,
 }
 
 // Structure to represent a buyer
@@ -135,6 +168,8 @@ async fn login(app: AppHandle, pool: tauri::State<'_, PgPool>, user: String, pas
     let user = user.trim_end().to_string();
     let password = password.trim_end().to_string();
     
+    debug_println!("Login attempt - User: {}", user);
+    
     let rows = sqlx::query("SELECT id, name, password, admin FROM users WHERE name = $1 AND password = $2")
         .bind(&user)
         .bind(&password)
@@ -144,8 +179,10 @@ async fn login(app: AppHandle, pool: tauri::State<'_, PgPool>, user: String, pas
 
     if let Some(row) = rows.first() {
         let admin_value: String = row.try_get("admin").map_err(|e| e.to_string())?;
+        debug_println!("Login successful - User: {}, Admin role from DB: {}", user, admin_value);
         app.emit_to("login", "login-result", format!("LoggedIn:{}", admin_value)).map_err(|e| e.to_string())?;
     } else {
+        debug_println!("Login failed - Invalid credentials for user: {}", user);
         app.emit_to("login", "login-result", "Invalid Credentials").map_err(|e| e.to_string())?;
     }
     
@@ -158,14 +195,34 @@ async fn login(app: AppHandle, pool: tauri::State<'_, PgPool>, user: String, pas
 // Function to handle signup process
 #[tauri::command]
 async fn signup_proccess(app: AppHandle, pool: tauri::State<'_, PgPool>, name: String, password: String, admin: String) -> Result<(), String> {
+    debug_println!("Signup attempt - Name: {}, Admin role: {}", name, admin);
+    
+    // Check if user already exists
+    let existing_user = sqlx::query("SELECT name FROM users WHERE name = $1")
+        .bind(&name)
+        .fetch_optional(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    if existing_user.is_some() {
+        debug_println!("User '{}' already exists", name);
+        app.emit_to("signup", "signup-result", "User already exists").map_err(|e| e.to_string())?;
+        return Err("User already exists".to_string());
+    }
+    
+    // Insert new user
     sqlx::query("INSERT INTO users(name, password, admin) VALUES ($1, $2, $3)")
         .bind(&name)
         .bind(&password)
         .bind(&admin)
         .execute(&*pool)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            debug_println!("Signup database error: {}", e);
+            e.to_string()
+        })?;
     
+    debug_println!("User '{}' created successfully with admin role: {}", name, admin);
     app.emit_to("signup", "signup-result", "Success").map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -831,6 +888,79 @@ async fn delete_project_info(pool: tauri::State<'_, PgPool>, info_id: i32) -> Re
     Ok(())
 }
 
+// Prix Unitaire Management Functions
+#[tauri::command]
+async fn add_prix_unitaire(pool: tauri::State<'_, PgPool>, prix_data: PrixUnitaireInput) -> Result<(), String> {
+    let query = "INSERT INTO prix_unitaire (project_id, prix_unitaire) VALUES ($1, $2)";
+
+    sqlx::query(query)
+        .bind(prix_data.project_id)
+        .bind(Decimal::from_f64_retain(prix_data.prix_unitaire).unwrap_or(Decimal::new(0, 2)))
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_prix_unitaire(pool: tauri::State<'_, PgPool>, project_id: i32) -> Result<Option<PrixUnitaire>, String> {
+    let query = "SELECT id, project_id, prix_unitaire FROM prix_unitaire WHERE project_id = $1";
+
+    let result = sqlx::query(query)
+        .bind(project_id)
+        .fetch_optional(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    match result {
+        Some(row) => {
+            let id: i32 = row.try_get("id").map_err(|e| e.to_string())?;
+            let project_id: i32 = row.try_get("project_id").map_err(|e| e.to_string())?;
+            let prix_unitaire: Decimal = row.try_get("prix_unitaire").map_err(|e| e.to_string())?;
+            
+            Ok(Some(PrixUnitaire {
+                id,
+                project_id,
+                prix_unitaire,
+            }))
+        }
+        None => Ok(None)
+    }
+}
+
+#[tauri::command]
+async fn update_prix_unitaire(pool: tauri::State<'_, PgPool>, project_id: i32, prix_unitaire: f64) -> Result<(), String> {
+    // Check if prix_unitaire exists for this project
+    let existing = sqlx::query("SELECT id FROM prix_unitaire WHERE project_id = $1")
+        .bind(project_id)
+        .fetch_optional(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if existing.is_some() {
+        // Update existing record
+        let query = "UPDATE prix_unitaire SET prix_unitaire = $1 WHERE project_id = $2";
+        sqlx::query(query)
+            .bind(Decimal::from_f64_retain(prix_unitaire).unwrap_or(Decimal::new(0, 2)))
+            .bind(project_id)
+            .execute(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+    } else {
+        // Insert new record
+        let query = "INSERT INTO prix_unitaire (project_id, prix_unitaire) VALUES ($1, $2)";
+        sqlx::query(query)
+            .bind(project_id)
+            .bind(Decimal::from_f64_retain(prix_unitaire).unwrap_or(Decimal::new(0, 2)))
+            .execute(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
 // Structure to represent dashboard statistics
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DashboardStats {
@@ -902,27 +1032,26 @@ async fn ensure_database_exists(base_url: &str, db_name: &str) -> Result<(), Str
             
             if exists.is_none() {
                 // Database doesn't exist, create it
-                println!("Creating database '{}'...", db_name);
+                debug_println!("Creating database '{}'...", db_name);
                 let create_db_query = format!("CREATE DATABASE \"{}\"", db_name);
                 sqlx::query(&create_db_query)
                     .execute(&admin_pool)
                     .await
                     .map_err(|e| format!("Failed to create database '{}': {}", db_name, e))?;
-                println!("Database '{}' created successfully!", db_name);
+                debug_println!("Database '{}' created successfully!", db_name);
             } else {
-                println!("Database '{}' already exists.", db_name);
+                debug_println!("Database '{}' already exists.", db_name);
             }
             
             admin_pool.close().await;
             Ok(())
-        }
-        Err(e) => {
-            eprintln!("Warning: Could not connect to PostgreSQL admin database: {}", e);
-            eprintln!("This might be because:");
-            eprintln!("1. PostgreSQL is not running");
-            eprintln!("2. Connection credentials are incorrect");
-            eprintln!("3. PostgreSQL is not installed");
-            eprintln!("\nContinuing with the assumption that the database exists...");
+        }        Err(e) => {
+            debug_println!("Warning: Could not connect to PostgreSQL admin database: {}", e);
+            debug_println!("This might be because:");
+            debug_println!("1. PostgreSQL is not running");
+            debug_println!("2. Connection credentials are incorrect");
+            debug_println!("3. PostgreSQL is not installed");
+            debug_println!("\nContinuing with the assumption that the database exists...");
             Ok(())
         }
     }
@@ -950,7 +1079,7 @@ async fn create_default_admin_user(pool: &PgPool) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     
     if user_count == 0 {
-        println!("No users found. Creating default admin user...");
+        debug_println!("No users found. Creating default admin user...");
         
         // Create default admin user
         sqlx::query("INSERT INTO users (name, password, admin) VALUES ($1, $2, $3)")
@@ -960,11 +1089,10 @@ async fn create_default_admin_user(pool: &PgPool) -> Result<(), String> {
             .execute(pool)
             .await
             .map_err(|e| e.to_string())?;
-        
-        println!("Default admin user created:");
-        println!("  Username: admin");
-        println!("  Password: admin123");
-        println!("  Please change this password after first login!");
+          debug_println!("Default admin user created:");
+        debug_println!("  Username: admin");
+        debug_println!("  Password: admin123");
+        debug_println!("  Please change this password after first login!");
     }
     
     Ok(())
@@ -973,102 +1101,146 @@ async fn create_default_admin_user(pool: &PgPool) -> Result<(), String> {
 // PostgreSQL Service Management
 static POSTGRES_STARTED_BY_APP: AtomicBool = AtomicBool::new(false);
 
+// Function to check if PostgreSQL is accessible via network connection
+async fn is_postgres_accessible(host: &str, port: u16) -> bool {
+    use std::time::Duration;
+    
+    let addr = format!("{}:{}", host, port);
+    debug_println!("Testing PostgreSQL connection to {}", addr);
+    
+    // Try to connect to the port
+    match tokio::time::timeout(Duration::from_secs(2), tokio::net::TcpStream::connect(&addr)).await {
+        Ok(Ok(_)) => {
+            debug_println!("PostgreSQL port {} is accessible", port);
+            true
+        }
+        Ok(Err(e)) => {
+            debug_println!("PostgreSQL port {} is not accessible: {}", port, e);
+            false
+        }
+        Err(_) => {
+            debug_println!("PostgreSQL connection timeout to port {}", port);
+            false
+        }
+    }
+}
+
 // Function to check if PostgreSQL service is running
-fn is_postgres_running() -> bool {
+fn is_postgres_running() -> (bool, Option<String>) {
     #[cfg(target_os = "windows")]
     {
-        let output = Command::new("sc")
-            .args(&["query", "postgresql-x64-16"]) // Adjust service name as needed
-            .output();
+        let service_names = [
+            "postgresql-x64-17",
+            "postgresql-x64-16",
+            "postgresql-x64-15",
+            "postgresql-x64-14", 
+            "postgresql-x64-13",
+            "postgresql-x64-12",
+            "PostgreSQL",
+            "postgres"
+        ];
         
-        match output {
-            Ok(output) => {
+        for service_name in &service_names {
+            let output = Command::new("sc")
+                .args(&["query", service_name])
+                .creation_flags(CREATE_NO_WINDOW)
+                .output();
+            
+            if let Ok(output) = output {
                 let output_str = String::from_utf8_lossy(&output.stdout);
-                output_str.contains("RUNNING")
-            }
-            Err(_) => {
-                // Try alternative service names
-                let alternative_names = [
-                    "postgresql-x64-15",
-                    "postgresql-x64-14", 
-                    "postgresql-x64-13",
-                    "PostgreSQL",
-                    "postgres"
-                ];
-                
-                for name in &alternative_names {
-                    let output = Command::new("sc")
-                        .args(&["query", name])
-                        .output();
-                    
-                    if let Ok(output) = output {
-                        let output_str = String::from_utf8_lossy(&output.stdout);
-                        if output_str.contains("RUNNING") {
-                            return true;
-                        }
-                    }
+                if output_str.contains("RUNNING") {
+                    debug_println!("Found running PostgreSQL service: {}", service_name);
+                    return (true, Some(service_name.to_string()));
+                } else if output_str.contains("STOPPED") || output_str.contains("START_PENDING") {
+                    debug_println!("Found stopped PostgreSQL service: {}", service_name);
+                    return (false, Some(service_name.to_string()));
                 }
-                false
             }
         }
+        
+        // Check if PostgreSQL is running on the default port (connection test)
+        debug_println!("No PostgreSQL service found via 'sc query', checking port 5432...");
+        (false, None)
     }
     
     #[cfg(not(target_os = "windows"))]
     {
+        // Try systemctl first
         let output = Command::new("systemctl")
             .args(&["is-active", "postgresql"])
             .output();
         
         match output {
-            Ok(output) => output.status.success(),
+            Ok(output) => {
+                if output.status.success() {
+                    return (true, Some("postgresql".to_string()));
+                }
+            }
             Err(_) => {
                 // Try alternative methods for non-systemd systems
                 let output = Command::new("service")
                     .args(&["postgresql", "status"])
                     .output();
                 
-                match output {
-                    Ok(output) => output.status.success(),
-                    Err(_) => false
+                if let Ok(output) = output {
+                    if output.status.success() {
+                        return (true, Some("postgresql".to_string()));
+                    }
                 }
             }
         }
+        
+        (false, None)
     }
 }
 
 // Function to start PostgreSQL service
-fn start_postgres_service() -> Result<(), String> {
-    println!("Attempting to start PostgreSQL service...");
+fn start_postgres_service() -> Result<String, String> {
+    debug_println!("Attempting to start PostgreSQL service...");
     
     #[cfg(target_os = "windows")]
     {
         let service_names = [
+            "postgresql-x64-17",
             "postgresql-x64-16",
             "postgresql-x64-15", 
             "postgresql-x64-14",
             "postgresql-x64-13",
+            "postgresql-x64-12",
             "PostgreSQL",
             "postgres"
         ];
         
+        // First, check if any service exists and try to start it
         for service_name in &service_names {
+            debug_println!("Trying to start service: {}", service_name);
+            
             let output = Command::new("net")
                 .args(&["start", service_name])
+                .creation_flags(CREATE_NO_WINDOW)
                 .output();
             
             match output {
                 Ok(output) => {
+                    let output_str = String::from_utf8_lossy(&output.stderr);
                     if output.status.success() {
-                        println!("PostgreSQL service '{}' started successfully!", service_name);
+                        debug_println!("PostgreSQL service '{}' started successfully!", service_name);
                         POSTGRES_STARTED_BY_APP.store(true, Ordering::Relaxed);
-                        return Ok(());
+                        return Ok(service_name.to_string());
+                    } else if output_str.contains("already started") || output_str.contains("already running") {
+                        debug_println!("PostgreSQL service '{}' was already running!", service_name);
+                        return Ok(service_name.to_string());
+                    } else {
+                        debug_println!("Failed to start service '{}': {}", service_name, output_str);
                     }
                 }
-                Err(_) => continue,
+                Err(e) => {
+                    debug_println!("Error executing 'net start {}': {}", service_name, e);
+                }
             }
         }
         
-        return Err("Failed to start PostgreSQL service. Please ensure PostgreSQL is installed and the service name is correct.".to_string());
+        Err("Failed to start PostgreSQL service. Please ensure PostgreSQL is installed and the service name is correct.".to_string())
     }
     
     #[cfg(not(target_os = "windows"))]
@@ -1080,11 +1252,12 @@ fn start_postgres_service() -> Result<(), String> {
         match output {
             Ok(output) => {
                 if output.status.success() {
-                    println!("PostgreSQL service started successfully!");
+                    debug_println!("PostgreSQL service started successfully!");
                     POSTGRES_STARTED_BY_APP.store(true, Ordering::Relaxed);
-                    Ok(())
+                    Ok("postgresql".to_string())
                 } else {
-                    Err("Failed to start PostgreSQL service".to_string())
+                    let error = String::from_utf8_lossy(&output.stderr);
+                    Err(format!("Failed to start PostgreSQL service: {}", error))
                 }
             }
             Err(e) => Err(format!("Failed to start PostgreSQL service: {}", e))
@@ -1095,19 +1268,21 @@ fn start_postgres_service() -> Result<(), String> {
 // Function to stop PostgreSQL service (only if we started it)
 fn stop_postgres_service() -> Result<(), String> {
     if !POSTGRES_STARTED_BY_APP.load(Ordering::Relaxed) {
-        println!("PostgreSQL was not started by this application, leaving it running.");
+        debug_println!("PostgreSQL was not started by this application, leaving it running.");
         return Ok(());
     }
     
-    println!("Stopping PostgreSQL service (started by this application)...");
+    debug_println!("Stopping PostgreSQL service (started by this application)...");
     
     #[cfg(target_os = "windows")]
     {
         let service_names = [
+            "postgresql-x64-17",
             "postgresql-x64-16",
             "postgresql-x64-15",
             "postgresql-x64-14", 
             "postgresql-x64-13",
+            "postgresql-x64-12",
             "PostgreSQL",
             "postgres"
         ];
@@ -1115,20 +1290,18 @@ fn stop_postgres_service() -> Result<(), String> {
         for service_name in &service_names {
             let output = Command::new("net")
                 .args(&["stop", service_name])
+                .creation_flags(CREATE_NO_WINDOW)
                 .output();
             
-            match output {
-                Ok(output) => {
-                    if output.status.success() {
-                        println!("PostgreSQL service '{}' stopped successfully!", service_name);
-                        return Ok(());
-                    }
+            if let Ok(output) = output {
+                if output.status.success() {
+                    debug_println!("PostgreSQL service '{}' stopped successfully!", service_name);
+                    return Ok(());
                 }
-                Err(_) => continue,
             }
         }
         
-        return Err("Failed to stop PostgreSQL service".to_string());
+        Err("Failed to stop PostgreSQL service".to_string())
     }
     
     #[cfg(not(target_os = "windows"))]
@@ -1140,7 +1313,7 @@ fn stop_postgres_service() -> Result<(), String> {
         match output {
             Ok(output) => {
                 if output.status.success() {
-                    println!("PostgreSQL service stopped successfully!");
+                    debug_println!("PostgreSQL service stopped successfully!");
                     Ok(())
                 } else {
                     Err("Failed to stop PostgreSQL service".to_string())
@@ -1151,27 +1324,142 @@ fn stop_postgres_service() -> Result<(), String> {
     }
 }
 
-// Function to ensure PostgreSQL is running (start if needed)
-async fn ensure_postgres_running() -> Result<(), String> {
-    if is_postgres_running() {
-        println!("PostgreSQL is already running.");
-        return Ok(());
-    }
-    
-    println!("PostgreSQL is not running. Starting it now...");
-    start_postgres_service()?;
-    
-    // Wait a bit for the service to fully start
-    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-    
-    // Verify it's actually running
-    if is_postgres_running() {
-        println!("PostgreSQL started successfully and is now running.");
-        Ok(())
-    } else {
-        Err("PostgreSQL service was started but is not responding. Please check the service manually.".to_string())
+// Function to test database connectivity
+async fn test_database_connection(database_url: &str) -> bool {
+    match PgPool::connect(database_url).await {
+        Ok(pool) => {
+            // Try a simple query
+            let result = sqlx::query("SELECT 1")
+                .fetch_one(&pool)
+                .await;
+            pool.close().await;
+            result.is_ok()
+        }
+        Err(_) => false,
     }
 }
+
+// Function to ensure PostgreSQL is running (start if needed)
+async fn ensure_postgres_running() -> Result<(), String> {    debug_println!("Checking PostgreSQL status...");
+    
+    // First check if service is running
+    let (is_running, service_name) = is_postgres_running();
+    
+    if is_running {
+        debug_println!("PostgreSQL service is already running: {:?}", service_name);
+        
+        // Test database connection to make sure it's actually accessible
+        let database_url = std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://postgres:test@localhost:5432/managist_db".to_string());
+        
+        if test_database_connection(&database_url).await {
+            debug_println!("PostgreSQL is running and accessible.");
+            return Ok(());
+        } else {
+            debug_println!("PostgreSQL service is running but database is not accessible. Waiting a moment...");
+            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+            
+            if test_database_connection(&database_url).await {
+                debug_println!("PostgreSQL is now accessible.");
+                return Ok(());
+            } else {
+                debug_println!("PostgreSQL service is running but database connection failed. Continuing anyway...");
+                return Ok(()); // Don't fail completely, let the main connection logic handle it
+            }
+        }
+    }
+    
+    debug_println!("PostgreSQL is not running. Attempting to start it...");
+    
+    // Try to start the service
+    match start_postgres_service() {        Ok(started_service) => {
+            debug_println!("Started PostgreSQL service: {}", started_service);
+            
+            // Wait for the service to fully start
+            debug_println!("Waiting for PostgreSQL to become ready...");            for attempt in 1..=6 {
+                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                
+                let (is_now_running, _) = is_postgres_running();
+                if is_now_running {
+                    debug_println!("PostgreSQL service is now running (attempt {}).", attempt);
+                    
+                    // Test database connection
+                    let database_url = std::env::var("DATABASE_URL")
+                        .unwrap_or_else(|_| "postgres://postgres:test@localhost:5432/managist_db".to_string());
+                    
+                    if test_database_connection(&database_url).await {
+                        debug_println!("PostgreSQL started successfully and is accessible.");
+                        return Ok(());
+                    } else {
+                        debug_println!("PostgreSQL service started but database not yet accessible (attempt {})...", attempt);
+                    }
+                } else {
+                    debug_println!("PostgreSQL service not yet running (attempt {})...", attempt);
+                }
+            }
+            
+            // Service started but might not be fully ready yet
+            debug_println!("PostgreSQL service started but may still be initializing. Continuing...");
+            Ok(())
+        }
+        Err(e) => {
+            debug_println!("Failed to start PostgreSQL service: {}", e);
+            debug_println!("Attempting to continue without autostart...");
+            Ok(()) // Don't completely fail - user might have PostgreSQL running manually
+        }
+    }
+}
+
+// Loading window management functions
+#[tauri::command]
+async fn initialize_app(app_handle: tauri::AppHandle) -> Result<(), String> {
+    // Initialize with progress using the existing function
+    initialize_with_progress(app_handle).await
+}
+
+#[tauri::command]
+async fn close_loading_window(app_handle: tauri::AppHandle) -> Result<(), String> {
+    // Close the loading window
+    if let Some(loading_window) = app_handle.get_webview_window("loading") {
+        loading_window.close().map_err(|e| e.to_string())?;
+    }
+    
+    // Show the main window
+    if let Some(main_window) = app_handle.get_webview_window("main") {
+        main_window.show().map_err(|e| e.to_string())?;
+        main_window.set_focus().map_err(|e| e.to_string())?;
+    }
+    
+    Ok(())
+}
+
+async fn emit_loading_progress(app_handle: &tauri::AppHandle, progress: u32, message: &str) -> Result<(), String> {
+    let payload = serde_json::json!({
+        "progress": progress,
+        "message": message
+    });
+    
+    app_handle
+        .emit("loading-progress", payload)
+        .map_err(|e| e.to_string())?;
+    
+    Ok(())
+}
+
+// fn get_database_path(app_handle: &tauri::AppHandle) -> Result<String, String> {
+//     let app_data_dir = app_handle
+//         .path()
+//         .app_data_dir()
+//         .map_err(|e| e.to_string())?;
+//     
+//     std::fs::create_dir_all(&app_data_dir).map_err(|e| e.to_string())?;
+//     
+//     let db_path = app_data_dir.join("login.db");
+//     Ok(db_path.to_string_lossy().to_string())
+// }
+
+// Database state management (not needed with current setup)
+// struct DatabaseState(Arc<Mutex<Option<PgPool>>>);
 
 // Main function
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1192,53 +1480,45 @@ pub fn run() -> Result<(), String> {
             get_all_employees, 
             delete_employee, 
             update_employee, 
-            get_project_names, 
-            get_projects, 
+            get_project_names,            get_projects, 
             add_project_to_the_database, 
-            delete_project_from_database, 
+            update_project,
+            delete_project_from_database,
             add_buyer_to_database, 
             get_buyers_by_project, 
             delete_buyer_from_database, 
-            edit_buyer_in_database, 
-            update_buyer_payments, 
-            migrate_buyers_table, 
-            get_project_bloc_count, 
+            edit_buyer_in_database,            update_buyer_payments, 
+            migrate_buyers_table,
+            migrate_projects_table, 
+            get_project_bloc_count,
             get_dashboard_stats,
             show_main_window,
             retry_initialization,
             get_project_info,
             add_project_info,
             update_project_info,
-            delete_project_info
-        ])
-        .setup(|app| {
+            delete_project_info,
+            initialize_app,
+            close_loading_window,
+            debug_windows,
+            check_for_updates,
+            add_prix_unitaire,
+            get_prix_unitaire,
+            update_prix_unitaire
+        ])        .setup(|app| {
+            // Initialize a placeholder database pool immediately during setup
+            // The actual connection will be established during initialize_with_progress
             let app_handle = app.handle().clone();
             
-            // Start initialization in background
+            // Create a temporary pool or manage a connection state
+            // We'll manage the actual pool after it's created in initialize_with_progress
             tauri::async_runtime::spawn(async move {
-                if let Err(e) = initialize_with_progress(app_handle).await {
-                    eprintln!("Initialization failed: {}", e);
+                if let Err(e) = ensure_database_pool_ready(app_handle).await {
+                    eprintln!("Failed to ensure database pool is ready: {}", e);
                 }
             });
-            
-            // Setup panic handler as backup
-            std::panic::set_hook(Box::new(|_| {
-                if let Err(e) = stop_postgres_service() {
-                    eprintln!("Failed to stop PostgreSQL service on panic: {}", e);
-                }
-            }));
             Ok(())
         })
-        .on_window_event(|_window, event| match event {
-            tauri::WindowEvent::CloseRequested { .. } => {
-                println!("Application window is closing...");
-                if let Err(e) = stop_postgres_service() {
-                    eprintln!("Failed to stop PostgreSQL service on window close: {}", e);
-                } else {
-                    println!("PostgreSQL service management completed.");
-                }
-            }
-            _ => {}        })
         .run(tauri::generate_context!());
     
     // Stop PostgreSQL service if we started it (normal exit)
@@ -1274,22 +1554,62 @@ async fn retry_initialization(app: AppHandle) -> Result<(), String> {
     initialize_with_progress(app).await
 }
 
-// Function to emit loading progress
-fn emit_loading_progress(app: &AppHandle, step: i32, message: &str, progress: i32) {
-    if let Err(e) = app.emit_to("loading", "loading-progress", serde_json::json!({
-        "step": step,
-        "message": message,
-        "progress": progress
-    })) {
-        eprintln!("Failed to emit loading progress: {}", e);
-    }
-}
-
 // Function to emit loading completion
 fn emit_loading_complete(app: &AppHandle) {
     if let Err(e) = app.emit_to("loading", "loading-complete", ()) {
         eprintln!("Failed to emit loading complete: {}", e);
     }
+}
+
+// Helper function to ensure database pool is ready during setup
+async fn ensure_database_pool_ready(app: AppHandle) -> Result<(), String> {
+    debug_println!("Ensuring database pool is ready during setup...");
+    
+    // Get database URL
+    let database_url = env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://postgres:test@localhost:5432/managist_db".to_string());
+    
+    debug_println!("Using database URL for setup: {}", database_url);
+    
+    // Start PostgreSQL if needed (non-blocking)
+    tokio::spawn(async move {
+        if let Err(e) = ensure_postgres_running().await {
+            debug_println!("PostgreSQL startup warning during setup: {}", e);
+        }
+    });
+    
+    // Give PostgreSQL a moment to start
+    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+    
+    // Try to connect to database with retries
+    let mut attempts = 0;
+    let max_attempts = 3;
+    
+    while attempts < max_attempts {
+        attempts += 1;
+        debug_println!("Database connection attempt {} of {}...", attempts, max_attempts);
+        
+        match PgPool::connect(&database_url).await {
+            Ok(pool) => {
+                debug_println!("Database pool created successfully during setup");
+                app.manage(pool);
+                debug_println!("Database pool managed successfully");
+                return Ok(());
+            }
+            Err(e) => {
+                debug_println!("Database connection attempt {} failed: {}", attempts, e);
+                if attempts < max_attempts {
+                    debug_println!("Retrying database connection in 2 seconds...");
+                    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                } else {
+                    debug_println!("Database not ready during setup (will retry during initialization): {}", e);
+                    // Don't fail setup - the loading screen will handle the full initialization
+                }
+            }
+        }
+    }
+    
+    Ok(())
 }
 
 // Function to emit loading error
@@ -1303,64 +1623,146 @@ fn emit_loading_error(app: &AppHandle, message: &str) {
 
 // Initialize application with progress updates
 async fn initialize_with_progress(app: AppHandle) -> Result<(), String> {
+    debug_println!("Starting initialization process...");
+    
     // Step 1: Initialize application
-    emit_loading_progress(&app, 0, "Initializing application...", 15);
+    emit_loading_progress(&app, 15, "Initializing application...").await?;
+    debug_println!("Step 1: Application initialized");
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     
     // Step 2: Start PostgreSQL
-    emit_loading_progress(&app, 1, "Starting database services...", 35);
+    emit_loading_progress(&app, 35, "Starting database services...").await?;
+    debug_println!("Step 2: Starting PostgreSQL...");
     match ensure_postgres_running().await {
         Ok(()) => {
-            emit_loading_progress(&app, 1, "Database services started successfully", 40);
+            debug_println!("PostgreSQL started successfully");
+            emit_loading_progress(&app, 40, "Database services started successfully").await?;
         }
         Err(e) => {
-            emit_loading_progress(&app, 1, &format!("Database services warning: {}", e), 40);
+            debug_println!("PostgreSQL warning: {}", e);
+            emit_loading_progress(&app, 40, "Database services may need manual setup").await?;
         }
     }
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     
     // Step 3: Connect to database
-    emit_loading_progress(&app, 2, "Connecting to database...", 60);
+    emit_loading_progress(&app, 60, "Connecting to database...").await?;
+    debug_println!("Step 3: Connecting to database...");
     
     // Get database URL
     let database_url = env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://postgres:test@localhost:5432/managist_db".to_string());
     
+    debug_println!("Using database URL: {}", database_url);
+    
     // Try to ensure database exists
     if let Ok((base_url, db_name)) = parse_database_url(&database_url) {
-        ensure_database_exists(&base_url, &db_name).await?;
+        debug_println!("Ensuring database '{}' exists...", db_name);
+        if let Err(e) = ensure_database_exists(&base_url, &db_name).await {
+            debug_println!("Database creation warning: {}", e);
+        }
     }
     
-    // Connect to database
-    let pool = PgPool::connect(&database_url).await
-        .map_err(|e| {
-            emit_loading_error(&app, &format!("Database connection failed: {}", e));
-            e.to_string()
-        })?;
+    // Connect to database (or use existing pool if already managed)
+    debug_println!("Attempting to connect to database...");
     
-    emit_loading_progress(&app, 2, "Database connected successfully", 65);
+    let pool = match app.try_state::<PgPool>() {
+        Some(existing_pool) => {
+            debug_println!("Using existing database pool from setup");            // Test the existing pool
+            match sqlx::query("SELECT 1").fetch_one(&*existing_pool).await {
+                Ok(_) => {
+                    debug_println!("Existing database pool is working");
+                    existing_pool.inner().clone()
+                }
+                Err(e) => {
+                    debug_println!("Existing pool test failed: {}, creating new pool", e);
+                    
+                    // Create a new pool
+                    let new_pool = create_database_pool_with_retries(&database_url, &app).await?;
+                    app.manage(new_pool.clone());
+                    new_pool
+                }
+            }
+        }
+        None => {
+            // Pool doesn't exist yet, create a new one
+            debug_println!("Creating new database pool...");
+            let new_pool = create_database_pool_with_retries(&database_url, &app).await?;
+            
+            // Manage the new pool
+            app.manage(new_pool.clone());
+            debug_println!("New database pool managed successfully");
+            new_pool
+        }
+    };
+    
+    debug_println!("Database connected successfully");
+    emit_loading_progress(&app, 65, "Database connected successfully").await?;
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     
     // Step 4: Setup tables
-    emit_loading_progress(&app, 3, "Setting up database tables...", 80);
+    emit_loading_progress(&app, 80, "Setting up database tables...").await?;
+    debug_println!("Step 4: Setting up database tables...");
     
     // Create tables (existing code)
     setup_database_tables(&pool).await?;
     
-    emit_loading_progress(&app, 3, "Database tables ready", 85);
+    debug_println!("Database tables ready");
+    emit_loading_progress(&app, 85, "Database tables ready").await?;
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     
     // Step 5: Finalize
-    emit_loading_progress(&app, 4, "Loading user interface...", 100);
+    emit_loading_progress(&app, 100, "Loading user interface...").await?;
+    debug_println!("Step 5: Finalizing...");
     tokio::time::sleep(tokio::time::Duration::from_millis(800)).await;
     
-    // Store pool in app state
-    app.manage(pool);
+    // Pool is already managed above, so we don't need to manage it again
+    debug_println!("Database pool is ready and managed");
     
     // Emit completion
     emit_loading_complete(&app);
+    debug_println!("Loading complete event emitted");
     
     Ok(())
+}
+
+// Helper function to create database pool with retries
+async fn create_database_pool_with_retries(database_url: &str, app: &AppHandle) -> Result<PgPool, String> {
+    let max_attempts = 5;
+    let mut last_error = String::new();
+    
+    for attempt in 1..=max_attempts {
+        debug_println!("Database connection attempt {} of {}...", attempt, max_attempts);
+        
+        match PgPool::connect(database_url).await {
+            Ok(pool) => {
+                debug_println!("Database pool created successfully on attempt {}", attempt);
+                return Ok(pool);
+            }
+            Err(e) => {
+                last_error = e.to_string();
+                debug_println!("Database connection attempt {} failed: {}", attempt, last_error);
+                
+                if attempt < max_attempts {
+                    let wait_time = attempt * 2; // Exponential backoff: 2, 4, 6, 8 seconds
+                    debug_println!("Retrying in {} seconds...", wait_time);
+                    
+                    emit_loading_progress(
+                        app, 
+                        60 + (attempt * 2) as u32, 
+                        &format!("Database connection attempt {} of {}...", attempt, max_attempts)
+                    ).await.ok();
+                    
+                    tokio::time::sleep(tokio::time::Duration::from_secs(wait_time as u64)).await;
+                }
+            }
+        }
+    }
+    
+    let error_msg = format!("Database connection failed after {} attempts. Last error: {}", max_attempts, last_error);
+    debug_println!("{}", error_msg);
+    emit_loading_error(app, &error_msg);
+    Err(error_msg)
 }
 
 // Extract database setup logic
@@ -1452,11 +1854,159 @@ async fn setup_database_tables(pool: &PgPool) -> Result<(), String> {
     .await
     .map_err(|e| e.to_string())?;
 
+    // Prix unitaire table
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS prix_unitaire (
+            id SERIAL PRIMARY KEY,
+            project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            prix_unitaire NUMERIC(15, 2) NOT NULL
+        )"
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
     // Run migrations
+    migrate_projects_table_internal(pool).await?;
     migrate_buyers_table_internal(pool).await?;
     
     // Create default admin user
     create_default_admin_user(pool).await?;
     
+    Ok(())
+}
+
+// Internal migration function for projects table
+async fn migrate_projects_table_internal(pool: &PgPool) -> Result<(), String> {
+    // Check if the projects table exists and what columns it has
+    let table_info = sqlx::query("SELECT column_name FROM information_schema.columns WHERE table_name = 'projects'")
+        .fetch_all(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    let column_names: Vec<String> = table_info.iter()
+        .map(|row| {
+            row.try_get::<String, _>("column_name").unwrap_or_default()
+        })
+        .collect();
+    
+    // Add missing columns if they don't exist
+    if !column_names.contains(&"types_appartements".to_string()) {
+        sqlx::query("ALTER TABLE projects ADD COLUMN types_appartements TEXT")
+            .execute(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    
+    if !column_names.contains(&"surfaces_appartements".to_string()) {
+        sqlx::query("ALTER TABLE projects ADD COLUMN surfaces_appartements TEXT")
+            .execute(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    
+    Ok(())
+}
+
+// Function to migrate existing projects table
+#[tauri::command]
+async fn migrate_projects_table(pool: tauri::State<'_, PgPool>) -> Result<(), String> {
+    migrate_projects_table_internal(&*pool).await
+}
+
+// Debugging and utility functions
+#[tauri::command]
+async fn debug_windows(app_handle: tauri::AppHandle) -> Result<String, String> {
+    let mut info = String::new();
+    
+    // Check if loading window exists
+    if let Some(loading_window) = app_handle.get_webview_window("loading") {
+        info.push_str("Loading window exists\n");
+        info.push_str(&format!("Loading window visible: {:?}\n", loading_window.is_visible()));
+    } else {
+        info.push_str("Loading window does not exist\n");
+    }
+    
+    // Check if main window exists
+    if let Some(main_window) = app_handle.get_webview_window("main") {
+        info.push_str("Main window exists\n");
+        info.push_str(&format!("Main window visible: {:?}\n", main_window.is_visible()));
+    } else {
+        info.push_str("Main window does not exist\n");
+    }
+    
+    Ok(info)
+}
+
+// Function to check for updates
+#[tauri::command]
+async fn check_for_updates(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri_plugin_updater::UpdaterExt;
+    
+    match app.updater() {
+        Ok(updater) => {
+            match updater.check().await {
+                Ok(Some(update)) => {
+                    println!("Update available: {}", update.version);
+                    // You can show a dialog or handle the update here
+                    match update.download_and_install(|chunk_length, content_length| {
+                        println!("Downloaded {} of {:?}", chunk_length, content_length);
+                    }, || {
+                        println!("Download finished");
+                    }).await {
+                        Ok(_) => {
+                            println!("Update installed successfully");
+                            Ok(())
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to install update: {}", e);
+                            Err(format!("Failed to install update: {}", e))
+                        }
+                    }
+                }
+                Ok(None) => {
+                    println!("No update available");
+                    Ok(())
+                }
+                Err(e) => {
+                    eprintln!("Failed to check for updates: {}", e);
+                    Err(format!("Failed to check for updates: {}", e))
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("Failed to initialize updater: {}", e);
+            Err(format!("Failed to initialize updater: {}", e))
+        }
+    }
+}
+
+// Function to update project in the database
+#[tauri::command]
+async fn update_project(pool: tauri::State<'_, PgPool>, project_id: i32, project: ProjectInput) -> Result<(), String> {
+    // Parse date strings to NaiveDate
+    let start_date = NaiveDate::parse_from_str(&project.project_start_date, "%Y-%m-%d")
+        .map_err(|e| format!("Invalid start date format: {}", e))?;
+    let end_date = NaiveDate::parse_from_str(&project.project_end_date, "%Y-%m-%d")
+        .map_err(|e| format!("Invalid end date format: {}", e))?;
+
+    let query = "UPDATE projects SET project_name = $1, project_location = $2, project_start_date = $3, project_end_date = $4, nombre_des_bloc = $5, nombre_des_etages = $6, nombre_des_appartement = $7, nda_dans_chaque_etage = $8, types_appartements = $9, surfaces_appartements = $10 WHERE id = $11";
+
+    sqlx::query(query)
+        .bind(&project.project_name)
+        .bind(&project.project_location)
+        .bind(start_date)
+        .bind(end_date)
+        .bind(&project.nombre_des_bloc)
+        .bind(&project.nombre_des_etages)
+        .bind(&project.nombre_des_appartement)
+        .bind(&project.nda_dans_chaque_etage)
+        .bind(&project.types_appartements)
+        .bind(&project.surfaces_appartements)
+        .bind(project_id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
     Ok(())
 }

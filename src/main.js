@@ -3,7 +3,7 @@ const { listen } = window.__TAURI__.event;
 const { getCurrentWindow, LogicalSize } = window.__TAURI__.window;
 // const { event, window: tauriWindow, path } = window.__TAURI__.;
 import { setCurrentUser } from './utils/userState.js';
-import { setCurrentUser as setCurrentUserWithRole } from './utils/roleManager.js';
+import { setCurrentUserWithRole } from './utils/roleManager.js';
 
 let greetInputEl;
 let greetMsgEl;
@@ -25,10 +25,20 @@ async function login() {
       const response = event.payload;      if (response.startsWith("LoggedIn:")) {
         // Get admin value (role)
         const adminValue = response.split(":")[1];
+        console.log('Login response:', response);
+        console.log('Extracted admin value:', adminValue);
+        console.log('Admin value type:', typeof adminValue);
+          // Set user with role information (this should be the primary storage)
+        console.log('About to call setCurrentUserWithRole with:', user, adminValue);
+        setCurrentUserWithRole(user, adminValue);
         
-        // Set user with role information
-        setCurrentUser(user); // Keep for backward compatibility
-        setCurrentUserWithRole(user, adminValue); // New role-based storage
+        // Verify what was stored
+        const storedUser = localStorage.getItem('currentUser');
+        console.log('Stored user after login:', storedUser);
+        const parsedUser = JSON.parse(storedUser);
+        console.log('Parsed stored user:', parsedUser);
+        console.log('Role field value:', parsedUser.role);
+        console.log('Admin field value:', parsedUser.admin);
         
         divMessage.textContent = "You are successfully logged in!";
         divMessage.style.color = "green";

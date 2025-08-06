@@ -17,10 +17,12 @@
         </ul>
         <button id="logout-button">Logout</button>
     </aside>
-    
-    <main class="content">
+      <main class="content">
         <header>
             <h1 id="pageTitle">Project Buyers Management</h1>
+            <button id="settingsButton" class="settings-btn" title="Project Settings">
+                <i class="fas fa-cog"></i>
+            </button>
         </header>
     
     <div class="table-controls">
@@ -130,17 +132,38 @@
                 
                 <!-- Tranches Section -->
                 <div class="tranches-section">
-                    <h3>Payment Tranches</h3>                    <div id="tranchesContainer">
-                        <div class="tranche-row">
+                    <h3>Payment Tranches</h3>                    <div id="tranchesContainer">                        <div class="tranche-row">
                             <label>T0:</label>
-                            <input type="number" step="0.01" min="0" name="tranche_0" placeholder="Enter amount for T0" oninput="calculateTotalPaid()">
-                            <input type="date" name="tranche_date_0" title="Payment date for T0">
+                            <input type="number" step="0.01" min="0" name="tranche_0" placeholder="Enter amount for T0" oninput="handleTrancheInput(this)">
+                            <input type="date" name="tranche_date_0" title="Payment date for T0" onchange="triggerDebouncedValidation()">
+                            <select name="tranche_type_0" title="Payment type for T0" onchange="handleTrancheTypeChange(this)">
+                                <option value="espece" selected>Espèce</option>
+                                <option value="versement">Versement</option>
+                            </select>
+                            <button type="button" class="btn-print-tranche" onclick="printOrdreVersement(0)" title="Print Ordre de Versement">
+                                <i class="fas fa-print"></i>
+                            </button>
                             <button type="button" class="btn-remove-tranche" onclick="removeTranche(this)" style="display: none;">×</button>
                         </div>
                     </div>
                     <button type="button" id="addTrancheBtn" class="btn-add-tranche">+ Add Tranche</button>
                     <div class="tranche-summary">
                         <strong>Total Paid: <span id="totalPaidDisplay">0 DA</span></strong>
+                    </div>
+                    
+                    <!-- Validation feedback container -->
+                    <div id="validationFeedback" class="validation-feedback-container" style="display: none;"></div>
+                    
+                    <!-- Payment limits display -->
+                    <div id="paymentLimits" class="payment-limits-display" style="display: none;">
+                        <div class="limit-item">
+                            <label>Max Versement:</label>
+                            <span id="maxVersementDisplay">0 DA</span>
+                        </div>
+                        <div class="limit-item">
+                            <label>Remaining for Espèce:</label>
+                            <span id="remainingAmountDisplay">0 DA</span>
+                        </div>
                     </div>
                 </div>
                 
@@ -162,6 +185,98 @@
             <p>Buyer has been added successfully to the table.</p>
             <div class="success-actions">
                 <button id="successOkBtn" class="btn-success">OK</button>
+            </div>        </div>
+    </div>    <!-- Espèce Exceeded Warning Modal -->
+    <div id="especeWarningModal" class="modal">
+        <div class="modal-content warning-modal">
+            <div class="modal-header">
+                <i class="fas fa-exclamation-triangle warning-icon"></i>
+                <h2>Espèce Amount Exceeded</h2>
+                <button type="button" class="close-modal" onclick="closeEspeceWarningModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="warning-message">
+                    <p><strong>Warning:</strong> The espèce amount exceeds the maximum allowed limit.</p>
+                </div>
+                <div class="amount-breakdown">
+                    <div class="amount-row">
+                        <span>Entered Espèce Amount:</span>
+                        <strong id="enteredEspeceAmount">0 DA</strong>
+                    </div>
+                    <div class="amount-row">
+                        <span>Maximum Espèce Allowed:</span>
+                        <strong id="maxEspeceAllowed">0 DA</strong>
+                    </div>
+                    <div class="amount-row highlight">
+                        <span>Accepted Espèce Amount:</span>
+                        <strong id="acceptedEspeceAmount">0 DA</strong>
+                    </div>
+                    <div class="amount-row highlight">
+                        <span>Remaining for Versement:</span>
+                        <strong id="remainingVersementAmount">0 DA</strong>
+                    </div>
+                </div>
+                <div class="action-message">
+                    <p>The system will automatically create a new tranche with the remaining amount as <strong>Versement</strong>.</p>
+                </div>
+            </div>            <div class="modal-footer">
+                <button type="button" class="btn-accept" onclick="acceptEspeceAdjustment()">
+                    <i class="fas fa-check"></i> OK
+                </button>
+                <button type="button" class="btn-print-recu" onclick="acceptEspeceAndPrintRecu()">
+                    <i class="fas fa-print"></i> Imprimer Reçu De Versement
+                </button>
+            </div>        </div>
+    </div>
+
+    <!-- Versement Order Modal -->
+    <div id="versementOrderModal" class="modal">
+        <div class="modal-content versement-modal">
+            <div class="modal-header">
+                <i class="fas fa-print"></i>
+                <h2>Ordre de Versement</h2>
+                <button type="button" class="close-modal" onclick="closeVersementOrderModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="info-message">
+                    <p>A new versement tranche has been created for:</p>
+                    <div class="amount-display">
+                        <strong id="versementOrderAmount">0 DA</strong>
+                    </div>
+                    <p>Do you want to print the Ordre de Versement for this amount?</p>
+                </div>
+            </div>            <div class="modal-footer">
+                <button type="button" class="btn-print-ordre" onclick="printVersementOrderFromModal()">
+                    <i class="fas fa-print"></i> Imprimer Ordre de Versement
+                </button>
+                <button type="button" class="btn-skip" onclick="skipPrintVersementOrder()">
+                    <i class="fas fa-times"></i> Non, Merci
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal">
+        <div class="modal-content settings-modal">
+            <div class="modal-header">
+                <h2>Project Settings</h2>
+                <button type="button" class="close-modal" onclick="closeSettingsModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="settings-section">
+                    <h3>Prix Unitaire</h3>
+                    <div class="form-group">
+                        <label for="prixUnitaireInput">Prix Unitaire (DA/m²):</label>
+                        <input type="number" id="prixUnitaireInput" class="form-input" step="0.01" min="0" placeholder="Enter unit price per m²">
+                    </div>
+                    <div class="current-value">
+                        Current Value: <strong id="currentPrixUnitaire">Loading...</strong> DA/m²
+                    </div>
+                </div>
+            </div>            <div class="modal-footer">
+                <button type="button" class="btn-save" onclick="savePrixUnitaire()">Save</button>
+                <button type="button" class="btn-cancel" onclick="closeSettingsModal()">Cancel</button>
             </div>
         </div>
     </div>
@@ -185,6 +300,18 @@
     </div>
     </main>
 
+    <!-- Validation utilities -->
+    <script type="module" src="../../../utils/ErrorHandler.js"></script>
+    <script type="module" src="../../../utils/PaymentCalculator.js"></script>
+    <script type="module" src="../../../utils/TrancheValidator.js"></script>
+    <script type="module" src="../../../utils/ValidationEngine.js"></script>
+    <script type="module" src="../../../utils/UIFeedbackManager.js"></script>
+    <script type="module" src="../../../utils/DocumentGenerator.js"></script>
+    
+    <!-- Integration bootstrap -->
+    <script src="../../../utils/IntegrationBootstrap.js"></script>
+    
+    <!-- Main application script -->
     <script type="module" src="javascript.js" defer></script>
 </body>
 </html>

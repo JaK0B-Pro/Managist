@@ -5,27 +5,40 @@ const { getCurrentWindow } = window.__TAURI__.window;
 // Role-based access control check
 function checkPageAccess() {
     const storedUser = localStorage.getItem('currentUser');
+    console.log('Stored user data:', storedUser); // Debug log
+    
     if (storedUser) {
         try {
             const userObject = JSON.parse(storedUser);
-            const role = userObject.role || '0';
+            console.log('Parsed user object:', userObject); // Debug log
+              // Try multiple ways to get the role for compatibility
+            const role = userObject.role || userObject.admin || '0';
+            console.log('Detected role:', role, 'Type:', typeof role); // Debug log
+            console.log('Role comparison: role === "1":', role === '1', 'role === 1:', role === 1); // Debug log
             
             // Only admin (role 1) can access salary page
-            if (role !== '1') {
-                alert('Access denied. You do not have permission to view this page.');
+            // Manager (role 2) and Employee (role 0) cannot access
+            if (role === '1' || role === 1) {
+                console.log('Access granted for admin user'); // Debug log
+                return true;
+            } else {
+                console.log('Access denied. User role:', role, 'Required: 1 (Admin)'); // Debug log
+                alert(`Access denied. You do not have permission to view this page. Your role: ${role}`);
                 window.location.href = '../index.html';
                 return false;
             }
         } catch (error) {
             console.error('Error checking user role:', error);
+            alert('Error checking user permissions. Please log in again.');
             window.location.href = '../index.html';
             return false;
         }
     } else {
+        console.log('No user data found in localStorage'); // Debug log
+        alert('Please log in to access this page.');
         window.location.href = '../index.html';
         return false;
     }
-    return true;
 }
 
 // Utility functions (embedded to avoid import issues)

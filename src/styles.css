@@ -18,40 +18,58 @@
   }
 }
 
+/* Remove all scrollbars */
+html, body {
+  overflow: hidden;
+}
+
+* {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* Internet Explorer 10+ */
+}
+
+*::-webkit-scrollbar {
+  display: none; /* WebKit */
+}
+
 body {
   font-family: 'Open Sans', sans-serif;
   background-color: #1c1c1c;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
   margin: 0;
+  padding: clamp(1rem, 5vw, 2rem);
+  overflow: hidden; /* Remove scroll bars */
 }
 
 .container {
   background-color: #1c1c1c;
-  padding: 20px;
+  padding: clamp(1rem, 4vw, 2rem);
   width: 100%;
-  max-width: 400px;
+  max-width: min(25rem, 90vw);
   text-align: center;
   color: white;
+  display: grid;
+  gap: clamp(0.75rem, 3vw, 1.25rem);
 }
 .logo {
   background-color: #c4c4c4;
-  padding: 50px 0;
-  margin-bottom: 20px;
+  padding: clamp(2rem, 8vw, 3.125rem) 0;
+  border-radius: 0.3125rem;
 }
 .logo h1 {
   /* font-family: 'UnifrakturMaguntia', fantasy; */
-  font-size: 2em;
+  font-size: clamp(1.5rem, 5vw, 2rem);
   color: black;
+  margin: 0;
 }
 .input-group {
   background-color: #f4f4f4;
   display: flex;
   align-items: center;
   background-color: #f4f4f4;
-  margin-bottom: 15px;
+  margin-bottom: 0px; /* Remove space between input fields */
   padding: 10px;
   border-radius: 5px;
 }
@@ -79,6 +97,7 @@ input[type="text"], input[type="password"] {
 .forgot-password {
   text-align: right;
   font-size: 0.9em;
+  margin-top: 10px; /* Small space after password field */
   margin-bottom: 20px;
 }
 .login-button {
