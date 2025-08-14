@@ -796,11 +796,14 @@ document.addEventListener('DOMContentLoaded', function() {
         };
         
         if (currentEditingInfoId) {
-          // Update existing
-          await invoke('update_project_info', { infoId: currentEditingInfoId, projectInfo });
+          // Update existing - Fixed parameter names to match Rust backend
+          await invoke('update_project_info', { 
+            projectInfoId: currentEditingInfoId, 
+            projectInfoInput: projectInfo 
+          });
         } else {
-          // Add new
-          await invoke('add_project_info', { projectInfo });
+          // Add new - Using camelCase parameter name as expected by Tauri
+          await invoke('add_project_info', { projectInfoInput: projectInfo });
         }
         
         // Reload the list
@@ -830,7 +833,7 @@ async function deleteApartmentType(id) {
   }
   
   try {
-    await invoke('delete_project_info', { infoId: id });
+    await invoke('delete_project_info', { projectInfoId: id });
     await loadApartmentTypes(currentSelectedProjectId);
   } catch (error) {
     console.error('Error deleting apartment type:', error);

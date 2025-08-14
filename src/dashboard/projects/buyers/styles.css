@@ -1070,7 +1070,7 @@ td[rowspan] {
 }
 
 /* Animation for bloc transitions */
-@keyframes fadeInUp {
+@keyframes fadeIn {
     from {
         opacity: 0;
         transform: translateY(10px);
@@ -1082,11 +1082,11 @@ td[rowspan] {
 }
 
 .buyer-row {
-    animation: fadeInUp 0.3s ease-out;
+    animation: fadeIn 0.3s ease-out;
 }
 
 .bloc-separator {
-    animation: fadeInUp 0.4s ease-out;
+    animation: fadeIn 0.4s ease-out;
 }
 
 /* Readonly field styling for auto-filled fields */
@@ -1161,7 +1161,7 @@ td[rowspan] {
 .tranche-row select:focus {
     outline: none;
     border-color: #007bff;
-    box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
 }
 
 .tranche-row .btn-remove-tranche {
@@ -2124,6 +2124,339 @@ header {
     .btn-print-ordre,
     .btn-accept,
     .warning-modal .btn-cancel {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* Check Number Input Styles */
+.tranche-amount-container {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+    min-width: 150px;
+}
+
+.check-number-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.check-number-and-print-container {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 220px;
+    flex-wrap: nowrap;
+    margin-top: 8px;
+}
+
+.check-label {
+    font-size: 12px;
+    color: #666;
+    font-weight: bold;
+    white-space: nowrap;
+    min-width: 55px;
+    margin: 0;
+    padding: 0;
+    display: block;
+    flex-shrink: 0;
+}
+
+.check-input {
+    padding: 4px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 12px;
+    width: 160px;
+    max-width: 160px;
+    flex-shrink: 0;
+    background: #f9f9f9;
+    transition: all 0.2s ease;
+}
+
+.check-input:focus {
+    outline: none;
+    border-color: #007bff;
+    background: white;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
+}
+
+.btn-print-cheque {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 8px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background-color 0.3s ease;
+    min-width: 32px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-print-cheque:hover {
+    background-color: #0056b3;
+}
+
+.btn-print-cheque i {
+    font-size: 14px;
+}
+
+.check-input::placeholder {
+    color: #999;
+    font-size: 11px;
+}
+
+/* Adjust tranche row layout to accommodate new structure */
+.tranche-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 15px;
+    margin-bottom: 15px;
+    padding: 12px;
+    border: 1px solid #eee;
+    border-radius: 6px;
+    background: #fafafa;
+    flex-wrap: nowrap;
+}
+
+.tranche-row label {
+    min-width: 40px;
+    margin-top: 8px;
+    font-weight: bold;
+    font-size: 14px;
+    color: #333;
+}
+
+.tranche-row input[type="number"] {
+    flex: 1;
+    min-width: 150px;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.tranche-row input[type="date"] {
+    min-width: 140px;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.tranche-row select {
+    min-width: 110px;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+/* User Information Modal Styles */
+.user-info-modal .modal-content {
+    max-width: 700px;
+    padding: 30px;
+    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.user-info-modal .modal-header {
+    background: linear-gradient(135deg, #4285f4 0%, #34a853 100%);
+    color: white;
+    padding: 20px 25px;
+    border-radius: 8px 8px 0 0;
+    margin: -30px -30px 25px -30px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.user-info-modal .modal-header h2 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.user-info-modal .modal-header i {
+    font-size: 18px;
+}
+
+.user-info-modal .close-modal {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    margin-left: auto;
+    padding: 5px;
+    border-radius: 50%;
+    transition: background-color 0.3s ease;
+}
+
+.user-info-modal .close-modal:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.modal-description {
+    color: #666;
+    margin-bottom: 25px;
+    font-size: 14px;
+    line-height: 1.5;
+    text-align: center;
+    padding: 15px;
+    background-color: #f0f7ff;
+    border-left: 4px solid #4285f4;
+    border-radius: 4px;
+}
+
+.user-info-form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.user-info-form .form-row {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+.user-info-form .form-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.user-info-form label {
+    font-weight: 600;
+    color: #333;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.user-info-form label i {
+    color: #4285f4;
+    width: 16px;
+    text-align: center;
+}
+
+.user-info-form input {
+    padding: 12px 15px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: all 0.3s ease;
+    background-color: #fafafa;
+}
+
+.user-info-form select {
+    padding: 12px 15px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: all 0.3s ease;
+    background-color: #fafafa;
+    cursor: pointer;
+}
+
+.user-info-form input:focus,
+.user-info-form select:focus {
+    outline: none;
+    border-color: #4285f4;
+    background-color: white;
+    box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.1);
+}
+
+.user-info-form input::placeholder {
+    color: #999;
+    font-style: italic;
+}
+
+.user-info-modal .modal-footer {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin-top: 30px;
+    padding-top: 25px;
+    border-top: 1px solid #eee;
+}
+
+.user-info-modal .btn-generate {
+    background: linear-gradient(135deg, #4285f4 0%, #34a853 100%);
+    color: white;
+    border: none;
+    padding: 12px 25px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(66, 133, 244, 0.3);
+}
+
+.user-info-modal .btn-generate:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(66, 133, 244, 0.4);
+}
+
+.user-info-modal .btn-cancel {
+    background: #f5f5f5;
+    color: #666;
+    border: 2px solid #ddd;
+    padding: 12px 25px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+}
+
+.user-info-modal .btn-cancel:hover {
+    background: #eeeeee;
+    border-color: #bbb;
+    transform: translateY(-1px);
+}
+
+/* Responsive design for user info modal */
+@media (max-width: 768px) {
+    .user-info-modal .modal-content {
+        width: 95%;
+        margin: 2% auto;
+        padding: 20px;
+    }
+    
+    .user-info-form .form-row {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .user-info-modal .modal-footer {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .user-info-modal .btn-generate,
+    .user-info-modal .btn-cancel {
         width: 100%;
         justify-content: center;
     }

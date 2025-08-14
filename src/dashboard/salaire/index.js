@@ -82,9 +82,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     const employeeForm = document.getElementById('employeeForm');
     const modeDeSaisierButton = document.getElementById('mode-de-saisir-button');
     const projectSelector = document.getElementById('project-selector');
-    
-    // Load employees from database when page loads
-    await loadEmployees();
+      // Load employees from database when page loads (default to administration)
+    await loadEmployeesByProject('administration');
     
     // Load projects into the dropdown
     await loadProjects();
@@ -124,15 +123,12 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (event.target === modal) {
             modal.style.display = 'none';
         }
-    });
-
-    // Handle project selection change
-    projectSelector.addEventListener('change', function() {
+    });    // Handle project selection change
+    projectSelector.addEventListener('change', async function() {
         const selectedProject = this.value;
         if (selectedProject) {
             console.log(`Selected project: ${selectedProject}`);
-            // You can filter employees by project here if needed
-            // For example: filterEmployeesByProject(selectedProject);
+            await loadEmployeesByProject(selectedProject);
         }
     });
 
@@ -147,10 +143,9 @@ document.addEventListener('DOMContentLoaded', async function() {
             const nombreHeurx = parseFloat(document.getElementById('nombreHeurx').value);
             const travaux_attache = parseInt(document.getElementById('travauxAttache').value) || 0;
             const salaire = (prix_jour * nombre_des_jours) + (prix_hour * nombreHeurx) + travaux_attache;
-            const acompte = parseFloat(document.getElementById('acompte').value);
-            const net_a_payer = salaire - acompte;
+            const acompte = parseFloat(document.getElementById('acompte').value);            const net_a_payer = salaire - acompte;
             const observation = document.getElementById('observation').value;
-
+            
             try {
                 // Debug log the data being sent
                 console.log('Sending data to backend:', {
@@ -164,28 +159,27 @@ document.addEventListener('DOMContentLoaded', async function() {
                     net_a_payer,
                     observation
                 });
-
-                // Call Tauri command to add employee to database
+                
+                // Call Tauri command to add employee to database (will be added to all projects)
                 await invoke('insert_employee', {
                     employee: {
                         nom_et_prenom,
                         prix_jour,
                         prix_hour,
                         nombre_des_jours,
+                        nombre_des_heurx: nombreHeurx,
                         travaux_attache,
                         salaire,
                         acompte,
                         net_a_payer,
                         observation
                     }
-                });
-
-                // Reset form and close modal
+                });// Reset form and close modal
                 employeeForm.reset();
                 modal.style.display = 'none';
 
                 // Reload employees from database
-                await loadEmployees();
+                await reloadCurrentEmployees();
             } catch (error) {
                 console.error("Error adding employee:", error);
                 alert("Failed to add employee. Please try again.");
@@ -215,8 +209,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     window.addEventListener('click', function(event) {
         if (event.target === editModal) {
             closeEditModal();
-        }
-    });
+        }    });
 
     // Delegate click event for edit and delete buttons
     document.querySelector('table tbody').addEventListener('click', function(e) {
@@ -224,6 +217,10 @@ document.addEventListener('DOMContentLoaded', async function() {
             const row = e.target.closest('tr');
             // Get all cell values
             const cells = row.querySelectorAll('td');
+            // Get data attributes
+            const employeeId = row.getAttribute('data-employee-id');
+            const projectId = row.getAttribute('data-project-id');
+            
             // Fill modal fields
             document.getElementById('editId').value = cells[0].textContent.trim();
             document.getElementById('editNomPrenom').value = cells[1].textContent.trim();
@@ -236,6 +233,11 @@ document.addEventListener('DOMContentLoaded', async function() {
             document.getElementById('editAcompte').value = cells[8].textContent.trim();
             document.getElementById('editNetAPayer').value = cells[9].textContent.trim();
             document.getElementById('editObservation').value = cells[10].childNodes[0].textContent.trim();
+            
+            // Store employee_id and project_id for later use
+            editModal.setAttribute('data-employee-id', employeeId);
+            editModal.setAttribute('data-project-id', projectId);
+            
             // Show modal
             editModal.style.display = 'block';
         }
@@ -249,9 +251,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             
             deleteEmployee(e.target.closest('.delete-btn'), employeeId, employeeName);
         }
-    });
-
-    // Handle update button click with proper salary calculations
+    });    // Handle update button click with proper salary calculations
     updateButton.addEventListener('click', async function(e) {
         e.preventDefault();
         
@@ -265,6 +265,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         const acompte = parseFloat(document.getElementById('editAcompte').value) || 0;
         const observation = document.getElementById('editObservation').value;
         
+        // Get employee_id and project_id from modal data attributes
+        const employee_id = parseInt(editModal.getAttribute('data-employee-id'));
+        const project_id = editModal.getAttribute('data-project-id');
+        
         // Calculate derived values (same logic as in add employee)
         const prix_hour = prix_jour / 8; // Prix de hour is prix de jour/8
         const salaire = (prix_jour * nombre_des_jours) + (prix_hour * nombreHeurx) + travaux_attache;
@@ -273,22 +277,24 @@ document.addEventListener('DOMContentLoaded', async function() {
         // Create the updated employee object
         const updatedEmployee = {
             id: id, // ID is never changed, only used for WHERE clause
+            employee_id: employee_id,
             nom_et_prenom: nom_et_prenom,
+            project_id: project_id,
             prix_jour: prix_jour,
             prix_hour: prix_hour,
             nombre_des_jours: nombre_des_jours,
+            nombre_des_heurx: nombreHeurx,
             travaux_attache: travaux_attache,
             salaire: salaire,
             acompte: acompte,
             net_a_payer: net_a_payer,
             observation: observation
         };
-        
-        try {
+          try {
             // Call backend to update employee
             await invoke('update_employee', { employee: updatedEmployee });
             closeEditModal();
-            await loadEmployees();
+            await reloadCurrentEmployees();
         } catch (error) {
             console.error('Update error:', error);
             alert('Erreur lors de la mise à jour de l\'employé: ' + error);
@@ -583,12 +589,10 @@ document.addEventListener('DOMContentLoaded', async function() {
 
             // Reset form and close modal
             modeDeSaisirForm.reset();
-            closeModeDeSaisirModal();
-            window.selectedEmployeeId = null; // Reset selected employee
+            closeModeDeSaisirModal();            window.selectedEmployeeId = null; // Reset selected employee
 
             // Reload employees from database
-            await loadEmployees();
-            await loadEmployeeNames(); // Refresh autocomplete data
+            await reloadCurrentEmployees();            await loadEmployeeNames(); // Refresh autocomplete data
             
             // Show success modal instead of alert
             showSuccessModal();
@@ -597,7 +601,9 @@ document.addEventListener('DOMContentLoaded', async function() {
             console.error("Error updating employee:", error);
             alert("Erreur lors de la mise à jour de l'employé: " + error);
         }
-    });    // Initialize mode de saisir functionality
+    });
+
+    // Initialize mode de saisir functionality
     addModeSaisirCalculationListeners();
     await loadEmployeeNames();
     setupAutocomplete();
@@ -616,6 +622,30 @@ async function loadEmployees() {
     } catch (error) {
         console.error("Error loading employees:", error);
     }
+}
+
+// Function to load employees for a specific project
+async function loadEmployeesByProject(projectId) {
+    try {
+        const employees = await invoke('get_employees_by_project', { projectId: projectId });
+        updateEmployeeTable(employees);
+    } catch (error) {
+        console.error("Error loading employees for project:", error);
+        // If there's an error, show an empty table
+        updateEmployeeTable([]);
+    }
+}
+
+// Helper function to get currently selected project
+function getCurrentSelectedProject() {
+    const projectSelector = document.getElementById('project-selector');
+    return projectSelector.value || 'administration';
+}
+
+// Function to reload employees for the currently selected project
+async function reloadCurrentEmployees() {
+    const currentProject = getCurrentSelectedProject();
+    await loadEmployeesByProject(currentProject);
 }
 
 // Function to load projects into the dropdown
@@ -665,9 +695,10 @@ function updateEmployeeTable(employees) {
     tbody.innerHTML = '';
     
     let totalNetAPayer = 0;
-    
-    employees.forEach((employee) => {
+      employees.forEach((employee) => {
         const row = document.createElement('tr');
+        row.setAttribute('data-employee-id', employee.employee_id);
+        row.setAttribute('data-project-id', employee.project_id);
         row.innerHTML = `
             <td>${employee.id}</td>
             <td>${employee.nom_et_prenom}</td>
@@ -730,11 +761,10 @@ function showDeleteConfirmationModal(button, employeeId, employeeName) {
             await invoke('delete_employee', { employeeId: parseInt(employeeId) });
             
             // Remove row from table
-            const row = button.closest('tr');
-            row.remove();
+            const row = button.closest('tr');            row.remove();
             
             // Reload employees to update the table and total
-            await loadEmployees();
+            await reloadCurrentEmployees();
             
             // Show success message
             const successMsg = document.createElement('div');
@@ -888,15 +918,15 @@ function performSearch() {
 function updateVisibleTotal() {
     const visibleRows = document.querySelectorAll('table tbody tr:not([style*="display: none"])');
     let totalNetAPayer = 0;
-    
-    visibleRows.forEach(row => {
+      visibleRows.forEach(row => {
         const netPayCell = row.cells[9]; // Net a Payer is the 10th column (index 9)
         if (netPayCell) {
             const value = parseFloat(netPayCell.textContent) || 0;
             totalNetAPayer += value;
         }
     });
-      // Update the total amount display
+    
+    // Update the total amount display
     document.querySelector('.amount').textContent = totalNetAPayer.toLocaleString('fr-FR', {
         minimumFractionDigits: 2, 
         maximumFractionDigits: 2
