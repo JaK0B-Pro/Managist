@@ -1,6 +1,6 @@
 [package]
 name = "Managist"
-version = "0.1.0"
+version = "0.1.4"
 description = "A Tauri Entreprise Managment App"
 authors = ["Fezzaa Lamri Yaakoub, Bouhara Yahia Abderraouf"]
 edition = "2021"

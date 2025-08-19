@@ -386,10 +386,12 @@ function addTranche() {
     const tranchesContainer = document.getElementById('tranchesContainer');
     const trancheCount = tranchesContainer.children.length;
     
-    if (trancheCount >= 10) {
-        alert('Maximum 10 tranches allowed');
+    if (trancheCount >= 30) {
+        alert('Maximum 30 tranches allowed');
         return;
-    }    // Check if espèce limit is already reached
+    }
+    
+    // Get basic values
     const surface = parseFloat(document.getElementById('surface').value) || 0;
     const prixTotale = parseFloat(document.getElementById('prixTotale').value) || 0;
     const remise = parseFloat(document.getElementById('remise').value) || 0;
@@ -398,37 +400,117 @@ function addTranche() {
     // Calculate the reduced total price after remise (direct value)
     const reducedTotalPrice = prixTotale - (remise || 0);
     
-    // Calculate max versement (unchanged)
-    const maxVersement = prixUnitaire * surface;
+    // Check if this is a unit purchase (no profit margin)
+    const isUnitPurchase = prixTotale === (surface * prixUnitaire);
     
-    // Calculate max espèce from the reduced total price
-    const maxEspece = reducedTotalPrice - maxVersement;
+    let maxVersement, maxEspece, currentEspeceTotal = 0;
+    let isEspeceLimitReached = false;
+    let remainingEspece = 0;
+    let especeTrancheDetails = [];
+    let allTrancheDetails = [];
     
-    // Calculate current espèce total
-    let currentEspeceTotal = 0;
-    Array.from(tranchesContainer.children).forEach(row => {
-        const amountInput = row.querySelector('input[name^="tranche_"]');
-        const typeSelect = row.querySelector('select[name^="tranche_"][name$="_type"]');
+    if (isUnitPurchase) {
+        // Unit purchase - no espèce/versement restrictions
+        console.log('🏠 UNIT PURCHASE DETECTED - No espèce/versement limits applied');
+        maxVersement = 0; // Not applicable
+        maxEspece = prixTotale; // Can pay all in espèce if desired
+        isEspeceLimitReached = false; // Never reached for unit purchases
+        remainingEspece = prixTotale; // All amount available
+    } else {
+        // Regular purchase with profit margin - apply normal limits
+        maxVersement = prixUnitaire * surface;
+        maxEspece = reducedTotalPrice - maxVersement;
         
-        if (amountInput && typeSelect) {
-            const value = parseFloat(amountInput.value) || 0;
-            const type = typeSelect.value;
+        console.log(`🔍 Analyzing ${tranchesContainer.children.length} existing tranches:`);
+        
+        Array.from(tranchesContainer.children).forEach((row, index) => {
+            const amountInput = row.querySelector('input[name^="tranche_"]');
+            const typeSelect = row.querySelector('select[name^="tranche_"][name$="_type"]');
             
-            if (type === 'espece' && value > 0) {
-                currentEspeceTotal += value;
+            let trancheInfo = `T${index}: `;
+            
+            if (amountInput && typeSelect) {
+                const value = parseFloat(amountInput.value) || 0;
+                const type = typeSelect.value;
+                
+                trancheInfo += `${value.toLocaleString()} DA (${type})`;
+                allTrancheDetails.push(trancheInfo);
+                
+                if (type === 'espece' && value > 0) {
+                    currentEspeceTotal += value;
+                    especeTrancheDetails.push(`T${index}: ${value.toLocaleString()} DA`);
+                    console.log(`   ✅ T${index} = ${value.toLocaleString()} DA (espèce) ← COUNTED`);
+                } else {
+                    console.log(`   ⏭️ T${index} = ${value.toLocaleString()} DA (${type}) ← SKIPPED`);
+                }
+            } else {
+                trancheInfo += 'ERROR - missing input or select';
+                allTrancheDetails.push(trancheInfo);
+                console.log(`   ❌ T${index} - Missing elements: input=${!!amountInput}, select=${!!typeSelect}`);
             }
-        }
-    });
+        });
+        
+        isEspeceLimitReached = currentEspeceTotal >= maxEspece;
+        remainingEspece = maxEspece - currentEspeceTotal;
+    }
     
     // Determine default type for new tranche and check if espèce should be disabled
-    const isEspeceLimitReached = currentEspeceTotal >= maxEspece;
     const defaultType = isEspeceLimitReached ? 'versement' : 'espece';
     const defaultSelected = defaultType === 'espece' ? 'selected' : '';
     const versementSelected = defaultType === 'versement' ? 'selected' : '';
     const especeDisabled = isEspeceLimitReached ? 'disabled' : '';
     const especeTitle = isEspeceLimitReached ? `title="Limite espèce atteinte: ${maxEspece.toLocaleString()} DA"` : '';
     
-    console.log(`💰 New tranche: Espèce ${currentEspeceTotal.toLocaleString()}/${maxEspece.toLocaleString()} DA, disabled: ${isEspeceLimitReached}`);
+    // Enhanced debugging
+    if (isUnitPurchase) {
+        console.log(`🏠 UNIT PURCHASE - No Limits Applied:
+        � Project Details:
+           - Prix Totale: ${prixTotale.toLocaleString()} DA
+           - Surface: ${surface.toLocaleString()} m²
+           - Prix Unitaire: ${prixUnitaire.toLocaleString()} DA/m²
+           - Unit Purchase: ${prixTotale.toLocaleString()} == ${(surface * prixUnitaire).toLocaleString()} ✅
+        🆓 No espèce/versement restrictions - buyer can pay any way they want
+        🚫 New tranche will be: ${defaultType.toUpperCase()} (default)`);
+    } else {
+        console.log(`�🔍 ESPÈCE LIMIT CHECK FOR NEW TRANCHE:
+        📊 Project Details:
+           - Prix Totale: ${prixTotale.toLocaleString()} DA
+           - Remise: ${remise.toLocaleString()} DA  
+           - Surface: ${surface.toLocaleString()} m²
+           - Prix Unitaire: ${prixUnitaire.toLocaleString()} DA/m²
+        💰 Espèce Calculation:
+           - Max Versement: ${maxVersement.toLocaleString()} DA
+           - Max Espèce (Total): ${maxEspece.toLocaleString()} DA
+           - Current Espèce Used: ${currentEspeceTotal.toLocaleString()} DA
+           - Remaining Espèce: ${remainingEspece.toLocaleString()} DA
+        📋 All Tranches: ${allTrancheDetails.join(', ') || 'None'}
+        📋 Current Espèce Tranches: ${especeTrancheDetails.length > 0 ? especeTrancheDetails.join(', ') : 'None'}
+        🚫 Limit Reached: ${isEspeceLimitReached} → New tranche will be: ${defaultType.toUpperCase()}`);
+    }
+    
+    // Show notification if espèce was auto-switched to versement
+    if (isEspeceLimitReached) {
+        console.log('🔄 Auto-switched new tranche to versement due to espèce limit');
+        // Optional: show a brief toast notification to user
+        setTimeout(() => {
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #ff9800;
+                color: white;
+                padding: 12px 20px;
+                border-radius: 6px;
+                z-index: 10000;
+                font-size: 14px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            `;
+            notification.textContent = `Limite espèce atteinte (${maxEspece.toLocaleString()} DA) - nouvelle tranche en versement`;
+            document.body.appendChild(notification);
+            setTimeout(() => notification.remove(), 4000);
+        }, 100);
+    }
 
     const trancheRow = document.createElement('div');
     trancheRow.className = 'tranche-row';
@@ -510,7 +592,7 @@ function updateTrancheLabels() {
 function updateAddTrancheButtonVisibility() {
     const tranchesContainer = document.getElementById('tranchesContainer');
     const addButton = document.getElementById('addTrancheBtn');
-    addButton.style.display = tranchesContainer.children.length >= 10 ? 'none' : 'inline-block';
+    addButton.style.display = tranchesContainer.children.length >= 30 ? 'none' : 'inline-block';
 }
 
 function calculateTotalPaid() {
@@ -535,6 +617,9 @@ function calculateTotalPaid() {
     
     // Update espèce options availability
     updateEspeceOptionsAvailability();
+    
+    // Also update tranche type options to ensure consistency
+    updateTrancheTypeOptions();
 }
 
 function validateTrancheAmount(input) {
@@ -1161,7 +1246,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Render buyers grouped by bloc with visual separation
                 sortedBlocs.forEach((bloc, blocIndex) => {
                     const buyersByNiveau = buyersByBloc[bloc];
-                    const sortedNiveaux = Object.keys(buyersByNiveau).sort();
+                    const sortedNiveaux = Object.keys(buyersByNiveau).sort((a, b) => {
+                        const numA = parseInt(a === 'Unknown' ? '9999' : a);
+                        const numB = parseInt(b === 'Unknown' ? '9999' : b);
+                        return numA - numB;
+                    });
                     const blocColor = getBlocColor(bloc);
 
                     // Add bloc separator row if not first bloc
@@ -1194,6 +1283,13 @@ document.addEventListener('DOMContentLoaded', function () {
                     sortedNiveaux.forEach(niveau => {
                         const buyersInNiveau = buyersByNiveau[niveau];
                         
+                        // Sort buyers within niveau by apartment number (N° LOGT)
+                        buyersInNiveau.sort((a, b) => {
+                            const aptA = parseInt(a.logt_num || '0');
+                            const aptB = parseInt(b.logt_num || '0');
+                            return aptA - aptB;
+                        });
+                        
                         buyersInNiveau.forEach((buyer, index) => {
                             const newRow = document.createElement('tr');
                             newRow.className = 'buyer-row';
@@ -1216,13 +1312,24 @@ document.addEventListener('DOMContentLoaded', function () {
                     buyersByNiveau[niveau].push(buyer);
                 });
 
-                // Sort NIVEAU keys for consistent ordering
-                const sortedNiveaux = Object.keys(buyersByNiveau).sort();
+                // Sort NIVEAU keys for consistent ordering (numeric)
+                const sortedNiveaux = Object.keys(buyersByNiveau).sort((a, b) => {
+                    const numA = parseInt(a === 'Unknown' ? '9999' : a);
+                    const numB = parseInt(b === 'Unknown' ? '9999' : b);
+                    return numA - numB;
+                });
                 const blocColor = getBlocColor(currentBloc);
 
                 // Render grouped buyers for single bloc
                 sortedNiveaux.forEach(niveau => {
                     const buyersInNiveau = buyersByNiveau[niveau];
+                    
+                    // Sort buyers within niveau by apartment number (N° LOGT)
+                    buyersInNiveau.sort((a, b) => {
+                        const aptA = parseInt(a.logt_num || '0');
+                        const aptB = parseInt(b.logt_num || '0');
+                        return aptA - aptB;
+                    });
                     
                     buyersInNiveau.forEach((buyer, index) => {
                         const newRow = document.createElement('tr');
@@ -2201,9 +2308,9 @@ function handleApartmentTypeChange() {
             surfaceInput.value = surface;
             priceInput.value = price;
             
-            // Make fields readonly for predefined types
+            // Make surface readonly for predefined types, but keep prix totale editable
             surfaceInput.readOnly = true;
-            priceInput.readOnly = true;
+            priceInput.readOnly = false; // Always allow prix totale to be editable
               // Add visual feedback for auto-filled fields
             [surfaceInput, priceInput].forEach(input => {
                 input.classList.add('updated');
@@ -2215,11 +2322,11 @@ function handleApartmentTypeChange() {
             priceInput.readOnly = false;
         }
     } else {
-        // No apartment type selected - clear fields and make them readonly
+        // No apartment type selected - clear fields
         surfaceInput.value = '';
         priceInput.value = '';
-        surfaceInput.readOnly = true;
-        priceInput.readOnly = true;
+        surfaceInput.readOnly = true;  // Keep surface readonly when no type selected
+        priceInput.readOnly = false;   // But allow prix totale to be manually entered
     }
     
     // Update tranche type options when surface/price changes
@@ -2468,6 +2575,17 @@ async function editBuyer(buyerId) {
         // Update modal title and button
         document.querySelector('#buyerModal h2').textContent = 'Edit Buyer';
         document.getElementById('addBuyerBtn').textContent = 'Update Buyer';
+        
+        // Ensure prix totale is always editable in edit mode
+        const priceInput = document.getElementById('prixTotale');
+        if (priceInput) {
+            priceInput.readOnly = false;
+            // Update the field note to indicate it's editable
+            const fieldNote = priceInput.nextElementSibling;
+            if (fieldNote && fieldNote.classList.contains('field-note')) {
+                fieldNote.textContent = 'Editable - you can modify this value';
+            }
+        }
         
         // Store buyer ID for update
         document.getElementById('addBuyerForm').setAttribute('data-buyer-id', buyerId);
@@ -2945,8 +3063,8 @@ async function printOrdreVersement(trancheIndex) {
         }
         
         // Determine document type based on tranche type
-        const documentType = trancheType === 'espece' ? 'Reçu de Versement' : 'Ordre de Versement';
-        const documentTitle = trancheType === 'espece' ? 'REÇU DE VERSEMENT' : 'ORDRE DE VERSEMENT';
+        const documentType = trancheType === 'espece' ? 'Reçu de Versement' : 'Ordre de Virement';
+        const documentTitle = trancheType === 'espece' ? 'REÇU DE VERSEMENT' : 'ORDRE DE VIREMENT';
         
         console.log(`📄 Document type: ${documentType} (tranche type: ${trancheType})`);
         
@@ -2957,30 +3075,49 @@ async function printOrdreVersement(trancheIndex) {
         const buyerId = form.getAttribute('data-buyer-id');
         let apartmentType = 'Appartement'; // Default fallback
         
+        console.log('🔍 Buyer ID for apartment type fetch:', buyerId);
+        
         if (buyerId) {
             try {
+                console.log('📡 Fetching buyer data for apartment type...');
                 // Fetch buyer data to get their type_logt
                 const buyerData = await invoke('get_buyer', { buyerId: parseInt(buyerId) });
+                console.log('👤 Buyer data:', buyerData);
+                
                 if (buyerData && buyerData.type_logt) {
+                    console.log('🏠 Found buyer type_logt:', buyerData.type_logt);
                     // Fetch project info to get apartment type details
                     const projectId = getCurrentProjectId();
+                    console.log('🏗️ Project ID:', projectId);
                     const projectInfo = await fetchProjectApartmentTypes(projectId);
+                    console.log('📋 Project info:', projectInfo);
                     
                     // Find the apartment type that matches the buyer's type_logt
                     const apartmentTypeInfo = projectInfo.find(info => info.type_logt === buyerData.type_logt);
                     if (apartmentTypeInfo) {
                         apartmentType = apartmentTypeInfo.type_logt;
+                        console.log('✅ Found matching apartment type:', apartmentType);
+                    } else {
+                        console.log('⚠️ No matching apartment type found in project info');
+                        // Try using the buyer's type_logt directly
+                        apartmentType = buyerData.type_logt;
+                        console.log('🔄 Using buyer type_logt directly:', apartmentType);
                     }
+                } else {
+                    console.log('⚠️ No type_logt found in buyer data');
                 }
             } catch (error) {
-                console.error('Error fetching apartment type from project_info:', error);
+                console.error('❌ Error fetching apartment type from project_info:', error);
                 // Fall back to form data if database fetch fails
                 apartmentType = formData.get('typeLogt') || 'Appartement';
             }
         } else {
+            console.log('ℹ️ No buyer ID found, using form data');
             // For new buyers, get from form
             apartmentType = formData.get('typeLogt') || 'Appartement';
         }
+        
+        console.log('🏠 Final apartment type:', apartmentType);
         
         // Create PDF using the DocumentGenerator from utils if available
         // Temporarily disabled to use fallback system
@@ -3039,7 +3176,14 @@ async function printOrdreVersement(trancheIndex) {
 
 // Simple document generation fallback (handles both Ordre de Versement and Reçu de Versement)
 function generateSimpleDocument(buyerName, prenom, trancheIndex, amount, date, type, documentType, documentTitle, apartmentType, projectTitle) {
-    const printWindow = window.open('', '_blank');
+    // Create fullscreen centered window
+    const screenWidth = window.screen.availWidth;
+    const screenHeight = window.screen.availHeight;
+    const left = (screenWidth - screenWidth) / 2;
+    const top = (screenHeight - screenHeight) / 2;
+    
+    const printWindow = window.open('', '_blank', 
+        `width=${screenWidth},height=${screenHeight},left=${left},top=${top},scrollbars=yes,resizable=yes`);
     
     const currentDate = new Date();
     const paymentDate = date ? new Date(date) : currentDate;
@@ -3049,7 +3193,7 @@ function generateSimpleDocument(buyerName, prenom, trancheIndex, amount, date, t
         <!DOCTYPE html>
         <html lang="fr">
         <head>
-            <title>${documentType} - T${trancheIndex}</title>
+            <title>${documentType}</title>
             <style>
                 body { 
                     font-family: Arial, sans-serif; 
@@ -3163,7 +3307,7 @@ function generateSimpleDocument(buyerName, prenom, trancheIndex, amount, date, t
                     <p><strong>(En lettres) :</strong> ${numberToFrenchWords(parseFloat(amount))} Dinars Algériens</p>
                 </div>
                 
-                <p>Représentant le paiement de la tranche T${trancheIndex} d'un appartement ${apartmentType || 'type standard'} du projet ${(projectTitle || '136 logements promotionnels à EL TARF').replace(/\s*-\s*Buyers\s*$/i, '')}</p>
+                <p>Représentant le paiement d'un appartement F3 du projet ${(projectTitle || '136 logements promotionnels à EL TARF').replace(/\s*-\s*Buyers\s*$/i, '')}</p>
             </div>
 
             <div class="observations">
@@ -3188,8 +3332,23 @@ function generateSimpleDocument(buyerName, prenom, trancheIndex, amount, date, t
             <script>
                 window.onload = function() {
                     window.print();
-                    setTimeout(() => window.close(), 200);
                 }
+                
+                // Handle print dialog events but don't auto-close
+                window.addEventListener('beforeprint', function() {
+                    console.log('Print dialog opened');
+                });
+                
+                window.addEventListener('afterprint', function() {
+                    console.log('Print dialog closed - window stays open');
+                });
+                
+                // Optional: Add keyboard shortcut to close window manually
+                window.addEventListener('keydown', function(event) {
+                    if (event.key === 'Escape') {
+                        window.close();
+                    }
+                });
             </script>
         </body>
         </html>
@@ -3432,55 +3591,105 @@ function numberToWords(num) {
     const teens = ['dix', 'onze', 'douze', 'treize', 'quatorze', 'quinze', 'seize', 'dix-sept', 'dix-huit', 'dix-neuf'];
     const tens = ['', '', 'vingt', 'trente', 'quarante', 'cinquante', 'soixante', 'soixante-dix', 'quatre-vingt', 'quatre-vingt-dix'];
     
-    if (num === 0) return 'zéro';
+    if (num === 0) return 'zéro dinars algériens';
     
-    let result = '';
-    let thousandCounter = 0;
-    
-    while (num > 0) {
-        let chunk = num % 1000;
-        if (chunk !== 0) {
-            let chunkText = '';
-            
-            // Hundreds
-            if (chunk >= 100) {
-                if (Math.floor(chunk / 100) === 1) {
-                    chunkText += 'cent ';
-                } else {
-                    chunkText += ones[Math.floor(chunk / 100)] + ' cent ';
-                }
-                chunk %= 100;
+    function convertChunk(chunk) {
+        let result = '';
+        
+        // Hundreds
+        if (chunk >= 100) {
+            const hundreds = Math.floor(chunk / 100);
+            if (hundreds === 1) {
+                result += 'cent';
+            } else {
+                result += ones[hundreds] + ' cent';
             }
             
-            // Tens and ones
-            if (chunk >= 20) {
-                chunkText += tens[Math.floor(chunk / 10)];
-                if (chunk % 10 !== 0) {
-                    chunkText += '-' + ones[chunk % 10];
-                }
-            } else if (chunk >= 10) {
-                chunkText += teens[chunk - 10];
-            } else if (chunk > 0) {
-                chunkText += ones[chunk];
+            // Add 's' for plural hundreds when no remainder
+            if (chunk % 100 === 0 && hundreds > 1) {
+                result += 's';
             }
             
-            // Add thousand multiplier
-            if (thousandCounter > 0 && chunk > 0) {
-                if (thousandCounter === 1) {
-                    chunkText += ' mille';
-                } else if (thousandCounter === 2) {
-                    chunkText += ' millions';
-                }
-            }
-            
-            result = chunkText + ' ' + result;
+            result += ' ';
+            chunk %= 100;
         }
         
-        num = Math.floor(num / 1000);
-        thousandCounter++;
+        // Tens and ones
+        if (chunk >= 20) {
+            const tensDigit = Math.floor(chunk / 10);
+            const onesDigit = chunk % 10;
+            
+            result += tens[tensDigit];
+            
+            // Handle special cases for quatre-vingt
+            if (tensDigit === 8 && onesDigit === 0) {
+                result += 's'; // quatre-vingts
+            }
+            
+            if (onesDigit !== 0) {
+                if (tensDigit === 7 || tensDigit === 9) {
+                    // 70-79 and 90-99 special cases
+                    if (tensDigit === 7) {
+                        result = result.replace('soixante-dix', 'soixante');
+                        if (onesDigit === 1) {
+                            result += '-et-onze';
+                        } else {
+                            result += '-' + teens[onesDigit - 1];
+                        }
+                    } else {
+                        result = result.replace('quatre-vingt-dix', 'quatre-vingt');
+                        result += '-' + teens[onesDigit - 1];
+                    }
+                } else {
+                    if (onesDigit === 1 && (tensDigit === 2 || tensDigit === 3 || tensDigit === 4 || tensDigit === 5 || tensDigit === 6)) {
+                        result += '-et-un';
+                    } else {
+                        result += '-' + ones[onesDigit];
+                    }
+                }
+            }
+        } else if (chunk >= 10) {
+            result += teens[chunk - 10];
+        } else if (chunk > 0) {
+            result += ones[chunk];
+        }
+        
+        return result.trim();
     }
     
-    return result.trim() + ' Dinars Algériens';
+    let result = '';
+    const billion = Math.floor(num / 1000000000);
+    const million = Math.floor((num % 1000000000) / 1000000);
+    const thousand = Math.floor((num % 1000000) / 1000);
+    const remainder = num % 1000;
+    
+    // Billions
+    if (billion > 0) {
+        result += convertChunk(billion);
+        result += billion === 1 ? ' milliard ' : ' milliards ';
+    }
+    
+    // Millions
+    if (million > 0) {
+        result += convertChunk(million);
+        result += million === 1 ? ' million ' : ' millions ';
+    }
+    
+    // Thousands
+    if (thousand > 0) {
+        if (thousand === 1) {
+            result += 'mille ';
+        } else {
+            result += convertChunk(thousand) + ' mille ';
+        }
+    }
+    
+    // Remainder (0-999)
+    if (remainder > 0) {
+        result += convertChunk(remainder);
+    }
+    
+    return result.trim() + ' dinars algériens';
 }
 
 // Add event listener for apartment type change
@@ -3550,24 +3759,14 @@ async function savePrixUnitaire() {
         
         console.log('🔄 Saving prix unitaire:', newPrixUnitaire);
         
-        // First, get the existing prix unitaire record ID
-        let prixUnitaireId;
-        try {
-            const existingPrix = await invoke('get_prix_unitaire', { projectId: PROJECT_ID });
-            prixUnitaireId = existingPrix.id;
-        } catch (error) {
-            console.error('Error getting existing prix unitaire ID:', error);
-            throw new Error('Could not find existing prix unitaire record');
-        }
-        
-        // Save to database with correct parameter structure
-        await invoke('update_prix_unitaire', { 
-            prixUnitaireId: prixUnitaireId,
+        // Use add_prix_unitaire which handles both create and update
+        await invoke('add_prix_unitaire', {
             prixUnitaireInput: {
                 project_id: PROJECT_ID,
                 prix_unitaire: newPrixUnitaire
             }
         });
+        console.log('✅ Prix unitaire saved successfully (create or update)');
         
         // Update local variables
         currentPrixUnitaire = newPrixUnitaire;
@@ -3939,10 +4138,15 @@ function acceptEspeceAdjustment() {
                 pendingEspeceData.remainingVersement = versementAmount;
                 console.log(`💳 Stored remaining versement: ${versementAmount.toLocaleString()} DA`);
                 
-                // Show versement modal after a short delay
-                setTimeout(() => {
-                    showOrdreVersementConfirmModal();
-                }, 300);
+                // Only show versement modal if we're not in the print reçu flow
+                if (!pendingEspeceData.fromEspeceWarning) {
+                    // Show versement modal after a short delay
+                    setTimeout(() => {
+                        showOrdreVersementConfirmModal();
+                    }, 300);
+                } else {
+                    console.log('🎯 Skipping first ordre modal - will show after reçu is printed');
+                }
             } else {
                 // No versement tranche created - continue with form submission
                 setTimeout(() => {
@@ -4167,6 +4371,9 @@ function acceptEspeceAndPrintRecu() {
     if (!pendingEspeceData) return;
     console.log('🖨️ Accept + Print Reçu flow started');
     
+    // Mark that we're in the espèce warning modal flow to prevent duplicate ordre modal
+    pendingEspeceData.fromEspeceWarning = true;
+    
     // Perform split first (synchronously modifies existing tranche / adds new)
     const originalPending = { ...pendingEspeceData };
     let remainingAmount = originalPending.enteredAmount - originalPending.acceptedEspece;
@@ -4174,19 +4381,12 @@ function acceptEspeceAndPrintRecu() {
     // Run core split logic but defer submission clearing
     acceptEspeceAdjustment();
     
-    // Schedule printing after DOM updates - NO additional acceptEspeceAdjustment calls
+    // Schedule printing after DOM updates - use modal system without index
     setTimeout(() => {
         try {
-            // Determine which tranche to print: the newly created versement if remaining > 0 else existing adjusted tranche
-            const tranches = Array.from(document.querySelectorAll('#tranchesContainer .tranche-row'));
-            let targetIndex = tranches.length - 1; // assume last is new versement
-            if (remainingAmount <= 0) {
-                // No new tranche; print the tranche input that was adjusted
-                targetIndex = tranches.findIndex(row => row.querySelector('input[name^="tranche_"]') === originalPending.trancheInput);
-                if (targetIndex < 0) targetIndex = tranches.length - 1;
-            }
-            console.log('🖨️ Printing reçu for tranche index', targetIndex);
-            printRecuVersement(targetIndex);
+            console.log('🖨️ Printing reçu via user info modal');
+            // Use the modal system for consistent user info collection
+            printRecuVersement();
         } catch (e) {
             console.error('❌ Error printing reçu after split:', e);
         }
@@ -4352,7 +4552,7 @@ function skipPrintVersementOrder() {
 function printRecuVersement() {
     if (!pendingEspeceData) return;
     
-    console.log('🖨️ Printing Reçu de Versement (Arabic receipt)');
+    console.log('🖨️ Preparing Reçu de Versement with user info modal');
     
     // Get buyer data for the receipt
     const surface = parseFloat(document.getElementById('surface').value) || 0;
@@ -4360,75 +4560,25 @@ function printRecuVersement() {
     const prenom = document.getElementById('prenom').value || '';
     const bloc = document.getElementById('bloc').value || '';
     const logtNum = document.getElementById('logtNum').value || '';
+    const projectTitle = document.getElementById('pageTitle')?.textContent || '136 logements promotionnels à EL TARF';
     
-    // Create and show printable receipt document
-    const receiptWindow = window.open('', '_blank', 'width=800,height=600');
-    receiptWindow.document.write(`
-        <!DOCTYPE html>
-        <html dir="rtl" lang="ar">
-        <head>
-            <meta charset="UTF-8">
-            <title>وصل استلام - Reçu de Versement</title>
-            <style>
-                body { font-family: Arial, sans-serif; padding: 20px; direction: rtl; }
-                .header { text-align: center; margin-bottom: 30px; }
-                .amount { font-size: 24px; font-weight: bold; color: #2c3e50; }
-                .details { margin: 20px 0; }
-                .signature { margin-top: 50px; text-align: left; }
-                @media print { body { margin: 0; } }
-            </style>
-        </head>
-        <body>
-            <div class="header">
-                <h2>وصل استلام نقدي</h2>
-                <h3>Reçu de Versement en Espèce</h3>
-            </div>
-            <div class="details">
-                <p><strong>المبلغ / Montant:</strong> <span class="amount">${pendingEspeceData.acceptedEspece.toLocaleString()} DA</span></p>
-                <p><strong>الاسم / Nom:</strong> ${nom} ${prenom}</p>
-                <p><strong>الكتلة / Bloc:</strong> ${bloc}</p>
-                <p><strong>رقم السكن / N° Logement:</strong> ${logtNum}</p>
-                <p><strong>المساحة / Surface:</strong> ${surface} m²</p>
-                <p><strong>التاريخ / Date:</strong> ${new Date().toLocaleDateString('fr-FR')}</p>
-            </div>            <div class="signature">                <p>التوقيع / Signature: ____________________</p>
-            </div>
-            <script>
-                let printTriggered = false;
-                
-                window.onload = function() {
-                    printTriggered = true;
-                    window.print();
-                }
-                
-                window.onafterprint = function() {
-                    // Close window after 200ms delay (whether printed or cancelled)
-                    setTimeout(() => {
-                        window.close();
-                    }, 200);
-                }
-                
-                window.onbeforeunload = function() {
-                    // Also close if user navigates away or closes manually
-                    if (printTriggered) {
-                        window.close();
-                    }
-                }
-            </script>
-        </body>
-        </html>
-    `);
-    receiptWindow.document.close();
+    // Prepare document data for the user info modal
+    const documentData = {
+        buyerName: nom,
+        prenom: prenom,
+        trancheIndex: 'Espèce',
+        trancheAmount: pendingEspeceData.acceptedEspece,
+        trancheDate: new Date().toISOString().split('T')[0],
+        trancheType: 'espece',
+        documentType: 'Reçu de Versement',
+        documentTitle: 'REÇU DE VERSEMENT',
+        apartmentType: 'Appartement',
+        projectTitle: projectTitle,
+        isEspeceWarningModal: true // Flag to identify this comes from espece warning modal
+    };
     
-    // After showing the receipt, check if there's remaining versement amount
-    setTimeout(() => {
-        if (pendingEspeceData.remainingVersement > 0) {
-            // Show proper modal asking if user wants to print ordre de versement
-            showOrdreVersementConfirmModal();
-        } else {
-            // No remaining amount, splitting already handled - no need to call acceptEspeceAdjustment again
-            console.log('✅ Receipt printed, no remaining versement');
-        }
-    }, 1000);
+    // Show user info modal to collect additional details
+    showUserInfoModal(documentData);
 }
 
 function printOrdreVersementForEspece() {
@@ -4600,7 +4750,7 @@ function skipOrdreVersementPrint() {
     }, 100);
 }
 
-function printOrdreVersementForRemaining() {
+async function printOrdreVersementForRemaining() {
     if (!pendingEspeceData) return;
     
     console.log('🖨️ Printing Ordre de Versement for remaining amount');
@@ -4611,7 +4761,55 @@ function printOrdreVersementForRemaining() {
     const prenom = document.getElementById('prenom').value || '';
     const bloc = document.getElementById('bloc').value || '';
     const logtNum = document.getElementById('logtNum').value || '';
-    const typeLogt = document.getElementById('typeLogt').value || '';
+    let typeLogt = document.getElementById('typeLogt').value || 'Appartement';
+    
+    // Get buyer ID to fetch their apartment type from project_info
+    const form = document.getElementById('addBuyerForm');
+    const buyerId = form?.getAttribute('data-buyer-id');
+    
+    console.log('🔍 Buyer ID for apartment type fetch:', buyerId);
+    
+    if (buyerId) {
+        try {
+            console.log('📡 Fetching buyer data for apartment type...');
+            // Fetch buyer data to get their type_logt
+            const buyerData = await invoke('get_buyer', { buyerId: parseInt(buyerId) });
+            console.log('👤 Buyer data:', buyerData);
+            
+            if (buyerData && buyerData.type_logt) {
+                console.log('🏠 Found buyer type_logt:', buyerData.type_logt);
+                // Fetch project info to get apartment type details
+                const projectId = getCurrentProjectId();
+                console.log('🏗️ Project ID:', projectId);
+                const projectInfo = await fetchProjectApartmentTypes(projectId);
+                console.log('📋 Project info:', projectInfo);
+                
+                // Find the apartment type that matches the buyer's type_logt
+                const apartmentTypeInfo = projectInfo.find(info => info.type_logt === buyerData.type_logt);
+                if (apartmentTypeInfo) {
+                    typeLogt = apartmentTypeInfo.type_logt;
+                    console.log('✅ Found matching apartment type:', typeLogt);
+                } else {
+                    console.log('⚠️ No matching apartment type found in project info');
+                    // Try using the buyer's type_logt directly
+                    typeLogt = buyerData.type_logt;
+                    console.log('🔄 Using buyer type_logt directly:', typeLogt);
+                }
+            } else {
+                console.log('⚠️ No type_logt found in buyer data');
+            }
+        } catch (error) {
+            console.error('❌ Error fetching apartment type from project_info:', error);
+            // Fall back to form data if database fetch fails
+            typeLogt = document.getElementById('typeLogt').value || 'Appartement';
+        }
+    } else {
+        console.log('ℹ️ No buyer ID found, using form data');
+        // For new buyers, get from form
+        typeLogt = document.getElementById('typeLogt').value || 'Appartement';
+    }
+    
+    console.log('🏠 Final apartment type:', typeLogt);
     
     // Generate reference number (current date + random)
     const currentDate = new Date();
@@ -4620,8 +4818,15 @@ function printOrdreVersementForRemaining() {
     // Get current project title
     const projectTitle = document.getElementById('pageTitle')?.textContent || '136 logements promotionnels à EL TARF';
     
-    // Create and show printable order document
-    const orderWindow = window.open('', '_blank', 'width=800,height=600');
+    // Create and show printable order document - fullscreen and centered
+    const screenWidth = window.screen.availWidth;
+    const screenHeight = window.screen.availHeight;
+    const left = (screenWidth - screenWidth) / 2;
+    const top = (screenHeight - screenHeight) / 2;
+    
+    const orderWindow = window.open('', '_blank', 
+        `width=${screenWidth},height=${screenHeight},left=${left},top=${top},scrollbars=yes,resizable=yes`);
+    
     orderWindow.document.write(`
         <!DOCTYPE html>
         <html lang="fr">
@@ -4650,12 +4855,6 @@ function printOrdreVersementForRemaining() {
                     font-size: 12px;
                     margin: 3px 0;
                 }
-                .ref-date-section {
-                    display: flex;
-                    justify-content: space-between;
-                    margin: 25px 0;
-                    font-size: 12px;
-                }
                 .document-title {
                     text-align: center;
                     font-size: 18px;
@@ -4668,36 +4867,13 @@ function printOrdreVersementForRemaining() {
                     font-size: 13px;
                     line-height: 1.6;
                 }
-                .client-info {
-                    margin: 20px 0;
-                }
                 .amount-section {
                     margin: 25px 0;
-                    text-align: center;
-                }
-                .amount-box {
-                    border: 2px solid #000;
-                    padding: 15px;
-                    margin: 15px auto;
-                    max-width: 400px;
                 }
                 .amount-large {
                     font-size: 16px;
                     font-weight: bold;
                     margin-bottom: 10px;
-                }
-                .amount-words {
-                    font-size: 13px;
-                    font-style: italic;
-                }
-                .signature-section {
-                    margin-top: 60px;
-                    text-align: right;
-                    font-size: 12px;
-                }
-                .underline {
-                    text-decoration: underline;
-                    font-weight: bold;
                 }
                 .observations {
                     border: 2px solid #000;
@@ -4711,13 +4887,10 @@ function printOrdreVersementForRemaining() {
                     margin-bottom: 15px;
                 }
                 .footer {
-                    margin-top: 50px;
+                    margin-top: 30px;
                     display: flex;
                     justify-content: space-between;
                     align-items: flex-end;
-                }
-                .date-location {
-                    text-align: left;
                 }
                 .signature-section {
                     text-align: center;
@@ -4750,7 +4923,7 @@ function printOrdreVersementForRemaining() {
             <div class="ref-number">
                 N° REF : ...... ${refNumber}
             </div>            <div class="document-title">
-                ORDRE DE VERSEMENT
+                ORDRE DE VIREMENT
             </div>            <div class="content">
                 <p><strong>Mr : ${nom.toUpperCase()} ${prenom.toUpperCase()}</strong></p>
                 
@@ -4765,7 +4938,7 @@ function printOrdreVersementForRemaining() {
                     <p><strong>(En lettres) :</strong> ${numberToFrenchWords(pendingEspeceData.remainingVersement)} Dinars Algériens</p>
                 </div>
                 
-                <p>Représentant le paiement de la première tranche de réservation d'un appartement type <strong>${typeLogt}</strong> du projet ${(projectTitle || '136 logements promotionnels à EL TARF').replace(/\s*-\s*Buyers\s*$/i, '')}</p>
+                <p>Représentant le paiement de la première tranche de réservation d'un <strong>${typeLogt}</strong> du projet ${(projectTitle || '136 logements promotionnels à EL TARF').replace(/\s*-\s*Buyers\s*$/i, '')} à EL TARF</p>
             </div>            <div class="observations">
                 <div class="observations-title">Observations :</div>
                 <p>- Valable 15 jours, si le réservataire dépasse ce délai</p>
@@ -4786,26 +4959,25 @@ function printOrdreVersementForRemaining() {
             </div>
             
             <script>
-                let printTriggered = false;
-                
                 window.onload = function() {
-                    printTriggered = true;
                     window.print();
                 }
                 
-                window.onafterprint = function() {
-                    // Close window after 200ms delay (whether printed or cancelled)
-                    setTimeout(() => {
-                        window.close();
-                    }, 200);
-                }
+                // Handle print dialog events but don't auto-close
+                window.addEventListener('beforeprint', function() {
+                    console.log('Print dialog opened');
+                });
                 
-                window.onbeforeunload = function() {
-                    // Also close if user navigates away or closes manually
-                    if (printTriggered) {
+                window.addEventListener('afterprint', function() {
+                    console.log('Print dialog closed - window stays open');
+                });
+                
+                // Optional: Add keyboard shortcut to close window manually
+                window.addEventListener('keydown', function(event) {
+                    if (event.key === 'Escape') {
                         window.close();
                     }
-                }
+                });
             </script>
         </body>
         </html>
@@ -4960,18 +5132,38 @@ function updateTrancheTypeOptions() {
     const remise = parseFloat(remiseEl.value) || 0;
     const prixUnitaire = currentPrixUnitaire || 0;
     
-    // Calculate the reduced total price after remise (direct value)
+    // Check if this is a unit purchase (no profit margin)
+    const isUnitPurchase = prixTotale === (surface * prixUnitaire);
+    
+    const tranchesContainer = document.getElementById('tranchesContainer');
+    
+    if (isUnitPurchase) {
+        // Unit purchase - no restrictions, enable all options
+        console.log('🏠 UNIT PURCHASE - Enabling all payment options');
+        
+        if (tranchesContainer) {
+            Array.from(tranchesContainer.children).forEach(row => {
+                const typeSelect = row.querySelector('select');
+                
+                if (typeSelect) {
+                    const especeOption = typeSelect.querySelector('option[value="espece"]');
+                    if (especeOption) {
+                        especeOption.disabled = false;
+                        especeOption.title = '';
+                    }
+                }
+            });
+        }
+        return; // Exit early for unit purchases
+    }
+    
+    // Regular purchase with profit margin - apply normal limits
     const reducedTotalPrice = prixTotale - (remise || 0);
-    
-    // Calculate max versement (unchanged)
     const maxVersement = prixUnitaire * surface;
-    
-    // Calculate max espèce from the reduced total price
     const maxEspece = reducedTotalPrice - maxVersement;
     
     // Calculate current total espèce amount
     let currentEspeceTotal = 0;
-    const tranchesContainer = document.getElementById('tranchesContainer');
     
     if (tranchesContainer) {
         Array.from(tranchesContainer.children).forEach(row => {
@@ -5693,7 +5885,8 @@ function generateRecuWithUserInfo() {
         documentType,
         documentTitle,
         apartmentType,
-        projectTitle
+        projectTitle,
+        isEspeceWarningModal
     } = pendingDocumentData;
     
     try {
@@ -5713,6 +5906,27 @@ function generateRecuWithUserInfo() {
         
         // Close modal after successful generation
         closeUserInfoModal();
+        
+        // If this came from the espece warning modal, continue with the flow
+        if (isEspeceWarningModal && pendingEspeceData) {
+            console.log('📋 Continuing espece warning modal flow after recu generation');
+            
+            // Check if there's remaining versement amount and we're not from espèce warning modal
+            setTimeout(() => {
+                if (pendingEspeceData.remainingVersement > 0) {
+                    if (pendingEspeceData.fromEspeceWarning) {
+                        // Coming from espèce warning flow - show ordre modal after reçu is printed
+                        console.log('✅ Receipt printed from espèce warning flow, showing ordre de versement modal');
+                    } else {
+                        console.log('✅ Receipt printed, no espèce warning flow context');
+                    }
+                    showOrdreVersementConfirmModal();
+                } else {
+                    // No remaining amount, splitting already handled
+                    console.log('✅ Receipt printed, no remaining versement');
+                }
+            }, 1000);
+        }
         
     } catch (error) {
         console.error('Error generating recu with user info:', error);
