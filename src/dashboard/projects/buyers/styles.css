@@ -497,10 +497,14 @@ td[rowspan] {
 }
 
 .form-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 15px;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    gap: 20px !important;
     margin-top: 25px;
+    flex-wrap: wrap !important;
+    width: 100% !important;
+    min-height: 60px !important;
 }
 
 /* Button styles */
@@ -532,6 +536,37 @@ td[rowspan] {
 
 .btn-cancel:hover {
     background-color: #c82333;
+}
+
+/* Print Reservation Button */
+.btn-print-reservation {
+    background-color: #ff0000 !important; /* Red for debugging */
+    color: white !important;
+    border: 2px solid #138496 !important;
+    padding: 15px 25px !important;
+    border-radius: 4px;
+    font-size: 16px !important;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin: 0 10px !important;
+    display: inline-block !important;
+    align-items: center;
+    gap: 8px;
+    min-width: 200px !important;
+    justify-content: center;
+    height: 50px !important;
+    z-index: 9999 !important;
+    position: relative !important;
+}
+
+.btn-print-reservation:hover {
+    background-color: #138496;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.btn-print-reservation i {
+    font-size: 14px;
 }
 
 /* Success Modal Styles */
@@ -1935,7 +1970,168 @@ header {
     }
 }
 
-/* 🚨 Espèce Warning Modal Styles */
+/* � Reservation Info Modal Styles */
+.reservation-info-modal {
+    max-width: 600px;
+    width: 90%;
+    direction: rtl;
+    text-align: right;
+}
+
+.reservation-info-modal .modal-header {
+    background: #e8f4fd;
+    border-bottom: 1px solid #bee5eb;
+    padding: 15px 20px;
+    border-radius: 8px 8px 0 0;
+    direction: rtl;
+}
+
+.reservation-info-modal .modal-header h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #0c5460;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    direction: rtl;
+}
+
+.reservation-info-modal .modal-body {
+    padding: 20px;
+    direction: rtl;
+}
+
+.reservation-info-modal .modal-description {
+    margin-bottom: 20px;
+    color: #495057;
+    font-size: 14px;
+    line-height: 1.5;
+    direction: rtl;
+    text-align: right;
+}
+
+.reservation-info-form .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.reservation-info-form .form-group {
+    display: flex;
+    flex-direction: column;
+    direction: rtl;
+}
+
+.reservation-info-form .form-group:last-child .form-row {
+    grid-template-columns: 1fr;
+}
+
+.reservation-info-form label {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    direction: rtl;
+}
+
+.reservation-info-form label i {
+    color: #007bff;
+    width: 16px;
+}
+
+.reservation-info-form input {
+    padding: 10px 12px;
+    border: 2px solid #e9ecef;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    direction: rtl;
+    text-align: right;
+}
+
+.reservation-info-form input:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.reservation-info-form input::placeholder {
+    color: #6c757d;
+    direction: rtl;
+}
+
+.reservation-info-modal .modal-footer {
+    background: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+    padding: 15px 20px;
+    border-radius: 0 0 8px 8px;
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    direction: rtl;
+}
+
+.reservation-info-modal .btn-generate {
+    background: #007bff;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.reservation-info-modal .btn-generate:hover {
+    background: #0056b3;
+    transform: translateY(-1px);
+}
+
+.reservation-info-modal .btn-cancel {
+    background: #6c757d;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background-color 0.3s ease;
+}
+
+.reservation-info-modal .btn-cancel:hover {
+    background: #5a6268;
+}
+
+/* Responsive design for reservation modal */
+@media (max-width: 768px) {
+    .reservation-info-form .form-row {
+        grid-template-columns: 1fr;
+    }
+    
+    .reservation-info-modal .modal-footer {
+        flex-direction: column-reverse;
+    }
+    
+    .reservation-info-modal .btn-generate,
+    .reservation-info-modal .btn-cancel {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* �🚨 Espèce Warning Modal Styles */
 .warning-modal {
     max-width: 550px;
     width: 90%;

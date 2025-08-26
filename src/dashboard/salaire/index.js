@@ -123,7 +123,9 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (event.target === modal) {
             modal.style.display = 'none';
         }
-    });    // Handle project selection change
+    });    
+    
+    // Handle project selection change
     projectSelector.addEventListener('change', async function() {
         const selectedProject = this.value;
         if (selectedProject) {
@@ -143,7 +145,8 @@ document.addEventListener('DOMContentLoaded', async function() {
             const nombreHeurx = parseFloat(document.getElementById('nombreHeurx').value);
             const travaux_attache = parseInt(document.getElementById('travauxAttache').value) || 0;
             const salaire = (prix_jour * nombre_des_jours) + (prix_hour * nombreHeurx) + travaux_attache;
-            const acompte = parseFloat(document.getElementById('acompte').value);            const net_a_payer = salaire - acompte;
+            const acompte = parseFloat(document.getElementById('acompte').value);            
+            const net_a_payer = salaire - acompte;
             const observation = document.getElementById('observation').value;
             
             try {

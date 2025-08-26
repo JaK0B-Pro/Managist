@@ -1669,6 +1669,15 @@ document.addEventListener('DOMContentLoaded', function () {
         document.querySelector('#buyerModal h2').textContent = 'Add New Buyer';
         document.getElementById('addBuyerBtn').textContent = 'Add Buyer';
         
+        // Reset prix totale field note to default
+        const priceInput = document.getElementById('prixTotale');
+        if (priceInput) {
+            const fieldNote = priceInput.nextElementSibling;
+            if (fieldNote && fieldNote.classList.contains('field-note')) {
+                fieldNote.textContent = 'Auto-filled based on apartment type (editable)';
+            }
+        }
+        
         // Populate bloc dropdown
         await populateBlocDropdown();
         
@@ -1891,6 +1900,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 nom: document.getElementById('nom')?.value?.trim() || '',
                 prenom: document.getElementById('prenom')?.value?.trim() || '',
                 type_logt: document.getElementById('typeLogt')?.value?.trim() || '',
+                type_of_logt: document.getElementById('typeOfLogt')?.value?.trim() || '',
                 surface: document.getElementById('surface')?.value?.trim() || '',
                 date: document.getElementById('date')?.value || '',
                 prix_totale: parseFloat(document.getElementById('prixTotale')?.value || 0),
@@ -2463,6 +2473,12 @@ async function editBuyer(buyerId) {
         document.getElementById('nom').value = buyer.nom || '';
         document.getElementById('prenom').value = buyer.prenom || '';
         
+        // Set the type of logt field
+        const typeOfLogtSelect = document.getElementById('typeOfLogt');
+        if (typeOfLogtSelect && buyer.type_of_logt) {
+            typeOfLogtSelect.value = buyer.type_of_logt;
+        }
+        
         // For editing, we need to handle apartment type differently
         // First select the apartment type, then manually set surface and price if needed
         const typeSelect = document.getElementById('typeLogt');
@@ -2575,6 +2591,13 @@ async function editBuyer(buyerId) {
         // Update modal title and button
         document.querySelector('#buyerModal h2').textContent = 'Edit Buyer';
         document.getElementById('addBuyerBtn').textContent = 'Update Buyer';
+        
+        // Ensure print reservation button is visible and store buyer data
+        const printReservationBtn = document.getElementById('printReservationBtn');
+        if (printReservationBtn) {
+            printReservationBtn.style.display = 'inline-flex';
+            printReservationBtn.setAttribute('data-buyer-id', buyerId);
+        }
         
         // Ensure prix totale is always editable in edit mode
         const priceInput = document.getElementById('prixTotale');
@@ -4294,6 +4317,7 @@ async function processFormSubmission(formData, isEdit, buyerId, submitBtn, origi
         const nomEl = document.getElementById('nom');
         const prenomEl = document.getElementById('prenom');
         const telephoneEl = document.getElementById('telephone');
+        const typeOfLogtEl = document.getElementById('typeOfLogt');
         const typeLogtEl = document.getElementById('typeLogt');
         const surfaceEl = document.getElementById('surface');
         const prixTotaleEl = document.getElementById('prixTotale');
@@ -4320,6 +4344,7 @@ async function processFormSubmission(formData, isEdit, buyerId, submitBtn, origi
             prenom: prenomEl.value.trim(),
             telephone: telephoneEl.value.trim(),
             typeLogt: typeLogtEl.value,
+            type_of_logt: document.getElementById('typeOfLogt').value,
             surface: parseFloat(surfaceEl.value),
             prixTotale: parseFloat(prixTotaleEl.value),
             remise: parseFloat(remiseEl?.value || 0),
@@ -5975,8 +6000,441 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
+// Print Reservation Document Function
+async function printReservationDocument() {
+    // Instead of generating the document immediately, show the info modal
+    showReservationInfoModal();
+}
+
+// Show Reservation Info Modal
+function showReservationInfoModal() {
+    const modal = document.getElementById('reservationInfoModal');
+    if (modal) {
+        modal.style.display = 'block';
+        
+        // Focus on first input
+        setTimeout(() => {
+            const firstInput = modal.querySelector('input');
+            if (firstInput) {   
+                firstInput.focus();
+            }
+        }, 100);
+    }
+}
+
+// Close Reservation Info Modal
+function closeReservationInfoModal() {
+    const modal = document.getElementById('reservationInfoModal');
+    if (modal) {
+        modal.style.display = 'none';
+        
+        // Clear form
+        const form = document.getElementById('reservationInfoForm');
+        if (form) {
+            form.reset();
+        }
+    }
+}
+
+// Generate Reservation with Additional Info
+function generateReservationWithInfo() {
+    try {
+        console.log('🔍 Starting reservation document generation...');
+        
+        // Validate required fields with unique IDs
+        const requiredFields = ['reservationBirthDate', 'reservationBirthPlace', 'reservationNationalId', 'reservationIdIssueDate', 'reservationIdIssuePlace'];
+        let isValid = true;
+        let missingFields = [];
+        
+        for (const fieldId of requiredFields) {
+            const field = document.getElementById(fieldId);
+            console.log(`Checking field ${fieldId}:`, field ? `"${field.value}"` : 'FIELD NOT FOUND');
+            
+            if (!field) {
+                console.error(`❌ Field with ID "${fieldId}" not found in DOM!`);
+                isValid = false;
+                missingFields.push(fieldId + ' (not found)');
+            } else if (!field.value || !field.value.trim()) {
+                console.error(`❌ Field "${fieldId}" is empty or only whitespace`);
+                isValid = false;
+                missingFields.push(fieldId + ' (empty)');
+                field.style.borderColor = '#dc3545';
+                if (field.focus) field.focus();
+            } else {
+                console.log(`✅ Field "${fieldId}" is valid: "${field.value.trim()}"`);
+                field.style.borderColor = '#e9ecef';
+            }
+        }
+        
+        if (!isValid) {
+            console.error('❌ Validation failed. Missing fields:', missingFields);
+            alert('يرجى ملء جميع الحقول المطلوبة\nMissing: ' + missingFields.join(', '));
+            return;
+        }
+        
+        console.log('✅ All fields validated successfully!');
+        
+        // Collect additional info
+        const additionalInfo = {
+            birthDate: document.getElementById('reservationBirthDate').value.trim(),
+            birthPlace: document.getElementById('reservationBirthPlace').value.trim(),
+            nationalId: document.getElementById('reservationNationalId').value.trim(),
+            idIssueDate: document.getElementById('reservationIdIssueDate').value.trim(),
+            idIssuePlace: document.getElementById('reservationIdIssuePlace').value.trim()
+        };
+        
+        // Get buyer data from the form
+        const buyerData = {
+            nom: document.getElementById('nom')?.value || '',
+            prenom: document.getElementById('prenom')?.value || '',
+            bloc: document.getElementById('bloc')?.value || '',
+            niveau: document.getElementById('niveau')?.value || '',
+            logtNum: document.getElementById('logtNum')?.value || '',
+            typeLogt: document.getElementById('typeLogt')?.value || '',
+            type_of_logt: document.getElementById('typeOfLogt')?.value || '',
+            surface: document.getElementById('surface')?.value || '',
+            prixTotale: document.getElementById('prixTotale')?.value || '',
+            date: document.getElementById('date')?.value || new Date().toISOString().split('T')[0],
+            payments: {} // Initialize payments object
+        };
+
+        // Collect tranches data from form
+        const tranchesContainer = document.getElementById('tranchesContainer');
+        if (tranchesContainer) {
+            Array.from(tranchesContainer.children).forEach((row, index) => {
+                const amountInput = row.querySelector('input[name^="tranche_"]');
+                const dateInput = row.querySelector('input[type="date"]');
+                const typeSelect = row.querySelector('select[name*="type"]');
+                
+                if (amountInput && amountInput.value) {
+                    const amount = parseFloat(amountInput.value) || 0;
+                    const date = dateInput?.value || null;
+                    const type = typeSelect?.value || 'versement';
+                    
+                    if (amount > 0) {
+                        buyerData.payments[`T${index}`] = {
+                            amount: amount,
+                            date: date,
+                            type: type
+                        };
+                    }
+                }
+            });
+        }
+
+        // Create print content with additional info
+        const printContent = generateReservationDocument(buyerData, additionalInfo);
+        
+        // Create print window
+        const printWindow = window.open('', '_blank', 'width=800,height=600');
+        if (!printWindow) {
+            alert('تعذر فتح نافذة الطباعة. يرجى التأكد من السماح للنوافذ المنبثقة.');
+            return;
+        }
+        
+        printWindow.document.write(printContent);
+        printWindow.document.close();
+        
+        // Print after content loads
+        printWindow.onload = function() {
+            printWindow.focus();
+            printWindow.print();
+            
+            // Close print window after printing
+            printWindow.onafterprint = function() {
+                printWindow.close();
+            };
+        };
+        
+        // Close the modal
+        closeReservationInfoModal();
+        
+        console.log('Reservation document generated with additional info:', additionalInfo);
+        
+    } catch (error) {
+        console.error('Error generating reservation with info:', error);
+        alert('حدث خطأ في إنشاء الوثيقة. يرجى المحاولة مرة أخرى.');
+    }
+}
+
+// Arabic Number to Text Conversion
+function convertNumberToArabicText(num) {
+    if (num === 0) return "صفر";
+    
+    const ones = ["", "واحد", "اثنان", "ثلاثة", "أربعة", "خمسة", "ستة", "سبعة", "ثمانية", "تسعة"];
+    const tens = ["", "", "عشرون", "ثلاثون", "أربعون", "خمسون", "ستون", "سبعون", "ثمانون", "تسعون"];
+    const teens = ["عشرة", "أحد عشر", "اثنا عشر", "ثلاثة عشر", "أربعة عشر", "خمسة عشر", "ستة عشر", "سبعة عشر", "ثمانية عشر", "تسعة عشر"];
+    const hundreds = ["", "مائة", "مائتان", "ثلاثمائة", "أربعمائة", "خمسمائة", "ستمائة", "سبعمائة", "ثمانمائة", "تسعمائة"];
+    
+    function convertHundreds(n) {
+        let result = "";
+        
+        const h = Math.floor(n / 100);
+        const t = Math.floor((n % 100) / 10);
+        const o = n % 10;
+        
+        if (h > 0) {
+            result += hundreds[h];
+            if (t > 0 || o > 0) result += " و ";
+        }
+        
+        if (t === 1) {
+            result += teens[o];
+        } else {
+            if (t > 0) {
+                result += tens[t];
+                if (o > 0) result += " و ";
+            }
+            if (o > 0 && t !== 1) {
+                result += ones[o];
+            }
+        }
+        
+        return result.trim();
+    }
+    
+    if (num < 1000) {
+        return convertHundreds(num);
+    } else if (num < 1000000) {
+        const thousands = Math.floor(num / 1000);
+        const remainder = num % 1000;
+        let result = "";
+        
+        if (thousands === 1) {
+            result = "ألف";
+        } else if (thousands === 2) {
+            result = "ألفان";
+        } else if (thousands < 11) {
+            result = convertHundreds(thousands) + " آلاف";
+        } else {
+            result = convertHundreds(thousands) + " ألف";
+        }
+        
+        if (remainder > 0) {
+            result += " و " + convertHundreds(remainder);
+        }
+        
+        return result.trim();
+    } else if (num < 1000000000) {
+        const millions = Math.floor(num / 1000000);
+        const remainder = num % 1000000;
+        let result = "";
+        
+        if (millions === 1) {
+            result = "مليون";
+        } else if (millions === 2) {
+            result = "مليونان";
+        } else if (millions < 11) {
+            result = convertHundreds(millions) + " ملايين";
+        } else {
+            result = convertHundreds(millions) + " مليون";
+        }
+        
+        if (remainder >= 1000) {
+            const thousands = Math.floor(remainder / 1000);
+            const ones = remainder % 1000;
+            if (thousands === 1) {
+                result += " و ألف";
+            } else if (thousands === 2) {
+                result += " و ألفان";
+            } else {
+                result += " و " + convertHundreds(thousands) + " ألف";
+            }
+            if (ones > 0) {
+                result += " و " + convertHundreds(ones);
+            }
+        } else if (remainder > 0) {
+            result += " و " + convertHundreds(remainder);
+        }
+        
+        return result.trim();
+    }
+    
+    return num.toString(); // Fallback for very large numbers
+}
+
+// Generate Reservation Document HTML
+function generateReservationDocument(buyerData, additionalInfo = {}) {
+    const currentDate = new Date().toLocaleDateString('ar-DZ');
+    
+    // Get first tranche amount
+    let firstTrancheAmount = 0;
+    if (buyerData.payments && typeof buyerData.payments === 'object') {
+        // Check for T0 first, then T1, etc.
+        for (let i = 0; i <= 10; i++) {
+            const trancheKey = `T${i}`;
+            if (buyerData.payments[trancheKey]) {
+                const trancheData = buyerData.payments[trancheKey];
+                if (typeof trancheData === 'object' && trancheData.amount > 0) {
+                    firstTrancheAmount = trancheData.amount;
+                    break;
+                } else if (typeof trancheData === 'number' && trancheData > 0) {
+                    firstTrancheAmount = trancheData;
+                    break;
+                }
+            }
+        }
+    }
+    
+    // If no first tranche found, use a portion of total price as fallback
+    if (firstTrancheAmount === 0 && buyerData.prixTotale) {
+        firstTrancheAmount = parseFloat(buyerData.prixTotale) * 0.2; // 20% as default first tranche
+    }
+    
+    const amountInArabic = convertNumberToArabicText(Math.floor(firstTrancheAmount));
+    
+    return `
+    <!DOCTYPE html>
+    <html dir="rtl" lang="ar">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            @page {
+                margin: 15mm;
+                size: A4;
+            }
+            body {
+                font-family: 'Arial', sans-serif;
+                line-height: 1.6;
+                margin: 0;
+                padding: 15px;
+                direction: rtl;
+                text-align: right;
+                font-size: 14px;
+            }
+            .header {
+                text-align: center;
+                margin-bottom: 20px;
+                border-bottom: 2px solid #333;
+                padding-bottom: 12px;
+            }
+            .company-info {
+                font-size: 14px;
+                line-height: 1.4;
+            }
+            .document-title {
+                font-size: 20px;
+                font-weight: bold;
+                margin: 20px 0;
+                text-align: center;
+                text-decoration: underline;
+            }
+            .content {
+                font-size: 16px;
+                line-height: 1.6;
+                margin: 15px 0;
+            }
+            .buyer-details {
+                background-color: #f9f9f9;
+                padding: 6px;
+                border-radius: 5px;
+                margin: 15px 0;
+                font-size: 16px;
+            }
+            .signature-section {
+                margin-top: 30px;
+                display: flex;
+                justify-content: space-between;
+            }
+            .signature-box {
+                text-align: center;
+                width: 200px;
+            }
+            .date {
+                text-align: left;
+                margin-top: 20px;
+                font-size: 12px;
+            }
+            .amount {
+                font-weight: bold;
+                color: #2c5aa0;
+                font-size: 16px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <div class="company-info">
+                <strong>مؤسسة الترقية العقارية</strong><br>
+                فرطاس يزيد<br>
+                عنوان الترقية: حي 20 وحدة 56 مقابل مركز التكوين المهني<br>
+                بلدية : دائرة ، ولاية الطارف<br>
+                رقم الاعتماد الوزاري : 3601P3895<br>
+                السجل التجاري: 36/01-3423747 106<br>
+                رقم الهاتف: 038 30 17 74<br>
+                التاريخ: ${currentDate}
+            </div>
+        </div>
+
+        <div class="document-title">
+            إشهـــــــــــــــاد
+        </div>
+
+        <div class="content">
+            <p>أنا الممضي أسفله السيد فرطاس يزيد صاحب مؤسسة الترقية العقارية الكائن مركزها بالعنوان التالي:</p>
+            <p>حي 20 أوت 56 مقابل مركز التكوين المهني بالطارف مركز</p>
+            
+            <p><strong>أشهد بأنني استلمت بتاريخ</strong> ${buyerData.date} <strong>من السيد:</strong> ${buyerData.prenom} ${buyerData.nom}</p>
+            
+            <div class="buyer-details">
+                <p><strong>المولــــــود بتـــــاريخ:</strong> ${additionalInfo.birthDate || '_______________'} <strong>بـــ:</strong> ${additionalInfo.birthPlace || '_______________'}</p>
+                <p><strong>الحامل لبطاقة الهوية رقم:</strong> ${additionalInfo.nationalId || '_______________'}</p>
+                <p><strong>الصادرة عن دائرة:</strong> ${additionalInfo.idIssuePlace || '_______________'} <strong>بتاريخ:</strong> ${additionalInfo.idIssueDate || '_______________'}</p>
+                <p><strong>مبلغا ماليا قدره:</strong> <span class="amount">${firstTrancheAmount.toLocaleString()} د.ج</span></p>
+                <div class="amount-in-words"><strong> (بالأحرف) ${amountInArabic} دينار جزائري</strong></div>
+                <p><strong>مدفوعا لدى بنك الفلاحة والتنمية الريفية وفقا لوصل الدفع رقم: VE 2-0117 بتاريخ: 2016/04/26</strong></p>
+            </div>
+
+            <p><strong>و ذلك لغرض تخصيص شقة من نوع ${buyerData.typeLogt} , و المترتبة عن انجاز مشروع 136 سكن ترقوي المتواجد ببلدية الطارف</strong></p>
+
+            <p><strong>أن المبلغ المذكور يعد تسبيقا على ثمن بيع الشقة و الذي سوف يتم حسابه لاحقا بعد الانتهاء من جميع عمليات البناء و التهيئة.</strong></p>
+            <p><strong>ان تحديد الشقة المعنية يبقى مؤقت و قابل لأي تعديل إلى حين المصادقة على مخطط التجزئة من قبل المصالح المخولة.</strong></p>
+            <p><strong>الطارف في:</strong> ${currentDate}</p>
+        </div>
+
+        <div class="signature-section">
+            <div class="signature-box">
+                <p><strong>الإمضاء:</strong></p>
+            </div>
+        </div>
+    </body>
+    </html>
+    `;
+}
+
+// Add event listener for print reservation button
+document.addEventListener('DOMContentLoaded', function() {
+    const printReservationBtn = document.getElementById('printReservationBtn');
+    const printReservationBtn2 = document.getElementById('printReservationBtn2');
+    
+    console.log('Searching for print buttons...');
+    console.log('Button 1:', printReservationBtn);
+    console.log('Button 2:', printReservationBtn2);
+    
+    if (printReservationBtn) {
+        console.log('Adding event listener to button 1');
+        printReservationBtn.addEventListener('click', showReservationInfoModal);
+    }
+    
+    if (printReservationBtn2) {
+        console.log('Adding event listener to button 2');
+        printReservationBtn2.addEventListener('click', function() {
+            console.log('Print button 2 clicked!');
+            showReservationInfoModal();
+        });
+    }
+    
+    if (!printReservationBtn && !printReservationBtn2) {
+        console.error('NO PRINT BUTTONS FOUND!');
+    }
+});
+
 // Make functions globally accessible
 window.showUserInfoModal = showUserInfoModal;
 window.closeUserInfoModal = closeUserInfoModal;
 window.generateRecuWithUserInfo = generateRecuWithUserInfo;
+window.showReservationInfoModal = showReservationInfoModal;
+window.closeReservationInfoModal = closeReservationInfoModal;
+window.generateReservationWithInfo = generateReservationWithInfo;
 

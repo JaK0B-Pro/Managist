@@ -164,6 +164,7 @@ pub struct Buyer {
     nom: String,
     prenom: String,
     type_logt: String,
+    type_of_logt: String,
     surface: String,
     date: NaiveDate,
     prix_totale: Decimal,
@@ -183,6 +184,7 @@ pub struct BuyerInput {
     nom: String,
     prenom: String,
     type_logt: String,
+    type_of_logt: String,
     surface: String,
     date: String,
     prix_totale: f64,
@@ -717,7 +719,7 @@ async fn add_buyer_to_database(pool: tauri::State<'_, PgPool>, buyer: BuyerInput
     
     debug_println!("Final price: {}, Is sold: {}, Payment status: {}", final_price, is_sold, payment_status);
 
-    let query = "INSERT INTO buyers (project_id, bloc, niveau, logt_num, nom, prenom, type_logt, surface, date, prix_totale, remise, payments, payment_status, total_paid, is_sold) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)";
+    let query = "INSERT INTO buyers (project_id, bloc, niveau, logt_num, nom, prenom, type_logt, type_of_logt, surface, date, prix_totale, remise, payments, payment_status, total_paid, is_sold) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)";
 
     sqlx::query(query)
         .bind(&buyer.project_id)
@@ -727,6 +729,7 @@ async fn add_buyer_to_database(pool: tauri::State<'_, PgPool>, buyer: BuyerInput
         .bind(&buyer.nom)
         .bind(&buyer.prenom)
         .bind(&buyer.type_logt)
+        .bind(&buyer.type_of_logt)
         .bind(&buyer.surface)
         .bind(date)
         .bind(Decimal::from_f64_retain(buyer.prix_totale).unwrap_or_default())
@@ -773,6 +776,7 @@ async fn get_buyers_by_project(pool: tauri::State<'_, PgPool>, project_id: i32) 
             nom: row.try_get("nom").map_err(|e| e.to_string())?,
             prenom: row.try_get("prenom").map_err(|e| e.to_string())?,
             type_logt: row.try_get("type_logt").map_err(|e| e.to_string())?,
+            type_of_logt: row.try_get("type_of_logt").unwrap_or_else(|_| "".to_string()),
             surface: row.try_get("surface").map_err(|e| e.to_string())?,
             date: row.try_get("date").map_err(|e| e.to_string())?,
             prix_totale: row.try_get("prix_totale").map_err(|e| e.to_string())?,
@@ -868,7 +872,7 @@ async fn edit_buyer_in_database(pool: tauri::State<'_, PgPool>, buyer_id: i32, b
     let is_sold = total_paid >= final_price;
     let payment_status = if is_sold { "paid" } else if total_paid > 0.0 { "partial" } else { "unpaid" };
 
-    let query = "UPDATE buyers SET project_id = $1, bloc = $2, niveau = $3, logt_num = $4, nom = $5, prenom = $6, type_logt = $7, surface = $8, date = $9, prix_totale = $10, remise = $11, payments = $12, payment_status = $13, total_paid = $14, is_sold = $15 WHERE id = $16";
+    let query = "UPDATE buyers SET project_id = $1, bloc = $2, niveau = $3, logt_num = $4, nom = $5, prenom = $6, type_logt = $7, type_of_logt = $8, surface = $9, date = $10, prix_totale = $11, remise = $12, payments = $13, payment_status = $14, total_paid = $15, is_sold = $16 WHERE id = $17";
 
     sqlx::query(query)
         .bind(&buyer.project_id)
@@ -878,6 +882,7 @@ async fn edit_buyer_in_database(pool: tauri::State<'_, PgPool>, buyer_id: i32, b
         .bind(&buyer.nom)
         .bind(&buyer.prenom)
         .bind(&buyer.type_logt)
+        .bind(&buyer.type_of_logt)
         .bind(&buyer.surface)
         .bind(date)
         .bind(Decimal::from_f64_retain(buyer.prix_totale).unwrap_or_default())
@@ -1011,6 +1016,13 @@ async fn migrate_buyers_table_internal(pool: &PgPool) -> Result<(), String> {
     
     if !column_names.contains(&"bloc".to_string()) {
         sqlx::query("ALTER TABLE buyers ADD COLUMN bloc VARCHAR(10) DEFAULT 'A'")
+            .execute(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    
+    if !column_names.contains(&"type_of_logt".to_string()) {
+        sqlx::query("ALTER TABLE buyers ADD COLUMN type_of_logt VARCHAR(20) DEFAULT ''")
             .execute(pool)
             .await
             .map_err(|e| e.to_string())?;
@@ -1355,30 +1367,6 @@ async fn create_default_admin_user(pool: &PgPool) -> Result<(), String> {
 // PostgreSQL Service Management
 static POSTGRES_STARTED_BY_APP: AtomicBool = AtomicBool::new(false);
 
-// Function to check if PostgreSQL is accessible via network connection
-async fn is_postgres_accessible(host: &str, port: u16) -> bool {
-    use std::time::Duration;
-    
-    let addr = format!("{}:{}", host, port);
-    debug_println!("Testing PostgreSQL connection to {}", addr);
-    
-    // Try to connect to the port
-    match tokio::time::timeout(Duration::from_secs(2), tokio::net::TcpStream::connect(&addr)).await {
-        Ok(Ok(_)) => {
-            debug_println!("PostgreSQL port {} is accessible", port);
-            true
-        }
-        Ok(Err(e)) => {
-            debug_println!("PostgreSQL port {} is not accessible: {}", port, e);
-            false
-        }
-        Err(_) => {
-            debug_println!("PostgreSQL connection timeout to port {}", port);
-            false
-        }
-    }
-}
-
 // Function to check if PostgreSQL service is running
 fn is_postgres_running() -> (bool, Option<String>) {
     #[cfg(target_os = "windows")]
@@ -1716,6 +1704,17 @@ async fn emit_loading_progress(app_handle: &tauri::AppHandle, progress: u32, mes
 // struct DatabaseState(Arc<Mutex<Option<PgPool>>>);
 
 // Main function
+// Command aliases for backwards compatibility
+#[tauri::command]
+async fn add_buyer(pool: tauri::State<'_, PgPool>, buyer_data: BuyerInput) -> Result<(), String> {
+    add_buyer_to_database(pool, buyer_data).await
+}
+
+#[tauri::command]
+async fn update_buyer(pool: tauri::State<'_, PgPool>, buyer_id: i32, buyer_data: BuyerInput) -> Result<(), String> {
+    edit_buyer_in_database(pool, buyer_id, buyer_data).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() -> Result<(), String> {
     // Load environment variables from .env file if it exists
@@ -1745,9 +1744,11 @@ pub fn run() -> Result<(), String> {
             update_project,
             delete_project_from_database,
             add_buyer_to_database,
+            add_buyer,
             get_buyers_by_project,
             delete_buyer_from_database,
             edit_buyer_in_database,
+            update_buyer,
             update_buyer_payments,
             migrate_buyers_table,
             migrate_employees_table,

@@ -2,11 +2,14 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">    <title>Settings</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings</title>
     <link rel="stylesheet" href="setting.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
-<body>    <!-- 🌍 Barre latérale -->
+<body>
+
+    <!-- 🌍 Barre latérale -->
     <div class="sidebar">
         <h2><i class="fas fa-cogs"></i>Managist</h2>
         <ul>            <li><a href="../index.html"><i class="fas fa-home"></i> Dashboard</a></li>
@@ -27,7 +30,7 @@
 
             <!-- 💬 Chat -->
             <div class="settings-card" onclick="openSection('chat')">
-                <img src="../assets/chat-icon.jpg".png" alt="Chat Illustration">
+                <img src="../assets/chat-icon.jpg" alt="Chat Illustration">
                 <h2>Chat with Admin</h2>
                 <p>Communicate with the administrator in real-time.</p>
                 <button>Open Chat <i class="fas fa-arrow-right"></i></button>
@@ -63,7 +66,7 @@
 
         <!-- 🌐 Section Langue -->
         <div id="language-section" class="hidden">
-            <h2><i class="fas fa-globe"></i> Select Language</h2>            
+            <h2><i class="fas fa-globe"></i> Select Language</h2>
             <select id="language-select">
                 <option value="fr">Français</option>
                 <option value="en">English</option>

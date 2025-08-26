@@ -68,6 +68,14 @@
         <div class="modal-content">
             <span class="close">&times;</span>
             <h2>Add New Buyer</h2>
+            
+            <!-- Print Reservation Button - Separate Row -->
+            <div class="print-actions" style="text-align: center; margin: 15px 0; padding: 10px; background-color: #f8f9fa; border-radius: 5px;">
+                <button type="button" id="printReservationBtn" class="btn-print-reservation" title="Print Reservation Document">
+                    <i class="fas fa-print"></i> Print Reservation Document
+                </button>
+            </div>
+            
             <form id="addBuyerForm">
                 <div class="form-row">
                     <div class="form-group">
@@ -97,25 +105,35 @@
                         <input type="text" id="prenom" required>
                     </div>
                     <div class="form-group">
+                        <label for="typeOfLogt">TYPE OF LOGT</label>
+                        <select id="typeOfLogt">
+                            <option value="">Select Type</option>
+                            <option value="Appartement">Appartement</option>
+                            <option value="Lotissement">Lotissement</option>
+                            <option value="Local">Local</option>
+                            <option value="Bureau">Bureau</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
                         <label for="typeLogt">TYPE LOGT</label>
                         <select id="typeLogt" required>
                             <option value="">Select Apartment Type</option>
                             <!-- Options will be populated dynamically from project_info -->
                         </select>
                     </div>
-                </div>
-                <div class="form-row">
                     <div class="form-group">
                         <label for="surface">SURFACE</label>
                         <input type="text" id="surface" readonly>
                         <small class="field-note">Auto-filled based on apartment type</small>
                     </div>
+                </div>
+                <div class="form-row">
                     <div class="form-group">
                         <label for="date">DATE</label>
                         <input type="date" id="date" required>
                     </div>
-                </div>
-                <div class="form-row">
                     <div class="form-group">
                         <label for="prixTotale">PRIX TOTALE</label>
                         <input type="number" id="prixTotale" step="0.01" min="0">
@@ -388,6 +406,74 @@
             </div>
         </div>
     </div>
+
+    <!-- Reservation Info Modal -->
+    <div id="reservationInfoModal" class="modal">
+        <div class="modal-content reservation-info-modal">
+            <div class="modal-header">
+                <i class="fas fa-user-edit"></i>
+                <h2>معلومات إضافية للحجز</h2>
+                <button type="button" class="close-modal" onclick="closeReservationInfoModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-description">يرجى ملء المعلومات التالية لإنشاء وثيقة الحجز:</p>
+                
+                <form id="reservationInfoForm" class="reservation-info-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="reservationBirthDate">
+                                <i class="fas fa-calendar-alt"></i>
+                                تاريخ الميلاد *
+                            </label>
+                            <input type="text" id="reservationBirthDate" name="birthDate" placeholder="يوم/شهر/سنة" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="reservationBirthPlace">
+                                <i class="fas fa-map-marker-alt"></i>
+                                مكان الميلاد *
+                            </label>
+                            <input type="text" id="reservationBirthPlace" name="birthPlace" placeholder="المدينة، الولاية" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="reservationNationalId">
+                                <i class="fas fa-id-card"></i>
+                                رقم بطاقة الهوية *
+                            </label>
+                            <input type="text" id="reservationNationalId" name="nationalId" placeholder="مثال: 012345678901234" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="reservationIdIssueDate">
+                                <i class="fas fa-calendar-check"></i>
+                                تاريخ إصدار البطاقة *
+                            </label>
+                            <input type="text" id="reservationIdIssueDate" name="idIssueDate" placeholder="يوم/شهر/سنة" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="reservationIdIssuePlace">
+                                <i class="fas fa-building"></i>
+                                مكان إصدار البطاقة *
+                            </label>
+                            <input type="text" id="reservationIdIssuePlace" name="idIssuePlace" placeholder="البلدية، الولاية" required>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-generate" onclick="generateReservationWithInfo()">
+                    <i class="fas fa-print"></i> إنشاء وثيقة الحجز
+                </button>
+                <button type="button" class="btn-cancel" onclick="closeReservationInfoModal()">
+                    <i class="fas fa-times"></i> إلغاء
+                </button>
+            </div>
+        </div>
+    </div>
     </main>
 
     <!-- Validation utilities -->
@@ -397,9 +483,6 @@
     <script type="module" src="../../../utils/ValidationEngine.js"></script>
     <script type="module" src="../../../utils/UIFeedbackManager.js"></script>
     <script type="module" src="../../../utils/DocumentGenerator.js"></script>
-    
-    <!-- Integration bootstrap -->
-    <script src="../../../utils/IntegrationBootstrap.js"></script>
     
     <!-- Main application script -->
     <script type="module" src="javascript.js" defer></script>
