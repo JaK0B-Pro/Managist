@@ -1771,17 +1771,37 @@ pub fn run() -> Result<(), String> {
             delete_project_info
         ])
         .setup(|app| {
-            // Initialize a placeholder database pool immediately during setup
-            // The actual connection will be established during initialize_with_progress
-            let app_handle = app.handle().clone();
+            // Ensure loading window gets focus
+            if let Some(loading_window) = app.get_webview_window("loading") {
+                let _ = loading_window.set_focus();
+                let _ = loading_window.show();
+            }
             
-            // Create a temporary pool or manage a connection state
-            // We'll manage the actual pool after it's created in initialize_with_progress
+            // Delay main window creation to ensure loading window shows first
+            let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
+                // Wait a bit to ensure loading window is shown
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                
+                // Create the main window but keep it hidden
+                let _main_window = tauri::WebviewWindowBuilder::new(
+                    &app_handle,
+                    "main",
+                    tauri::WebviewUrl::App("index.html".into())
+                )
+                .title("Managist")
+                .inner_size(500.0, 600.0)
+                .center()
+                .resizable(true)
+                .visible(false)
+                .build();
+                
+                // Initialize database pool
                 if let Err(e) = ensure_database_pool_ready(app_handle).await {
                     eprintln!("Failed to ensure database pool is ready: {}", e);
                 }
             });
+            
             Ok(())
         })
         .run(tauri::generate_context!());
