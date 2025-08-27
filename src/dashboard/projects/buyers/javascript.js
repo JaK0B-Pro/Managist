@@ -3330,7 +3330,7 @@ function generateSimpleDocument(buyerName, prenom, trancheIndex, amount, date, t
                     <p><strong>(En lettres) :</strong> ${numberToFrenchWords(parseFloat(amount))} Dinars Algériens</p>
                 </div>
                 
-                <p>Représentant le paiement d'un appartement F3 du projet ${(projectTitle || '136 logements promotionnels à EL TARF').replace(/\s*-\s*Buyers\s*$/i, '')}</p>
+                <p>Représentant le paiement d'un Appartement ${apartmentType || 'F3'} du projet ${(projectTitle || '136 logements promotionnels').replace(/\s*-\s*Buyers\s*$/i, '')} à EL TAREF</p>
             </div>
 
             <div class="observations">
@@ -6042,7 +6042,7 @@ function generateReservationWithInfo() {
         console.log('🔍 Starting reservation document generation...');
         
         // Validate required fields with unique IDs
-        const requiredFields = ['reservationBirthDate', 'reservationBirthPlace', 'reservationNationalId', 'reservationIdIssueDate', 'reservationIdIssuePlace'];
+        const requiredFields = ['reservationBirthDate', 'reservationBirthPlace', 'reservationNationalId', 'reservationIdIssueDate', 'reservationIdIssuePlace', 'typeOfBankReservation', 'typeOfCheck'];
         let isValid = true;
         let missingFields = [];
         
@@ -6080,8 +6080,12 @@ function generateReservationWithInfo() {
             birthPlace: document.getElementById('reservationBirthPlace').value.trim(),
             nationalId: document.getElementById('reservationNationalId').value.trim(),
             idIssueDate: document.getElementById('reservationIdIssueDate').value.trim(),
-            idIssuePlace: document.getElementById('reservationIdIssuePlace').value.trim()
+            idIssuePlace: document.getElementById('reservationIdIssuePlace').value.trim(),
+            typeOfBank: document.getElementById('typeOfBankReservation').value.trim(),
+            typeOfCheck: document.getElementById('typeOfCheck').value.trim()
         };
+        
+        console.log('📋 Additional Info for Reservation:', additionalInfo);
         
         // Get buyer data from the form
         const buyerData = {
@@ -6126,7 +6130,7 @@ function generateReservationWithInfo() {
         const printContent = generateReservationDocument(buyerData, additionalInfo);
         
         // Create print window
-        const printWindow = window.open('', '_blank', 'width=800,height=600');
+        const printWindow = window.open('', '_blank', `width=${screen.width},height=${screen.height},left=0,top=0,resizable=yes,scrollbars=yes,toolbar=yes,menubar=yes,location=yes,status=yes`);
         if (!printWindow) {
             alert('تعذر فتح نافذة الطباعة. يرجى التأكد من السماح للنوافذ المنبثقة.');
             return;
@@ -6314,7 +6318,7 @@ function generateReservationDocument(buyerData, additionalInfo = {}) {
                 line-height: 1.4;
             }
             .document-title {
-                font-size: 20px;
+                font-size: 24px;
                 font-weight: bold;
                 margin: 20px 0;
                 text-align: center;
@@ -6383,10 +6387,10 @@ function generateReservationDocument(buyerData, additionalInfo = {}) {
                 <p><strong>الصادرة عن دائرة:</strong> ${additionalInfo.idIssuePlace || '_______________'} <strong>بتاريخ:</strong> ${additionalInfo.idIssueDate || '_______________'}</p>
                 <p><strong>مبلغا ماليا قدره:</strong> <span class="amount">${firstTrancheAmount.toLocaleString()} د.ج</span></p>
                 <div class="amount-in-words"><strong> (بالأحرف) ${amountInArabic} دينار جزائري</strong></div>
-                <p><strong>مدفوعا لدى بنك الفلاحة والتنمية الريفية وفقا لوصل الدفع رقم: VE 2-0117 بتاريخ: 2016/04/26</strong></p>
+                <p><strong>${getBankText(additionalInfo.typeOfBank)}  عن طريق صك ${additionalInfo.typeOfCheck} وفقا لوصل الدفع رقم: VE 2-0117 بتاريخ: 2016/04/26</strong></p>
             </div>
 
-            <p><strong>و ذلك لغرض تخصيص شقة من نوع ${buyerData.typeLogt} , و المترتبة عن انجاز مشروع 136 سكن ترقوي المتواجد ببلدية الطارف</strong></p>
+            <p><strong>و ذلك لغرض تخصيص شقة من نوع ${buyerData.typeLogt} في الطابق ${buyerData.niveau} بمساحة ${buyerData.surface} في الجناح ${buyerData.bloc}, و المترتبة عن انجاز مشروع 136 سكن ترقوي المتواجد ببلدية الطارف</strong></p>
 
             <p><strong>أن المبلغ المذكور يعد تسبيقا على ثمن بيع الشقة و الذي سوف يتم حسابه لاحقا بعد الانتهاء من جميع عمليات البناء و التهيئة.</strong></p>
             <p><strong>ان تحديد الشقة المعنية يبقى مؤقت و قابل لأي تعديل إلى حين المصادقة على مخطط التجزئة من قبل المصالح المخولة.</strong></p>
@@ -6437,4 +6441,18 @@ window.generateRecuWithUserInfo = generateRecuWithUserInfo;
 window.showReservationInfoModal = showReservationInfoModal;
 window.closeReservationInfoModal = closeReservationInfoModal;
 window.generateReservationWithInfo = generateReservationWithInfo;
+
+function getBankText(bankName) {
+    if (!bankName) {
+        return 'مدفوعا لدى بنك الفلاحة والتنمية الريفية'; // Default text
+    }
+    const lowerCaseBankName = bankName.toLowerCase();
+    if (lowerCaseBankName === 'badr') {
+        return 'مدفوعا لدى بنك الفلاحة والتنمية الريفية';
+    } else if (lowerCaseBankName === 'bna') {
+        return 'مدفوعا لدى البنك الوطني الجزائري';
+    } else {
+        return `مدفوعا لدى ${bankName}`;
+    }
+}
 

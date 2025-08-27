@@ -569,6 +569,34 @@ td[rowspan] {
     font-size: 14px;
 }
 
+/* Print Reservation Icon Button (Small Version) */
+.btn-print-reservation-icon {
+    background-color: #17a2b8 !important;
+    color: white !important;
+    border: none !important;
+    padding: 8px 12px !important;
+    border-radius: 6px;
+    font-size: 14px !important;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 40px !important;
+    height: 36px !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.btn-print-reservation-icon:hover {
+    background-color: #138496 !important;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 6px rgba(0,0,0,0.2);
+}
+
+.btn-print-reservation-icon i {
+    font-size: 16px;
+}
+
 /* Success Modal Styles */
 .success-modal {
     max-width: 450px;

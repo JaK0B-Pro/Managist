@@ -15,7 +15,7 @@
       {
         "label": "loading",
         "title": "Managist - Loading",
-        "url": "loading.html",
+        "url": "loading_new.html",
         "width": 600,
         "height": 500,
         "center": true,
@@ -25,6 +25,18 @@
         "skipTaskbar": false,
         "visible": true,
         "focus": true
+      },
+      {
+        "label": "main",
+        "title": "Managist",
+        "url": "index.html",
+        "width": 1080,
+        "height": 720,
+        "center": true,
+        "resizable": true,
+        "decorations": true,
+        "visible": false,
+        "focus": false
       }
     ],
     "security": {

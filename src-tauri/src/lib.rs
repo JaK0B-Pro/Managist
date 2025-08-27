@@ -1777,11 +1777,11 @@ pub fn run() -> Result<(), String> {
                 let _ = loading_window.show();
             }
             
-            // Delay main window creation to ensure loading window shows first
+            // Start initialization process automatically
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                // Wait a bit to ensure loading window is shown
-                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                // Wait a bit to ensure loading window is shown and ready
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
                 
                 // Create the main window but keep it hidden
                 let _main_window = tauri::WebviewWindowBuilder::new(
@@ -1796,9 +1796,10 @@ pub fn run() -> Result<(), String> {
                 .visible(false)
                 .build();
                 
-                // Initialize database pool
-                if let Err(e) = ensure_database_pool_ready(app_handle).await {
-                    eprintln!("Failed to ensure database pool is ready: {}", e);
+                // Initialize database pool during setup
+                debug_println!("Setting up database pool during application startup...");
+                if let Err(e) = ensure_database_pool_ready(app_handle.clone()).await {
+                    debug_println!("Database pool setup warning: {}", e);
                 }
             });
             
@@ -1851,6 +1852,12 @@ fn emit_loading_complete(app: &AppHandle) {
 async fn ensure_database_pool_ready(app: AppHandle) -> Result<(), String> {
     debug_println!("Ensuring database pool is ready during setup...");
     
+    // Skip if pool already exists
+    if app.try_state::<PgPool>().is_some() {
+        debug_println!("Database pool already exists, skipping setup");
+        return Ok(());
+    }
+    
     // Get database URL
     let database_url = env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://postgres:test@localhost:5432/managist_db".to_string());
@@ -1865,35 +1872,22 @@ async fn ensure_database_pool_ready(app: AppHandle) -> Result<(), String> {
     });
     
     // Give PostgreSQL a moment to start
-    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
     
-    // Try to connect to database with retries
-    let mut attempts = 0;
-    let max_attempts = 3;    while attempts < max_attempts {
-        attempts += 1;
-        debug_println!("Database connection attempt {} of {}...", attempts, max_attempts);
-        
-        match PgPool::connect(&database_url).await {
-            Ok(pool) => {
-                debug_println!("Database pool created successfully during setup");
-                app.manage(pool);
-                debug_println!("Database pool managed successfully");
-                return Ok(());
-            }
-            Err(e) => {
-                debug_println!("Database connection attempt {} failed: {}", attempts, e);
-                if attempts < max_attempts {
-                    debug_println!("Retrying database connection in 2 seconds...");
-                    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-                } else {
-                    debug_println!("Database not ready during setup (will retry during initialization): {}", e);
-                    // Don't fail setup - the loading screen will handle the full initialization
-                }
-            }
+    // Try to connect to database (single attempt during setup)
+    match PgPool::connect(&database_url).await {
+        Ok(pool) => {
+            debug_println!("Database pool created successfully during setup");
+            app.manage(pool);
+            debug_println!("Database pool managed successfully");
+            Ok(())
+        }
+        Err(e) => {
+            debug_println!("Database connection failed during setup: {}", e);
+            debug_println!("Will retry during initialization process");
+            Ok(()) // Don't fail setup
         }
     }
-    
-    Ok(())
 }
 
 // Function to emit loading error
@@ -1950,34 +1944,16 @@ async fn initialize_with_progress(app: AppHandle) -> Result<(), String> {
     // Connect to database (or use existing pool if already managed)
     debug_println!("Attempting to connect to database...");
     
-    let pool = match app.try_state::<PgPool>() {
-        Some(existing_pool) => {
-            debug_println!("Using existing database pool from setup");            // Test the existing pool
-            match sqlx::query("SELECT 1").fetch_one(&*existing_pool).await {
-                Ok(_) => {
-                    debug_println!("Existing database pool is working");
-                    existing_pool.inner().clone()
-                }
-                Err(e) => {
-                    debug_println!("Existing pool test failed: {}, creating new pool", e);
-                    
-                    // Create a new pool
-                    let new_pool = create_database_pool_with_retries(&database_url, &app).await?;
-                    app.manage(new_pool.clone());
-                    new_pool
-                }
-            }
-        }
-        None => {
-            // Pool doesn't exist yet, create a new one
-            debug_println!("Creating new database pool...");
-            let new_pool = create_database_pool_with_retries(&database_url, &app).await?;
-            
-            // Manage the new pool
-            app.manage(new_pool.clone());
-            debug_println!("New database pool managed successfully");
-            new_pool
-        }
+    // Try to get existing pool or create a new one
+    let pool = if let Some(existing_pool) = app.try_state::<PgPool>() {
+        debug_println!("Using existing database pool");
+        existing_pool.inner().clone()
+    } else {
+        debug_println!("Creating new database pool for initialization...");
+        let new_pool = create_database_pool_with_retries(&database_url, &app).await?;
+        app.manage(new_pool.clone());
+        debug_println!("Database pool created and managed");
+        new_pool
     };
     
     debug_println!("Database connected successfully");
