@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
-    "frontendDist": "../dist",
+    "frontendDist": "../src",
     "devUrl": "http://localhost:1420"
   },
   "app": {
@@ -15,7 +15,7 @@
       {
         "label": "loading",
         "title": "Managist - Loading",
-        "url": "loading_new.html",
+        "url": "loading.html",
         "width": 600,
         "height": 500,
         "center": true,
@@ -25,18 +25,6 @@
         "skipTaskbar": false,
         "visible": true,
         "focus": true
-      },
-      {
-        "label": "main",
-        "title": "Managist",
-        "url": "index.html",
-        "width": 1080,
-        "height": 720,
-        "center": true,
-        "resizable": true,
-        "decorations": true,
-        "visible": false,
-        "focus": false
       }
     ],
     "security": {

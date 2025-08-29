@@ -3,7 +3,7 @@ const { listen } = window.__TAURI__.event;
 const { getCurrentWindow, LogicalSize } = window.__TAURI__.window;
 // const { event, window: tauriWindow, path } = window.__TAURI__.;
 import { setCurrentUser } from './utils/userState.js';
-import { getCurrentUser, setCurrentUserWithRole } from './utils/roleManager.js'; // Modify this line
+import { setCurrentUserWithRole } from './utils/roleManager.js';
 
 let greetInputEl;
 let greetMsgEl;
@@ -98,26 +98,6 @@ async function showEmployeePage() {
   globalThis.window.location.href = './dashboard/employee/emploi.html';
 }
 
-async function checkLoginStatus() {
-  const user = getCurrentUser();
-  console.log('Checking login status on startup. User:', user);
-  if (user && user.role) {
-    const role = user.role;
-    console.log('User found with role:', role);
-    if (role === "1") {
-      await showAdminPage();
-    } else if (role === "2") {
-      await showManagerPage();
-    } else {
-      await showEmployeePage();
-    }
-    return true; // A redirect was initiated
-  } else {
-    console.log('No active user session found.');
-    return false; // No redirect
-  }
-}
-
 export async function resizeWindow(width, height) {
   const appWindow = await getCussrrentWindow();
   await appWindow.setSize({type: 'Logical', width, height});
@@ -128,26 +108,9 @@ export async function centerWindow() {
   await appWindow.center();
 }
 
-window.addEventListener("DOMContentLoaded", async () => {
-  console.log("DOM content loaded. Checking login status...");
-  const redirected = await checkLoginStatus(); // Await the check and get its status
+window.addEventListener("DOMContentLoaded", () => {
 
-  if (!redirected) {
-    // Only initialize login form elements if no redirect occurred
-    const loginButton = document.getElementById("login_Button");
-    const usernameInput = document.getElementById("username");
-    const passwordInput = document.getElementById("passwordInput");
-    const loginMessage = document.getElementById("login-message");
-
-    if (usernameInput && passwordInput && loginButton && loginMessage) {
-      user = usernameInput.value;
-      password = passwordInput.value;
-      divMessage = loginMessage;
-      loginButton.addEventListener("click", login);
-    } else {
-      console.warn("Login page elements not found. This is expected if already redirected.");
-    }
-  }
+  document.getElementById("login_Button").addEventListener("click", login);
 });
 
 // togglePassword.addEventListener('click', () => {
