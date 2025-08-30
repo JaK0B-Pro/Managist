@@ -6439,6 +6439,135 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+// --- Payment summary (French) printing helpers ---
+
+function __formatDA(n) {
+        if (isNaN(n)) return '0 DA';
+        return Number(n).toLocaleString('fr-FR') + ' DA';
+}
+
+function __escapeHtml(s){
+        return String(s || '').replace(/[&<>"]+/g, function(m){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[m]; });
+}
+
+function __buildPaymentSummaryHtml({ buyerName, bloc, logtNum, typeLogt, surface, prixTotal, tranches }){
+        const totalTranches = tranches.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
+        const headerTitle = 'Récapitulatif des paiements';
+        const projectTitle = (document.getElementById('pageTitle')?.textContent || '').trim();
+
+        const rowsHtml = tranches.map(t => {
+            const rawType = (t.type || '').toString();
+            const displayType = rawType === 'versement' ? 'Virment' : (rawType === 'espece' ? 'Virment E' : rawType);
+            return `<tr>
+                <td style="padding:6px;border:1px solid #ccc">${__escapeHtml(t.label)}</td>
+                <td style="padding:6px;border:1px solid #ccc;text-align:right">${__formatDA(t.amount)}</td>
+                <td style="padding:6px;border:1px solid #ccc">${__escapeHtml(t.date || '')}</td>
+                <td style="padding:6px;border:1px solid #ccc">${__escapeHtml(displayType)}</td>
+            </tr>`;
+        }).join('\n');
+
+        const html = `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>${__escapeHtml(headerTitle)}</title>
+<style>
+    body{font-family: Arial, sans-serif; margin:20px; color:#111}
+    h1{font-size:18px; text-align:center; margin-bottom:8px}
+    .meta{margin:10px 0 18px 0}
+    .meta div{margin:2px 0}
+    table{width:100%; border-collapse:collapse; margin-bottom:12px}
+    th,td{border:1px solid #444; padding:8px; text-align:left}
+    th{background:#f2f2f2}
+    tfoot td{font-weight:bold}
+    .right{ text-align:right }
+    @media print { @page { size: A4; margin: 15mm } }
+</style>
+</head>
+<body>
+    <h1>${__escapeHtml(headerTitle)}</h1>
+    <div class="meta">
+        <div><strong>Projet :</strong> ${__escapeHtml(projectTitle)}</div>
+        <div><strong>Réservataire :</strong> ${__escapeHtml(buyerName)}</div>
+        <div><strong>Bloc / N° Logt :</strong> ${__escapeHtml(bloc)} - ${__escapeHtml(logtNum)}</div>
+        <div><strong>Type d'appartement :</strong> ${__escapeHtml(typeLogt || '')} &nbsp; <strong>Surface :</strong> ${__escapeHtml(surface || '')}</div>
+        <div><strong>Prix Total :</strong> ${__formatDA(prixTotal)}</div>
+    </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th style="text-align:center">Tranche</th>
+                    <th style="text-align:center">Montant</th>
+                    <th style="text-align:center">Date</th>
+                    <th style="text-align:center">Type</th>
+                </tr>
+            </thead>
+        <tbody>
+            ${rowsHtml || `<tr><td colspan="4" style="padding:8px;text-align:center">Aucune tranche</td></tr>`}
+        </tbody>
+        <tfoot>
+            <tr>
+                <td style="padding:8px">Total des tranches</td>
+                <td style="padding:8px;text-align:right">${__formatDA(totalTranches)}</td>
+                <td></td>
+                <td></td>
+            </tr>
+            <tr>
+                <td style="padding:8px">Prix total</td>
+                <td style="padding:8px;text-align:right">${__formatDA(prixTotal)}</td>
+                <td></td>
+                <td></td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <div style="margin-top:18px; font-size:12px; color:#555">Généré : ${new Date().toLocaleString('fr-FR')}</div>
+</body>
+</html>`;
+
+        return html;
+}
+
+function printPaymentSummaryFromModal(){
+        const nom = document.getElementById('nom')?.value || '';
+        const prenom = document.getElementById('prenom')?.value || '';
+        const buyerName = [nom, prenom].filter(Boolean).join(' ') || '—';
+        const bloc = document.getElementById('bloc')?.value || '';
+        const logtNum = document.getElementById('logtNum')?.value || '';
+        const typeLogt = document.getElementById('typeLogt')?.value || document.getElementById('typeOfLogt')?.value || '';
+        const surface = document.getElementById('surface')?.value || '';
+        const prixTotal = parseFloat(document.getElementById('prixTotale')?.value) || 0;
+
+        const trancheEls = Array.from(document.querySelectorAll('#tranchesContainer .tranche-row'));
+        const tranches = trancheEls.map((row, idx) => {
+                const labelEl = row.querySelector('label');
+                const amountEl = row.querySelector('input[type="number"]');
+                const dateEl = row.querySelector('input[type="date"]');
+                const typeEl = row.querySelector('select');
+                const label = labelEl ? labelEl.textContent.replace(':','').trim() : `T${idx}`;
+                const amount = parseFloat(amountEl?.value) || 0;
+                const date = dateEl?.value || '';
+                const type = typeEl?.value || '';
+                return { label, amount, date, type };
+        });
+
+        const html = __buildPaymentSummaryHtml({ buyerName, bloc, logtNum, typeLogt, surface, prixTotal, tranches });
+
+        const w = window.open('', '_blank');
+        if (!w) { alert('Impossible d\'ouvrir la fenêtre d\'impression. Autorisez les popups.'); return; }
+        w.document.write(html);
+        w.document.close();
+        w.focus();
+        setTimeout(() => { w.print(); }, 500);
+}
+
+// Hook the top button after DOM ready
+document.addEventListener('DOMContentLoaded', () => {
+        const topBtn = document.getElementById('printPaymentSummaryTopBtn');
+        if (topBtn) topBtn.addEventListener('click', printPaymentSummaryFromModal);
+});
+
 // Make functions globally accessible
 window.showUserInfoModal = showUserInfoModal;
 window.closeUserInfoModal = closeUserInfoModal;
