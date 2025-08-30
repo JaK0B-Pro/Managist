@@ -1746,6 +1746,7 @@ pub fn run() -> Result<(), String> {
             add_buyer_to_database,
             add_buyer,
             get_buyers_by_project,
+            get_buyer,
             delete_buyer_from_database,
             edit_buyer_in_database,
             update_buyer,
@@ -2440,4 +2441,38 @@ async fn initialize_default_prix_unitaire(pool: &PgPool) -> Result<(), String> {
     }
     
     Ok(())
+}
+
+// Function to get a single buyer by ID
+#[tauri::command]
+async fn get_buyer(pool: tauri::State<'_, PgPool>, buyer_id: i32) -> Result<Option<Buyer>, String> {
+    let row = sqlx::query("SELECT * FROM buyers WHERE id = $1")
+        .bind(buyer_id)
+        .fetch_optional(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if let Some(row) = row {
+        Ok(Some(Buyer {
+            id: row.try_get("id").map_err(|e| e.to_string())?,
+            project_id: row.try_get("project_id").map_err(|e| e.to_string())?,
+            bloc: row.try_get("bloc").unwrap_or_else(|_| "A".to_string()),
+            niveau: row.try_get("niveau").map_err(|e| e.to_string())?,
+            logt_num: row.try_get("logt_num").map_err(|e| e.to_string())?,
+            nom: row.try_get("nom").map_err(|e| e.to_string())?,
+            prenom: row.try_get("prenom").map_err(|e| e.to_string())?,
+            type_logt: row.try_get("type_logt").map_err(|e| e.to_string())?,
+            type_of_logt: row.try_get("type_of_logt").unwrap_or_else(|_| "".to_string()),
+            surface: row.try_get("surface").map_err(|e| e.to_string())?,
+            date: row.try_get("date").map_err(|e| e.to_string())?,
+            prix_totale: row.try_get("prix_totale").map_err(|e| e.to_string())?,
+            remise: row.try_get("remise").map_err(|e| e.to_string())?,
+            payments: row.try_get("payments").map_err(|e| e.to_string())?,
+            payment_status: row.try_get("payment_status").map_err(|e| e.to_string())?,
+            total_paid: row.try_get("total_paid").map_err(|e| e.to_string())?,
+            is_sold: row.try_get("is_sold").map_err(|e| e.to_string())?,
+        }))
+    } else {
+        Ok(None)
+    }
 }

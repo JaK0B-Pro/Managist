@@ -47,6 +47,26 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     });
+
+    // Function to print payment summary (moved here)
+    async function printPaymentSummary(buyerId) {
+        console.log('Attempting to print payment summary for buyer ID:', buyerId);
+        // Further implementation will go here
+    }
+
+    // Event listener for the new print summary button
+    const printSummaryButton = document.getElementById('printPaymentSummaryBtn');
+    if (printSummaryButton) {
+        printSummaryButton.addEventListener('click', async () => {
+            const buyerModal = document.getElementById('buyerModal');
+            const buyerId = buyerModal.getAttribute('data-buyer-id');
+            if (buyerId) {
+                await printPaymentSummary(parseInt(buyerId));
+            } else {
+                alert('No buyer selected for printing summary.');
+            }
+        });
+    }
 });
 
 // Get project ID from URL parameters
@@ -3096,7 +3116,7 @@ async function printOrdreVersement(trancheIndex) {
         
         // Get buyer ID to fetch their apartment type from project_info
         const buyerId = form.getAttribute('data-buyer-id');
-        let apartmentType = 'Appartement'; // Default fallback
+        let apartmentType = '';
         
         console.log('🔍 Buyer ID for apartment type fetch:', buyerId);
         
@@ -3108,26 +3128,11 @@ async function printOrdreVersement(trancheIndex) {
                 console.log('👤 Buyer data:', buyerData);
                 
                 if (buyerData && buyerData.type_logt) {
-                    console.log('🏠 Found buyer type_logt:', buyerData.type_logt);
-                    // Fetch project info to get apartment type details
-                    const projectId = getCurrentProjectId();
-                    console.log('🏗️ Project ID:', projectId);
-                    const projectInfo = await fetchProjectApartmentTypes(projectId);
-                    console.log('📋 Project info:', projectInfo);
-                    
-                    // Find the apartment type that matches the buyer's type_logt
-                    const apartmentTypeInfo = projectInfo.find(info => info.type_logt === buyerData.type_logt);
-                    if (apartmentTypeInfo) {
-                        apartmentType = apartmentTypeInfo.type_logt;
-                        console.log('✅ Found matching apartment type:', apartmentType);
-                    } else {
-                        console.log('⚠️ No matching apartment type found in project info');
-                        // Try using the buyer's type_logt directly
-                        apartmentType = buyerData.type_logt;
-                        console.log('🔄 Using buyer type_logt directly:', apartmentType);
-                    }
+                    apartmentType = buyerData.type_logt;
+                    console.log('🏠 Apartment type fetched from buyer details:', apartmentType);
                 } else {
-                    console.log('⚠️ No type_logt found in buyer data');
+                    console.log('⚠️ No type_logt found in buyer data, defaulting to Appartement');
+                    apartmentType = 'Appartement';
                 }
             } catch (error) {
                 console.error('❌ Error fetching apartment type from project_info:', error);
@@ -3330,7 +3335,7 @@ function generateSimpleDocument(buyerName, prenom, trancheIndex, amount, date, t
                     <p><strong>(En lettres) :</strong> ${numberToFrenchWords(parseFloat(amount))} Dinars Algériens</p>
                 </div>
                 
-                <p>Représentant le paiement d'un Appartement ${apartmentType || 'F3'} du projet ${(projectTitle || '136 logements promotionnels').replace(/\s*-\s*Buyers\s*$/i, '')} à EL TAREF</p>
+                <p>Représentant le paiement d'un Appartement <strong>${apartmentType}</strong> du projet ${(projectTitle || '136 logements promotionnels').replace(/\s*-\s*Buyers\s*$/i, '')} à EL TAREF</p>
             </div>
 
             <div class="observations">
@@ -6455,4 +6460,28 @@ function getBankText(bankName) {
         return `مدفوعا لدى ${bankName}`;
     }
 }
+
+// Function to print payment summary
+async function printPaymentSummary(buyerId) {
+    console.log('Attempting to print payment summary for buyer ID:', buyerId);
+    // Further implementation will go here
+}
+
+// Event listener for the new print summary button
+document.addEventListener('DOMContentLoaded', function() {
+    const printSummaryButton = document.getElementById('printPaymentSummaryBtn');
+    if (printSummaryButton) {
+        printSummaryButton.addEventListener('click', async () => {
+            const buyerModal = document.getElementById('buyerModal');
+            const buyerId = buyerModal.getAttribute('data-buyer-id');
+            if (buyerId) {
+                await printPaymentSummary(parseInt(buyerId));
+            } else {
+                alert('No buyer selected for printing summary.');
+            }
+        });
+    }
+
+    // ... existing code ...
+});
 
