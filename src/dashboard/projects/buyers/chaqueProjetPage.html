@@ -157,9 +157,13 @@
                 <!-- Tranches Section -->
                 <div class="tranches-section">
                     <!-- Print summary button (top of tranches) -->
-                    <div style="text-align: right; margin-bottom: 8px;">
+                    <div style="text-align: right; margin-bottom: 8px; display:flex; gap:8px; justify-content:flex-end;">
                         <button type="button" id="printPaymentSummaryTopBtn" class="btn-print-summary-top" title="Imprimer le récapitulatif des paiements" style="background:#17a2b8;color:#fff;border:none;padding:8px 10px;border-radius:4px;">
                             <i class="fas fa-print"></i>&nbsp;Imprimer le récapitulatif
+                        </button>
+                        <!-- Facture print button, hidden by default; shown only for Lot / Lotissement types -->
+                        <button type="button" id="printFactureBtn" class="btn-print-facture" title="Imprimer la facture" style="background:#28a745;color:#fff;border:none;padding:8px 10px;border-radius:4px;">
+                            <i class="fas fa-file-invoice"></i>&nbsp;Imprimer Facture
                         </button>
                     </div>
                     <h3>Payment Tranches</h3>                    <div id="tranchesContainer">                        <div class="tranche-row">
