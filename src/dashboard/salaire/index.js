@@ -751,20 +751,28 @@ function showDeleteConfirmationModal(button, employeeId, employeeName) {
     
     // Handle confirm deletion
     const handleConfirm = async () => {
+        // Store original button HTML outside try block so it's accessible in catch
+        const originalHTML = button.innerHTML;
+        
         try {
             // Show loading state
-            const originalHTML = button.innerHTML;
             button.innerHTML = '<div class="loading-spinner"></div>';
             button.disabled = true;
             
             // Close modal first
             modal.style.display = 'none';
             
-            // Delete from database
-            await invoke('delete_employee', { employeeId: parseInt(employeeId) });
+            // Delete from database - try both parameter names to be safe
+            try {
+                await invoke('delete_employee', { employeeId: parseInt(employeeId) });
+            } catch (firstError) {
+                // If employeeId doesn't work, try employeeSalaryId
+                await invoke('delete_employee', { employeeSalaryId: parseInt(employeeId) });
+            }
             
             // Remove row from table
-            const row = button.closest('tr');            row.remove();
+            const row = button.closest('tr');
+            row.remove();
             
             // Reload employees to update the table and total
             await reloadCurrentEmployees();

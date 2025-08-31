@@ -48,25 +48,13 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
-    // Function to print payment summary (moved here)
-    async function printPaymentSummary(buyerId) {
-        console.log('Attempting to print payment summary for buyer ID:', buyerId);
-        // Further implementation will go here
-    }
 
-    // Event listener for the new print summary button
-    const printSummaryButton = document.getElementById('printPaymentSummaryBtn');
-    if (printSummaryButton) {
-        printSummaryButton.addEventListener('click', async () => {
-            const buyerModal = document.getElementById('buyerModal');
-            const buyerId = buyerModal.getAttribute('data-buyer-id');
-            if (buyerId) {
-                await printPaymentSummary(parseInt(buyerId));
-            } else {
-                alert('No buyer selected for printing summary.');
-            }
-        });
-    }
+});
+
+// Hook the top button after DOM ready
+document.addEventListener('DOMContentLoaded', () => {
+    const topBtn = document.getElementById('printPaymentSummaryTopBtn');
+    if (topBtn) topBtn.addEventListener('click', printPaymentSummaryFromModal);
 });
 
 // Get project ID from URL parameters
@@ -5278,8 +5266,9 @@ async function printRecuCheque(trancheIndex) {
             return;
         }
 
-        // Get current project info
-        const projectTitle = document.getElementById('pageTitle')?.textContent || 'Project';
+        // Get current project info and remove "Buyers" from the title
+        const rawProjectTitle = document.getElementById('pageTitle')?.textContent || 'Project';
+        const projectTitle = rawProjectTitle.replace(/\s*-\s*Buyers?\s*$/i, '').trim();
 
         // Generate the receipt
         generateRecuCheque(buyerName, prenom, trancheIndex, trancheAmount, trancheDate, checkNumber, projectTitle);
@@ -5710,10 +5699,6 @@ function generateRecuCheque(buyerName, prenom, trancheIndex, amount, date, check
                         <div class="detail-item">
                             <div class="detail-label">Projet:</div>
                             <div class="detail-value">${projectTitle}</div>
-                        </div>
-                        <div class="detail-item">
-                            <div class="detail-label">Tranche:</div>
-                            <div class="detail-value">T${trancheIndex}</div>
                         </div>
                         <div class="detail-item">
                             <div class="detail-label">N° Chèque:</div>
@@ -6935,11 +6920,7 @@ function printPaymentSummaryFromModal() {
     setTimeout(() => { w.print(); }, 500);
 }
 
-// Hook the top button after DOM ready
-document.addEventListener('DOMContentLoaded', () => {
-    const topBtn = document.getElementById('printPaymentSummaryTopBtn');
-    if (topBtn) topBtn.addEventListener('click', printPaymentSummaryFromModal);
-});
+
 
 // Make functions globally accessible
 window.showUserInfoModal = showUserInfoModal;
