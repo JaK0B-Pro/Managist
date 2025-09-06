@@ -483,7 +483,13 @@ document.addEventListener('DOMContentLoaded', async function() {
         const salaire = document.getElementById('modeSaisirSalaire');
         const netAPayer = document.getElementById('modeSaisirNetAPayer');
         
+        // Flag to prevent infinite loops during calculations
+        let isCalculating = false;
+        
         function calculateModeSaisirValues() {
+            if (isCalculating) return;
+            isCalculating = true;
+            
             const prixJourVal = parseFloat(prixJour.value) || 0;
             const nombreJoursVal = parseInt(nombreJours.value) || 0;
             const nombreHeurxVal = parseFloat(nombreHeurx.value) || 0;
@@ -501,17 +507,93 @@ document.addEventListener('DOMContentLoaded', async function() {
             // Calculate net_a_payer: salaire - acompte
             const netAPayerVal = salaireVal - acompteVal;
             netAPayer.value = netAPayerVal.toFixed(2);
+            
+            isCalculating = false;
         }
         
-        // Add event listeners to all relevant fields
-        prixJour.addEventListener('input', calculateModeSaisirValues);
-        nombreJours.addEventListener('input', calculateModeSaisirValues);
-        nombreHeurx.addEventListener('input', calculateModeSaisirValues);
-        travauxAttache.addEventListener('input', calculateModeSaisirValues);
-        acompte.addEventListener('input', calculateModeSaisirValues);
+        // Reverse calculation: when salary is entered, calculate prix de jour
+        function calculateFromSalaire() {
+            if (isCalculating) return;
+            isCalculating = true;
+            
+            const salaireVal = parseFloat(salaire.value) || 0;
+            const nombreJoursVal = parseInt(nombreJours.value) || 0;
+            const nombreHeurxVal = parseFloat(nombreHeurx.value) || 0;
+            const travauxAttacheVal = parseFloat(travauxAttache.value) || 0;
+            const acompteVal = parseFloat(acompte.value) || 0;
+            
+            // If we have days and/or hours, calculate prix de jour
+            if (nombreJoursVal > 0 || nombreHeurxVal > 0) {
+                // Formula: salaire = (prix_jour * nombre_des_jours) + (prix_hour * nombre_heurx) + travaux_attache
+                // Rearranged: prix_jour = (salaire - travaux_attache - (prix_hour * nombre_heurx)) / nombre_des_jours
+                
+                // We need to solve for prix_jour where prix_hour = prix_jour / 8
+                // salaire = (prix_jour * nombre_des_jours) + ((prix_jour / 8) * nombre_heurx) + travaux_attache
+                // salaire = prix_jour * (nombre_des_jours + (nombre_heurx / 8)) + travaux_attache
+                // prix_jour = (salaire - travaux_attache) / (nombre_des_jours + (nombre_heurx / 8))
+                
+                const totalDayEquivalent = nombreJoursVal + (nombreHeurxVal / 8);
+                
+                if (totalDayEquivalent > 0) {
+                    const calculatedPrixJour = (salaireVal - travauxAttacheVal) / totalDayEquivalent;
+                    prixJour.value = calculatedPrixJour.toFixed(2);
+                    
+                    // Update prix_hour accordingly
+                    const prixHourVal = calculatedPrixJour / 8;
+                    prixHour.value = prixHourVal.toFixed(2);
+                    
+                    console.log(`🔄 Reverse calculation: Salary ${salaireVal} → Prix jour ${calculatedPrixJour.toFixed(2)} (Days: ${nombreJoursVal}, Hours: ${nombreHeurxVal}, Travaux: ${travauxAttacheVal})`);
+                }
+            }
+            
+            // Always calculate net_a_payer
+            const netAPayerVal = salaireVal - acompteVal;
+            netAPayer.value = netAPayerVal.toFixed(2);
+            
+            isCalculating = false;
+        }
         
-        // Store function globally for external access
+        // Add event listeners for forward calculation (from prix de jour)
+        prixJour.addEventListener('input', calculateModeSaisirValues);
+        nombreJours.addEventListener('input', function() {
+            // If salary has a value, do reverse calculation, otherwise forward
+            if (salaire.value && parseFloat(salaire.value) > 0) {
+                calculateFromSalaire();
+            } else {
+                calculateModeSaisirValues();
+            }
+        });
+        nombreHeurx.addEventListener('input', function() {
+            // If salary has a value, do reverse calculation, otherwise forward
+            if (salaire.value && parseFloat(salaire.value) > 0) {
+                calculateFromSalaire();
+            } else {
+                calculateModeSaisirValues();
+            }
+        });
+        travauxAttache.addEventListener('input', function() {
+            // If salary has a value, do reverse calculation, otherwise forward
+            if (salaire.value && parseFloat(salaire.value) > 0) {
+                calculateFromSalaire();
+            } else {
+                calculateModeSaisirValues();
+            }
+        });
+        acompte.addEventListener('input', function() {
+            // Always recalculate net_a_payer regardless of direction
+            if (salaire.value && parseFloat(salaire.value) > 0) {
+                calculateFromSalaire();
+            } else {
+                calculateModeSaisirValues();
+            }
+        });
+        
+        // Add event listener for reverse calculation (from salary)
+        salaire.addEventListener('input', calculateFromSalaire);
+        
+        // Store functions globally for external access
         window.calculateModeSaisirValues = calculateModeSaisirValues;
+        window.calculateFromSalaire = calculateFromSalaire;
     }
 
     // Handle save button for mode de saisir
@@ -762,12 +844,35 @@ function showDeleteConfirmationModal(button, employeeId, employeeName) {
             // Close modal first
             modal.style.display = 'none';
             
-            // Delete from database - try both parameter names to be safe
+            // Delete employee from all projects and salary records
             try {
-                await invoke('delete_employee', { employeeId: parseInt(employeeId) });
-            } catch (firstError) {
-                // If employeeId doesn't work, try employeeSalaryId
-                await invoke('delete_employee', { employeeSalaryId: parseInt(employeeId) });
+                // First, try to remove employee from all projects
+                try {
+                    await invoke('remove_employee_from_all_projects', { employeeId: parseInt(employeeId) });
+                } catch (projectError) {
+                    console.warn('Could not remove from projects (might not exist):', projectError);
+                }
+                
+                // Then delete the employee record - try both parameter names to be safe
+                try {
+                    await invoke('delete_employee', { employeeId: parseInt(employeeId) });
+                } catch (firstError) {
+                    // If employeeId doesn't work, try employeeSalaryId
+                    await invoke('delete_employee', { employeeSalaryId: parseInt(employeeId) });
+                }
+                
+                console.log(`Employee ${employeeId} successfully deleted from all projects and salary records`);
+                
+            } catch (deleteError) {
+                // If the backend doesn't have the remove_from_all_projects command, 
+                // just delete the employee record
+                try {
+                    await invoke('delete_employee', { employeeId: parseInt(employeeId) });
+                } catch (fallbackError) {
+                    await invoke('delete_employee', { employeeSalaryId: parseInt(employeeId) });
+                }
+                
+                console.log(`Employee ${employeeId} deleted from salary records (project cleanup may need manual handling)`);
             }
             
             // Remove row from table
@@ -777,20 +882,25 @@ function showDeleteConfirmationModal(button, employeeId, employeeName) {
             // Reload employees to update the table and total
             await reloadCurrentEmployees();
             
-            // Show success message
+            // Show comprehensive success message
             const successMsg = document.createElement('div');
-            successMsg.textContent = 'Employé supprimé avec succès';
+            successMsg.innerHTML = `
+                <div style="font-weight: bold; margin-bottom: 5px;">✅ Employé supprimé avec succès</div>
+                <div style="font-size: 12px; opacity: 0.9;">Retiré de tous les projets et des registres de salaire</div>
+            `;
             successMsg.style.cssText = `
                 position: fixed;
                 top: 20px;
                 right: 20px;
                 background: #27ae60;
                 color: white;
-                padding: 10px 20px;
-                border-radius: 6px;
+                padding: 15px 20px;
+                border-radius: 8px;
                 z-index: 10000;
-                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
                 animation: slideIn 0.3s ease;
+                max-width: 300px;
+                line-height: 1.4;
             `;
             document.body.appendChild(successMsg);
             

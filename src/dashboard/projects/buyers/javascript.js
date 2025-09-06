@@ -542,8 +542,11 @@ function addTranche() {
             <option value="espece" ${defaultSelected} ${especeDisabled} ${especeTitle}>Espèce</option>
             <option value="versement" ${versementSelected}>Versement</option>
         </select>
-        <button type="button" class="btn-print-tranche" onclick="printOrdreVersement(${trancheCount})" title="Print Document">
+        <button type="button" class="btn-print-tranche" onclick="printOrdreVersement(${trancheCount})" title="Print Ordre de Versement">
             <i class="fas fa-print"></i>
+        </button>
+        <button type="button" class="btn-print-tranche btn-print-bordereau" onclick="printBordereauEnvoi(${trancheCount})" title="Print Bordereau d'Envoi" style="background:#6f42c1;color:#fff;margin-left:4px;display:${defaultType === 'versement' ? 'inline-block' : 'none'};">
+            <i class="fas fa-file-export"></i>
         </button>
         <button type="button" class="btn-remove-tranche" onclick="removeTranche(this)">×</button>
     `;
@@ -2584,8 +2587,11 @@ async function editBuyer(buyerId) {
                     <option value="espece" ${type === 'espece' ? 'selected' : ''}>Espèce</option>
                     <option value="versement" ${type === 'versement' ? 'selected' : ''}>Versement</option>
                 </select>
-                <button type="button" class="btn-print-tranche" onclick="printOrdreVersement(${index})" title="Print Document">
+                <button type="button" class="btn-print-tranche" onclick="printOrdreVersement(${index})" title="Print Ordre de Versement">
                     <i class="fas fa-print"></i>
+                </button>
+                <button type="button" class="btn-print-tranche btn-print-bordereau" onclick="printBordereauEnvoi(${index})" title="Print Bordereau d'Envoi" style="background:#6f42c1;color:#fff;margin-left:4px;display:${type === 'versement' ? 'inline-block' : 'none'};">
+                    <i class="fas fa-file-export"></i>
                 </button>
                 <button type="button" class="btn-remove-tranche" onclick="removeTranche(this)">×</button>
             `;
@@ -5794,6 +5800,321 @@ function generateRecuCheque(buyerName, prenom, trancheIndex, amount, date, check
 
 // Make printRecuCheque function globally accessible
 window.printRecuCheque = printRecuCheque;
+
+// Print Bordereau d'Envoi function
+async function printBordereauEnvoi(trancheIndex) {
+    try {
+        const form = document.getElementById('addBuyerForm');
+        if (!form) {
+            alert('No form found');
+            return;
+        }
+
+        // Get buyer information from form inputs by ID
+        const buyerName = document.getElementById('nom')?.value || 'N/A';
+        const prenom = document.getElementById('prenom')?.value || '';
+
+        // Get tranche information from FormData
+        const formData = new FormData(form);
+        const trancheAmount = formData.get(`tranche_${trancheIndex}`) || '0';
+        const trancheDate = formData.get(`tranche_date_${trancheIndex}`) || new Date().toISOString().split('T')[0];
+        const trancheType = formData.get(`tranche_type_${trancheIndex}`) || 'versement';
+        const checkNumber = formData.get(`check_${trancheIndex}`) || '';
+
+        if (!trancheAmount || parseFloat(trancheAmount) <= 0) {
+            alert('Please enter a valid amount for this tranche before printing');
+            return;
+        }
+
+        if (trancheType !== 'versement') {
+            alert('Bordereau d\'envoi can only be printed for "versement" type tranches');
+            return;
+        }
+
+        if (!checkNumber.trim()) {
+            alert('Please enter a check number before printing the bordereau d\'envoi');
+            return;
+        }
+
+        // Get current project info and remove "Buyers" from the title
+        const rawProjectTitle = document.getElementById('pageTitle')?.textContent || 'Project';
+        const projectTitle = rawProjectTitle.replace(/\s*-\s*Buyers?\s*$/i, '').trim();
+
+        // Generate the bordereau d'envoi
+        generateBordereauEnvoi(buyerName, prenom, trancheIndex, trancheAmount, trancheDate, checkNumber, projectTitle);
+
+    } catch (error) {
+        console.error('Error generating Bordereau d\'Envoi:', error);
+        alert('Error generating Bordereau d\'Envoi: ' + error.message);
+    }
+}
+
+// Generate Bordereau d'Envoi Document
+function generateBordereauEnvoi(buyerName, prenom, trancheIndex, amount, date, checkNumber, projectTitle) {
+    const printWindow = window.open('', '_blank', 'width=800,height=1000,scrollbars=yes,resizable=yes');
+
+    // Set window title
+    if (printWindow) {
+        printWindow.document.title = `Bordereau d'Envoi - ${buyerName} ${prenom}`;
+    }
+
+    const currentDate = new Date();
+    const paymentDate = date ? new Date(date) : currentDate;
+    const refNumber = `N°02/08/PROMO 2025`;
+
+    const htmlContent = `
+        <!DOCTYPE html>
+        <html lang="fr">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Bordereau d'Envoi</title>
+            <style>
+                @page {
+                    size: A4;
+                    margin: 8mm;
+                }
+                
+                * {
+                    margin: 0;
+                    padding: 0;
+                    box-sizing: border-box;
+                }
+                
+                body { 
+                    font-family: 'Times New Roman', serif; 
+                    font-size: 14px;
+                    line-height: 1.4;
+                    color: #000;
+                    background: white;
+                    height: 100vh;
+                    display: flex;
+                    flex-direction: column;
+                }
+                
+                .document-container {
+                    flex: 1;
+                    padding: 10px;
+                    display: flex;
+                    flex-direction: column;
+                    max-height: 100vh;
+                }
+                
+                .header { 
+                    text-align: center; 
+                    margin-bottom: 20px;
+                }
+                
+                .company-name { 
+                    font-size: 20px; 
+                    font-weight: bold; 
+                    margin-bottom: 10px;
+                    text-transform: uppercase;
+                    letter-spacing: 2px;
+                }
+                
+                .company-address {
+                    font-size: 14px;
+                    margin-bottom: 20px;
+                }
+                
+                .document-ref {
+                    text-align: left;
+                    margin-bottom: 15px;
+                    font-size: 12px;
+                }
+                
+                .document-title { 
+                    font-size: 24px; 
+                    font-weight: bold; 
+                    text-align: center;
+                    margin: 20px 0;
+                    text-decoration: underline;
+                    letter-spacing: 1px;
+                }
+                
+                .destination {
+                    text-align: center;
+                    font-size: 16px;
+                    margin: 10px 0;
+                }
+                
+                .bank-name {
+                    font-size: 18px;
+                    font-weight: bold;
+                    margin: 10px 0;
+                }
+                
+                .table-container {
+                    margin: 20px 0 10px 0;
+                    flex: 1;
+                }
+                
+                .items-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    border: 2px solid #000;
+                }
+                
+                .items-table th,
+                .items-table td {
+                    border: 1px solid #000;
+                    padding: 12px 8px;
+                    text-align: center;
+                    vertical-align: middle;
+                }
+                
+                .items-table th {
+                    background: #f0f0f0;
+                    font-weight: bold;
+                    font-size: 14px;
+                }
+                
+                .items-table td {
+                    font-size: 13px;
+                    height: 60px;
+                }
+                
+                .designation-cell {
+                    text-align: left;
+                    padding-left: 8px;
+                }
+                
+                .footer-section {
+                    margin-top: 15px;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: flex-start;
+                    height: 80px;
+                }
+                
+                .signature-section {
+                    text-align: center;
+                    width: 200px;
+                }
+                
+                .signature-title {
+                    font-size: 14px;
+                    font-weight: bold;
+                    margin-bottom: 20px;
+                    text-decoration: underline;
+                }
+                
+                .stamp-area {
+                    width: 150px;
+                    height: 150px;
+                    border: 2px solid #000;
+                    border-radius: 50%;
+                    margin: 0 auto;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 10px;
+                    color: #666;
+                }
+                
+                @media print {
+                    body { 
+                        margin: 0; 
+                        padding: 0;
+                        height: 297mm;
+                    }
+                    .document-container {
+                        height: 100%;
+                        page-break-inside: avoid;
+                    }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="document-container">
+                <div class="header">
+                    <div class="company-name">PROMOTION FARTAS Yazid</div>
+                    <div class="company-address">Siège Social : El-Tarf</div>
+                </div>
+                
+                <div class="document-ref">
+                    EL-TARF Le : ${currentDate.toLocaleDateString('fr-FR')}. ${refNumber}
+                </div>
+                
+                <div class="document-title">Bordereau d'Envoi</div>
+                
+                <div class="destination">
+                    <div>A</div>
+                    <div class="bank-name">BADR EL-TARF</div>
+                </div>
+                
+                <div class="table-container">
+                    <table class="items-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 8%;">N°</th>
+                                <th style="width: 60%;">Désignation</th>
+                                <th style="width: 12%;">Nbre</th>
+                                <th style="width: 20%;">Observations</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>01</td>
+                                <td class="designation-cell" >
+                                    Chèque BDL N° <strong>${checkNumber}</strong><br>
+                                    <strong>Montant: ${parseFloat(amount).toLocaleString('fr-FR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    })} DA</strong><br>
+                                    <strong>Client: ${buyerName.toUpperCase()} ${prenom.toUpperCase()}</strong><br>
+                                </td>
+                                <td>01</td>
+                                <td></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="footer-section">
+                    <div class="signature-section">
+                        <div class="signature-title">BADR EL-TARF</div>
+                    </div>
+                    
+                    <div class="signature-section">
+                        <div class="signature-title">LE PROMOTEUR</div>
+                    </div>
+                </div>
+            </div>
+            
+            <script>
+                window.onload = function() {
+                    // Center the window
+                    if (window.screen) {
+                        const left = Math.max(0, (screen.width - 800) / 2);
+                        const top = Math.max(0, (screen.height - 1000) / 2);
+                        window.moveTo(left, top);
+                    }
+                    
+                    // Auto-print
+                    setTimeout(function() {
+                        window.print();
+                    }, 800);
+                };
+                
+                // Handle print completion
+                window.onafterprint = function() {
+                    if (confirm('Impression terminée. Fermer cette fenêtre ?')) {
+                        window.close();
+                    }
+                };
+            </script>
+        </body>
+        </html>
+    `;
+
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+}
+
+// Make printBordereauEnvoi function globally accessible
+window.printBordereauEnvoi = printBordereauEnvoi;
 
 // Utility function to calculate maxEspece safely (never negative)
 function calculateMaxEspece(reducedTotalPrice, maxVersement) {

@@ -590,9 +590,12 @@ async fn add_project_to_the_database(pool: tauri::State<'_, PgPool>, project: Pr
     let start_date = NaiveDate::parse_from_str(&project.project_start_date, "%Y-%m-%d")
         .map_err(|e| format!("Invalid start date format: {}", e))?;
     let end_date = NaiveDate::parse_from_str(&project.project_end_date, "%Y-%m-%d")
-        .map_err(|e| format!("Invalid end date format: {}", e))?;    let query = "INSERT INTO projects (project_name, project_location, project_start_date, project_end_date, nombre_des_bloc, nombre_des_etages, nombre_des_appartement, nda_dans_chaque_etage, nda_vendus, types_appartements, surfaces_appartements) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)";
+        .map_err(|e| format!("Invalid end date format: {}", e))?;
 
-    sqlx::query(query)
+    // Insert the new project and get its ID
+    let query = "INSERT INTO projects (project_name, project_location, project_start_date, project_end_date, nombre_des_bloc, nombre_des_etages, nombre_des_appartement, nda_dans_chaque_etage, nda_vendus, types_appartements, surfaces_appartements) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id";
+
+    let project_row = sqlx::query(query)
         .bind(&project.project_name)
         .bind(&project.project_location)
         .bind(start_date)
@@ -604,10 +607,56 @@ async fn add_project_to_the_database(pool: tauri::State<'_, PgPool>, project: Pr
         .bind(&project.nda_vendus)
         .bind(&project.types_appartements)
         .bind(&project.surfaces_appartements)
-        .execute(&*pool)
+        .fetch_one(&*pool)
         .await
         .map_err(|e| e.to_string())?;
 
+    let new_project_id: i32 = project_row.try_get("id").map_err(|e| e.to_string())?;
+
+    // Get all existing employees
+    let employees = sqlx::query("SELECT id FROM employees")
+        .fetch_all(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Store the count before moving the vector
+    let employee_count = employees.len();
+
+    // Add all existing employees to the new project with default/zero values
+    let salary_insert_query = "INSERT INTO employee_salary (employee_id, project_id, prix_jour, prix_hour, nombre_des_jours, nombre_des_heurx, travaux_attache, salaire, acompte, net_a_payer, observation) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)";
+    
+    for employee_row in employees {
+        let employee_id: i32 = employee_row.try_get("id").map_err(|e| e.to_string())?;
+        
+        // Check if this employee already exists for this project (shouldn't happen for new project, but safety check)
+        let existing_record = sqlx::query("SELECT id FROM employee_salary WHERE employee_id = $1 AND project_id = $2")
+            .bind(employee_id)
+            .bind(new_project_id.to_string())
+            .fetch_optional(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+        
+        if existing_record.is_none() {
+            // Insert employee with default/zero values for the new project
+            sqlx::query(salary_insert_query)
+                .bind(employee_id)
+                .bind(new_project_id.to_string())
+                .bind(Decimal::new(0, 2)) // prix_jour = 0
+                .bind(Decimal::new(0, 2)) // prix_hour = 0
+                .bind(0) // nombre_des_jours = 0
+                .bind(0) // nombre_des_heurx = 0
+                .bind(Decimal::new(0, 2)) // travaux_attache = 0
+                .bind(Decimal::new(0, 2)) // salaire = 0
+                .bind(Decimal::new(0, 2)) // acompte = 0
+                .bind(Decimal::new(0, 2)) // net_a_payer = 0
+                .bind("") // observation = empty
+                .execute(&*pool)
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+    }
+
+    debug_println!("Project '{}' created successfully with ID: {} and {} employees added", project.project_name, new_project_id, employee_count);
     Ok(())
 }
     
@@ -807,13 +856,40 @@ async fn delete_buyer_from_database(pool: tauri::State<'_, PgPool>, buyer_id: i3
 // Function to delete employee salary record from database
 #[tauri::command]
 async fn delete_employee(pool: tauri::State<'_, PgPool>, employee_salary_id: i32) -> Result<(), String> {
-    let query = "DELETE FROM employee_salary WHERE id = $1";
-
-    sqlx::query(query)
+    // First, get the employee_id from the salary record being deleted
+    let employee_id_query = "SELECT employee_id FROM employee_salary WHERE id = $1";
+    let employee_id_result = sqlx::query(employee_id_query)
         .bind(employee_salary_id)
-        .execute(&*pool)
+        .fetch_optional(&*pool)
         .await
         .map_err(|e| e.to_string())?;
+
+    if let Some(row) = employee_id_result {
+        let employee_id: i32 = row.try_get("employee_id").map_err(|e| e.to_string())?;
+        
+        // Delete ALL salary records for this employee across ALL projects
+        let delete_all_salaries_query = "DELETE FROM employee_salary WHERE employee_id = $1";
+        sqlx::query(delete_all_salaries_query)
+            .bind(employee_id)
+            .execute(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        // Optionally, also delete the employee from the main employees table
+        // (uncomment if you want to completely remove the employee record)
+        /*
+        let delete_employee_query = "DELETE FROM employees WHERE id = $1";
+        sqlx::query(delete_employee_query)
+            .bind(employee_id)
+            .execute(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+        */
+
+        println!("Employee {} deleted from all projects", employee_id);
+    } else {
+        return Err("Employee salary record not found".to_string());
+    }
 
     Ok(())
 }
