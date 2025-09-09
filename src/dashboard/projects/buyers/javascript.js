@@ -1178,6 +1178,89 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    // Function to add total calculation row
+    function addTotalCalculationRow(buyers) {
+        if (!buyers || buyers.length === 0) return;
+
+        // Remove existing total row if it exists
+        const existingTotalRow = tbody.querySelector('.total-calculation-row');
+        if (existingTotalRow) {
+            existingTotalRow.remove();
+        }
+
+        // Calculate totals
+        let totalPaidAmount = 0;
+        let totalPrixTotale = 0;
+        let totalRemise = 0;
+        const trancheTotals = {};
+
+        buyers.forEach(buyer => {
+            // Add to total paid
+            totalPaidAmount += parseFloat(buyer.total_paid || 0);
+            totalPrixTotale += parseFloat(buyer.prix_totale || 0);
+            totalRemise += parseFloat(buyer.remise || 0);
+
+            // Calculate tranche totals
+            let payments = {};
+            try {
+                payments = typeof buyer.payments === 'string' ? JSON.parse(buyer.payments) : buyer.payments || {};
+            } catch (e) {
+                payments = {};
+            }
+
+            Object.keys(payments).forEach(trancheKey => {
+                const trancheData = payments[trancheKey];
+                let amount = 0;
+
+                if (typeof trancheData === 'object' && trancheData !== null) {
+                    amount = parseFloat(trancheData.amount) || 0;
+                } else {
+                    amount = parseFloat(trancheData) || 0;
+                }
+
+                if (!trancheTotals[trancheKey]) {
+                    trancheTotals[trancheKey] = 0;
+                }
+                trancheTotals[trancheKey] += amount;
+            });
+        });
+
+        // Create total row
+        const totalRow = document.createElement('tr');
+        totalRow.className = 'total-calculation-row';
+        totalRow.style.backgroundColor = '#f8f9fa';
+        totalRow.style.fontWeight = 'bold';
+        totalRow.style.borderTop = '2px solid #dee2e6';
+
+        // Build row HTML
+        let totalRowHTML = `
+            <td style="text-align: center; font-weight: bold; color: #495057;">TOTAL</td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td style="text-align: right; color: #28a745;">${formatCurrency(totalPrixTotale)}</td>
+            <td style="text-align: right; color: #dc3545;">${formatCurrency(totalRemise)}</td>
+        `;
+
+        // Add tranche totals
+        for (let i = 0; i <= maxTranches; i++) {
+            const trancheTotal = trancheTotals[`T${i}`] || 0;
+            totalRowHTML += `<td style="text-align: right; color: #007bff;">${formatCurrency(trancheTotal)}</td>`;
+        }
+
+        // Add total paid and status columns
+        totalRowHTML += `
+            <td style="text-align: right; font-weight: bold; color: #28a745; font-size: 1.1em;">${formatCurrency(totalPaidAmount)}</td>
+            <td style="text-align: center; color: #6c757d;">${buyers.length} buyers</td>
+        `;
+
+        totalRow.innerHTML = totalRowHTML;
+        tbody.appendChild(totalRow);
+    }
+
     // Function to show loading state
     function showLoading() {
         tbody.innerHTML = `
@@ -1353,6 +1436,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
             }
             updateBuyerCount(buyers.length);
+
+            // Add total calculation row
+            addTotalCalculationRow(filteredBuyers);
 
             // 🔍 Trigger validation for all loaded buyers to show warnings
             await validateAllLoadedBuyers(filteredBuyers);
@@ -7287,4 +7373,238 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // ... existing code ...
+});
+
+// Excel Export Functionality
+async function exportToExcel() {
+    try {
+        console.log('🔄 Starting Excel export...');
+        
+        // Get current project information
+        const projectTitle = document.getElementById('pageTitle')?.textContent || 'Project Data';
+        const cleanProjectTitle = projectTitle.replace(/\s*-\s*Buyers?\s*$/i, '').trim();
+        
+        // Get all buyers data (visible and filtered)
+        const allBuyers = await invoke('get_buyers_by_project', { projectId: PROJECT_ID });
+        
+        if (!allBuyers || allBuyers.length === 0) {
+            alert('No buyer data available to export.');
+            return;
+        }
+
+        // Get project details
+        const projectDetails = await invoke('get_projects');
+        const currentProject = projectDetails.find(p => p.id === PROJECT_ID);
+        
+        console.log(`📊 Exporting ${allBuyers.length} buyers for project: ${cleanProjectTitle}`);
+
+        // Create a new workbook
+        const workbook = XLSX.utils.book_new();
+
+        // Prepare project summary data
+        const projectSummary = [
+            ['PROJECT SUMMARY', '', '', ''],
+            ['Project Name:', cleanProjectTitle, '', ''],
+            ['Location:', currentProject?.project_location || 'N/A', '', ''],
+            ['Total Apartments:', currentProject?.nombre_des_appartement || 'N/A', '', ''],
+            ['Sold Apartments:', allBuyers.length, '', ''],
+            ['Start Date:', currentProject?.project_start_date ? new Date(currentProject.project_start_date).toLocaleDateString() : 'N/A', '', ''],
+            ['End Date:', currentProject?.project_end_date ? new Date(currentProject.project_end_date).toLocaleDateString() : 'N/A', '', ''],
+            ['Export Date:', new Date().toLocaleDateString(), '', ''],
+            ['', '', '', ''], // Empty row
+        ];
+
+        // Prepare buyers data with headers
+        const buyersData = [
+            // Headers
+            [
+                'ID',
+                'Bloc',
+                'Level',
+                'Apartment',
+                'Full Name',
+                'Apartment Type',
+                'Surface (m²)',
+                'Purchase Date',
+                'Total Price (DA)',
+                'Discount (DA)',
+                'Final Price (DA)',
+                'Total Paid (DA)',
+                'Remaining (DA)',
+                'Payment Status',
+                'Payment Details'
+            ]
+        ];
+
+        // Add buyer rows
+        allBuyers.forEach((buyer, index) => {
+            let payments = {};
+            try {
+                payments = typeof buyer.payments === 'string' ? JSON.parse(buyer.payments) : buyer.payments || {};
+            } catch (e) {
+                console.warn('Error parsing payments for buyer', buyer.id, e);
+            }
+
+            // Calculate financial details
+            const totalPrice = parseFloat(buyer.prix_totale) || 0;
+            const discount = parseFloat(buyer.remise) || 0;
+            const finalPrice = totalPrice - discount;
+            const totalPaid = parseFloat(buyer.total_paid) || 0;
+            const remaining = finalPrice - totalPaid;
+
+            // Format payment details
+            const paymentDetails = Object.keys(payments).map(trancheKey => {
+                const trancheData = payments[trancheKey];
+                let amount = 0;
+                let type = 'versement';
+                let date = '';
+
+                if (typeof trancheData === 'object' && trancheData !== null) {
+                    amount = parseFloat(trancheData.amount) || 0;
+                    type = trancheData.type || 'versement';
+                    date = trancheData.date || '';
+                } else {
+                    amount = parseFloat(trancheData) || 0;
+                }
+
+                if (amount > 0) {
+                    return `${trancheKey}: ${amount.toLocaleString()} DA (${type})${date ? ' - ' + date : ''}`;
+                }
+                return null;
+            }).filter(Boolean).join('; ');
+
+            buyersData.push([
+                buyer.id,
+                buyer.bloc,
+                buyer.niveau,
+                buyer.logt_num,
+                `${buyer.nom} ${buyer.prenom}`,
+                buyer.type_logt,
+                buyer.surface,
+                new Date(buyer.date).toLocaleDateString(),
+                totalPrice.toLocaleString(),
+                discount.toLocaleString(),
+                finalPrice.toLocaleString(),
+                totalPaid.toLocaleString(),
+                remaining.toLocaleString(),
+                buyer.payment_status,
+                paymentDetails || 'No payments recorded'
+            ]);
+        });
+
+        // Combine project summary and buyers data
+        const combinedData = [...projectSummary, ...buyersData];
+
+        // Create worksheet
+        const worksheet = XLSX.utils.aoa_to_sheet(combinedData);
+
+        // Set column widths for better formatting
+        const columnWidths = [
+            { wch: 8 },   // ID
+            { wch: 8 },   // Bloc
+            { wch: 8 },   // Level
+            { wch: 12 },  // Apartment
+            { wch: 20 },  // Full Name
+            { wch: 15 },  // Apartment Type
+            { wch: 12 },  // Surface
+            { wch: 12 },  // Purchase Date
+            { wch: 15 },  // Total Price
+            { wch: 12 },  // Discount
+            { wch: 15 },  // Final Price
+            { wch: 15 },  // Total Paid
+            { wch: 15 },  // Remaining
+            { wch: 15 },  // Payment Status
+            { wch: 50 }   // Payment Details
+        ];
+        worksheet['!cols'] = columnWidths;
+
+        // Style the headers and project summary
+        const range = XLSX.utils.decode_range(worksheet['!ref']);
+        
+        // Style project summary (first 9 rows)
+        for (let row = 0; row < 9; row++) {
+            for (let col = 0; col <= 3; col++) {
+                const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+                if (worksheet[cellAddress]) {
+                    worksheet[cellAddress].s = {
+                        font: { bold: true, sz: 12 },
+                        fill: { fgColor: { rgb: "E3F2FD" } },
+                        alignment: { horizontal: "left" }
+                    };
+                }
+            }
+        }
+
+        // Style the buyers data headers (row 9, which is index 9)
+        const headerRow = 9;
+        for (let col = 0; col <= 14; col++) {
+            const cellAddress = XLSX.utils.encode_cell({ r: headerRow, c: col });
+            if (worksheet[cellAddress]) {
+                worksheet[cellAddress].s = {
+                    font: { bold: true, color: { rgb: "FFFFFF" }, sz: 11 },
+                    fill: { fgColor: { rgb: "2E7D32" } }, // Professional green
+                    alignment: { horizontal: "center" },
+                    border: {
+                        top: { style: "thin", color: { rgb: "000000" } },
+                        bottom: { style: "thin", color: { rgb: "000000" } },
+                        left: { style: "thin", color: { rgb: "000000" } },
+                        right: { style: "thin", color: { rgb: "000000" } }
+                    }
+                };
+            }
+        }
+
+        // Add worksheet to workbook
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Buyers Data');
+
+        // Generate filename with project name and date
+        const today = new Date();
+        const dateStr = today.toISOString().split('T')[0]; // YYYY-MM-DD format
+        const filename = `${cleanProjectTitle.replace(/[^a-zA-Z0-9]/g, '_')}_Buyers_${dateStr}.xlsx`;
+
+        // Write and download the file
+        XLSX.writeFile(workbook, filename);
+
+        console.log(`✅ Excel export completed: ${filename}`);
+        
+        // Show success message
+        setTimeout(() => {
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #28a745;
+                color: white;
+                padding: 15px 25px;
+                border-radius: 8px;
+                z-index: 10000;
+                font-size: 14px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            `;
+            notification.innerHTML = `
+                <i class="fas fa-check-circle"></i>
+                <span>Excel file exported successfully!<br><small>${filename}</small></span>
+            `;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => notification.remove(), 5000);
+        }, 500);
+
+    } catch (error) {
+        console.error('❌ Error exporting to Excel:', error);
+        alert('Error exporting to Excel: ' + error.message);
+    }
+}
+
+// Initialize Excel export functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const exportButton = document.getElementById('exportToExcelButton');
+    if (exportButton) {
+        exportButton.addEventListener('click', exportToExcel);
+        console.log('✅ Excel export button initialized');
+    }
 });
