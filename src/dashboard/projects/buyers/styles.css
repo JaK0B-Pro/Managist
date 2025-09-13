@@ -63,7 +63,7 @@ body {
 }
 
 .export-excel-btn:hover {
-    background: #218838; /* Darker green */
+    background: #218838;
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0,0,0,0.3);
 }
@@ -355,7 +355,7 @@ th {
 }
 
 /* Table row hover effect */
-tbody tr:not(.total-calculation-row):hover {
+tbody tr:hover {
     background-color: #f8f9fa;
     transition: background-color 0.2s ease;
 }
@@ -1145,7 +1145,7 @@ td[rowspan] {
     border-bottom: 1px solid #e1e8ed;
 }
 
-.table-container table tbody tr:not(.bloc-separator):not(.total-calculation-row):hover {
+.table-container table tbody tr:not(.bloc-separator):hover {
     background-color: #f8f9fa;
 }
 
@@ -2713,9 +2713,8 @@ header {
         width: 100%;
         justify-content: center;
     }
-}
-
-/* Total Calculation Row Styles */
+}/
+* Total Calculation Row Styles */
 .total-calculation-row {
     background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
     border-top: 2px solid #28a745 !important;
@@ -2744,8 +2743,9 @@ header {
     font-weight: bold !important;
     border: 1px solid #28a745 !important;
     border-radius: 3px;
-}/* En
-sure buyer rows maintain hover effects (not total row) */
+}
+
+/* Ensure buyer rows maintain hover effects (not total row) */
 tbody tr:not(.total-calculation-row):hover {
     background: linear-gradient(135deg, #f8f9ff 0%, #f0f2ff 100%) !important;
     transform: translateY(-1px);

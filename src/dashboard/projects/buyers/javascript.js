@@ -48,13 +48,25 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
+    // Function to print payment summary (moved here)
+    async function printPaymentSummary(buyerId) {
+        console.log('Attempting to print payment summary for buyer ID:', buyerId);
+        // Further implementation will go here
+    }
 
-});
-
-// Hook the top button after DOM ready
-document.addEventListener('DOMContentLoaded', () => {
-    const topBtn = document.getElementById('printPaymentSummaryTopBtn');
-    if (topBtn) topBtn.addEventListener('click', printPaymentSummaryFromModal);
+    // Event listener for the new print summary button
+    const printSummaryButton = document.getElementById('printPaymentSummaryBtn');
+    if (printSummaryButton) {
+        printSummaryButton.addEventListener('click', async () => {
+            const buyerModal = document.getElementById('buyerModal');
+            const buyerId = buyerModal.getAttribute('data-buyer-id');
+            if (buyerId) {
+                await printPaymentSummary(parseInt(buyerId));
+            } else {
+                alert('No buyer selected for printing summary.');
+            }
+        });
+    }
 });
 
 // Get project ID from URL parameters
@@ -1180,12 +1192,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Function to add total calculation row
     function addTotalCalculationRow(buyers) {
-        if (!buyers || buyers.length === 0) return;
-
         // Remove existing total row if it exists
         const existingTotalRow = tbody.querySelector('.total-calculation-row');
         if (existingTotalRow) {
             existingTotalRow.remove();
+        }
+
+        // Handle empty buyers array (show zeros)
+        if (!buyers) {
+            buyers = [];
         }
 
         // Calculate totals
@@ -1232,7 +1247,8 @@ document.addEventListener('DOMContentLoaded', function () {
         totalRow.style.fontWeight = 'bold';
         totalRow.style.borderTop = '2px solid #dee2e6';
 
-        // Build row HTML
+        // Build row HTML - match the exact table structure
+        // Base headers: NIVEAU, N° LOGT, NOM, PRENOM, TYPE LOGT, SURFACE, DATE, PRIX TOTALE, REMISE
         let totalRowHTML = `
             <td style="text-align: center; font-weight: bold; color: #495057;">TOTAL</td>
             <td></td>
@@ -1254,7 +1270,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // Add total paid and status columns
         totalRowHTML += `
             <td style="text-align: right; font-weight: bold; color: #28a745; font-size: 1.1em;">${formatCurrency(totalPaidAmount)}</td>
-            <td style="text-align: center; color: #6c757d;">${buyers.length} buyers</td>
+            <td style="text-align: center; color: #6c757d;">${buyers.length} buyer${buyers.length !== 1 ? 's' : ''}</td>
         `;
 
         totalRow.innerHTML = totalRowHTML;
@@ -1293,6 +1309,9 @@ document.addEventListener('DOMContentLoaded', function () {
             await loadPrixUnitaire();
 
             const buyers = await invoke('get_buyers_by_project', { projectId: PROJECT_ID });
+            
+            // Store buyers globally for search functionality
+            window.allBuyers = buyers;
 
             tbody.innerHTML = '';
 
@@ -2116,27 +2135,136 @@ document.addEventListener('DOMContentLoaded', function () {
         const filter = searchInput.value.toLowerCase().trim();
         const rows = tbody.getElementsByTagName('tr');
         let visibleCount = 0;
+        const visibleBuyers = [];
+
+        // If no filter, reload to restore original structure
+        if (!filter) {
+            filteredCountEl.style.display = 'none';
+            searchInput.style.borderColor = '#ddd';
+            loadBuyers();
+            return;
+        }
+
+        // First pass: determine visibility and collect visible buyers by BLOC + NIVEAU
+        const blocNiveauGroups = {};
+        const visibleRows = [];
 
         for (let i = 0; i < rows.length; i++) {
-            const rowText = rows[i].textContent.toLowerCase();
+            const row = rows[i];
+            
+            // Skip total calculation row and separator rows
+            if (row.classList.contains('total-calculation-row') || 
+                row.classList.contains('bloc-separator') || 
+                row.classList.contains('bloc-header')) {
+                continue;
+            }
+
+            const rowText = row.textContent.toLowerCase();
             const isVisible = rowText.includes(filter);
-            rows[i].style.display = isVisible ? '' : 'none';
-            if (isVisible) visibleCount++;
+            
+            if (isVisible && row.classList.contains('buyer-row')) {
+                visibleCount++;
+                visibleRows.push(row);
+                
+                // Get NIVEAU from the row (first cell text content)
+                const niveauCell = row.querySelector('td:first-child');
+                const niveau = niveauCell ? niveauCell.textContent.trim() : 'Unknown';
+                
+                // Get BLOC from the row's border color or data attribute
+                const borderColor = row.style.borderLeft || row.style.borderLeftColor || '';
+                let bloc = 'Unknown';
+                
+                // Try to get bloc from buyer data
+                const firstBuyerId = row.getAttribute('data-buyer-id');
+                if (firstBuyerId && window.allBuyers) {
+                    const buyer = window.allBuyers.find(b => b.id == firstBuyerId);
+                    if (buyer && buyer.bloc) {
+                        bloc = buyer.bloc;
+                    }
+                }
+                
+                // Create unique key combining BLOC and NIVEAU
+                const groupKey = `${bloc}-${niveau}`;
+                
+                if (!blocNiveauGroups[groupKey]) {
+                    blocNiveauGroups[groupKey] = [];
+                }
+                blocNiveauGroups[groupKey].push(row);
+                
+                // Extract buyer data for total calculation
+                const secondBuyerId = row.getAttribute('data-buyer-id');
+                if (secondBuyerId && window.allBuyers) {
+                    const buyer = window.allBuyers.find(b => b.id == secondBuyerId);
+                    if (buyer) {
+                        visibleBuyers.push(buyer);
+                    }
+                }
+            }
+        }
+
+        // Second pass: apply visibility and intelligent rowspan management
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            
+            if (row.classList.contains('total-calculation-row') || 
+                row.classList.contains('bloc-separator') || 
+                row.classList.contains('bloc-header')) {
+                continue;
+            }
+
+            const rowText = row.textContent.toLowerCase();
+            const isVisible = rowText.includes(filter);
+            
+            if (isVisible && row.classList.contains('buyer-row')) {
+                row.style.display = '';
+                
+                const niveauCell = row.querySelector('td:first-child');
+                const niveau = niveauCell ? niveauCell.textContent.trim() : 'Unknown';
+                
+                // Get BLOC for this row (same logic as first pass)
+                let bloc = 'Unknown';
+                const rowBuyerId = row.getAttribute('data-buyer-id');
+                if (rowBuyerId && window.allBuyers) {
+                    const buyer = window.allBuyers.find(b => b.id == rowBuyerId);
+                    if (buyer && buyer.bloc) {
+                        bloc = buyer.bloc;
+                    }
+                }
+                
+                const groupKey = `${bloc}-${niveau}`;
+                const groupSize = blocNiveauGroups[groupKey] ? blocNiveauGroups[groupKey].length : 1;
+                
+                // Intelligent rowspan management
+                if (groupSize === 1) {
+                    // Single buyer in BLOC-NIVEAU group - remove rowspan, show cell
+                    niveauCell.removeAttribute('rowspan');
+                    niveauCell.style.display = '';
+                } else {
+                    // Multiple buyers in BLOC-NIVEAU group - keep rowspan for first, hide for others
+                    const isFirstInGroup = blocNiveauGroups[groupKey][0] === row;
+                    if (isFirstInGroup) {
+                        niveauCell.setAttribute('rowspan', groupSize);
+                        niveauCell.style.display = '';
+                    } else {
+                        niveauCell.style.display = 'none';
+                    }
+                }
+            } else {
+                row.style.display = 'none';
+            }
         }
 
         // Update filtered count display
-        if (filter) {
-            filteredCountEl.textContent = `Showing: ${visibleCount} results`;
-            filteredCountEl.style.display = 'inline';
-        } else {
-            filteredCountEl.style.display = 'none';
-        }
+        filteredCountEl.textContent = `Showing: ${visibleCount} results`;
+        filteredCountEl.style.display = 'inline';
 
         // Visual feedback for search
-        if (filter && visibleCount === 0) {
+        if (visibleCount === 0) {
             searchInput.style.borderColor = '#e74c3c';
+            addTotalCalculationRow([]);
         } else {
-            searchInput.style.borderColor = filter ? '#27ae60' : '#ddd';
+            searchInput.style.borderColor = '#27ae60';
+            addTotalCalculationRow(visibleBuyers);
         }
     }
 
@@ -5358,9 +5486,8 @@ async function printRecuCheque(trancheIndex) {
             return;
         }
 
-        // Get current project info and remove "Buyers" from the title
-        const rawProjectTitle = document.getElementById('pageTitle')?.textContent || 'Project';
-        const projectTitle = rawProjectTitle.replace(/\s*-\s*Buyers?\s*$/i, '').trim();
+        // Get current project info
+        const projectTitle = document.getElementById('pageTitle')?.textContent || 'Project';
 
         // Generate the receipt
         generateRecuCheque(buyerName, prenom, trancheIndex, trancheAmount, trancheDate, checkNumber, projectTitle);
@@ -5793,6 +5920,10 @@ function generateRecuCheque(buyerName, prenom, trancheIndex, amount, date, check
                             <div class="detail-value">${projectTitle}</div>
                         </div>
                         <div class="detail-item">
+                            <div class="detail-label">Tranche:</div>
+                            <div class="detail-value">T${trancheIndex}</div>
+                        </div>
+                        <div class="detail-item">
                             <div class="detail-label">N° Chèque:</div>
                             <div class="detail-value">${checkNumber}</div>
                         </div>
@@ -5886,321 +6017,6 @@ function generateRecuCheque(buyerName, prenom, trancheIndex, amount, date, check
 
 // Make printRecuCheque function globally accessible
 window.printRecuCheque = printRecuCheque;
-
-// Print Bordereau d'Envoi function
-async function printBordereauEnvoi(trancheIndex) {
-    try {
-        const form = document.getElementById('addBuyerForm');
-        if (!form) {
-            alert('No form found');
-            return;
-        }
-
-        // Get buyer information from form inputs by ID
-        const buyerName = document.getElementById('nom')?.value || 'N/A';
-        const prenom = document.getElementById('prenom')?.value || '';
-
-        // Get tranche information from FormData
-        const formData = new FormData(form);
-        const trancheAmount = formData.get(`tranche_${trancheIndex}`) || '0';
-        const trancheDate = formData.get(`tranche_date_${trancheIndex}`) || new Date().toISOString().split('T')[0];
-        const trancheType = formData.get(`tranche_type_${trancheIndex}`) || 'versement';
-        const checkNumber = formData.get(`check_${trancheIndex}`) || '';
-
-        if (!trancheAmount || parseFloat(trancheAmount) <= 0) {
-            alert('Please enter a valid amount for this tranche before printing');
-            return;
-        }
-
-        if (trancheType !== 'versement') {
-            alert('Bordereau d\'envoi can only be printed for "versement" type tranches');
-            return;
-        }
-
-        if (!checkNumber.trim()) {
-            alert('Please enter a check number before printing the bordereau d\'envoi');
-            return;
-        }
-
-        // Get current project info and remove "Buyers" from the title
-        const rawProjectTitle = document.getElementById('pageTitle')?.textContent || 'Project';
-        const projectTitle = rawProjectTitle.replace(/\s*-\s*Buyers?\s*$/i, '').trim();
-
-        // Generate the bordereau d'envoi
-        generateBordereauEnvoi(buyerName, prenom, trancheIndex, trancheAmount, trancheDate, checkNumber, projectTitle);
-
-    } catch (error) {
-        console.error('Error generating Bordereau d\'Envoi:', error);
-        alert('Error generating Bordereau d\'Envoi: ' + error.message);
-    }
-}
-
-// Generate Bordereau d'Envoi Document
-function generateBordereauEnvoi(buyerName, prenom, trancheIndex, amount, date, checkNumber, projectTitle) {
-    const printWindow = window.open('', '_blank', 'width=800,height=1000,scrollbars=yes,resizable=yes');
-
-    // Set window title
-    if (printWindow) {
-        printWindow.document.title = `Bordereau d'Envoi - ${buyerName} ${prenom}`;
-    }
-
-    const currentDate = new Date();
-    const paymentDate = date ? new Date(date) : currentDate;
-    const refNumber = `N°02/08/PROMO 2025`;
-
-    const htmlContent = `
-        <!DOCTYPE html>
-        <html lang="fr">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Bordereau d'Envoi</title>
-            <style>
-                @page {
-                    size: A4;
-                    margin: 8mm;
-                }
-                
-                * {
-                    margin: 0;
-                    padding: 0;
-                    box-sizing: border-box;
-                }
-                
-                body { 
-                    font-family: 'Times New Roman', serif; 
-                    font-size: 14px;
-                    line-height: 1.4;
-                    color: #000;
-                    background: white;
-                    height: 100vh;
-                    display: flex;
-                    flex-direction: column;
-                }
-                
-                .document-container {
-                    flex: 1;
-                    padding: 10px;
-                    display: flex;
-                    flex-direction: column;
-                    max-height: 100vh;
-                }
-                
-                .header { 
-                    text-align: center; 
-                    margin-bottom: 20px;
-                }
-                
-                .company-name { 
-                    font-size: 20px; 
-                    font-weight: bold; 
-                    margin-bottom: 10px;
-                    text-transform: uppercase;
-                    letter-spacing: 2px;
-                }
-                
-                .company-address {
-                    font-size: 14px;
-                    margin-bottom: 20px;
-                }
-                
-                .document-ref {
-                    text-align: left;
-                    margin-bottom: 15px;
-                    font-size: 12px;
-                }
-                
-                .document-title { 
-                    font-size: 24px; 
-                    font-weight: bold; 
-                    text-align: center;
-                    margin: 20px 0;
-                    text-decoration: underline;
-                    letter-spacing: 1px;
-                }
-                
-                .destination {
-                    text-align: center;
-                    font-size: 16px;
-                    margin: 10px 0;
-                }
-                
-                .bank-name {
-                    font-size: 18px;
-                    font-weight: bold;
-                    margin: 10px 0;
-                }
-                
-                .table-container {
-                    margin: 20px 0 10px 0;
-                    flex: 1;
-                }
-                
-                .items-table {
-                    width: 100%;
-                    border-collapse: collapse;
-                    border: 2px solid #000;
-                }
-                
-                .items-table th,
-                .items-table td {
-                    border: 1px solid #000;
-                    padding: 12px 8px;
-                    text-align: center;
-                    vertical-align: middle;
-                }
-                
-                .items-table th {
-                    background: #f0f0f0;
-                    font-weight: bold;
-                    font-size: 14px;
-                }
-                
-                .items-table td {
-                    font-size: 13px;
-                    height: 60px;
-                }
-                
-                .designation-cell {
-                    text-align: left;
-                    padding-left: 8px;
-                }
-                
-                .footer-section {
-                    margin-top: 15px;
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: flex-start;
-                    height: 80px;
-                }
-                
-                .signature-section {
-                    text-align: center;
-                    width: 200px;
-                }
-                
-                .signature-title {
-                    font-size: 14px;
-                    font-weight: bold;
-                    margin-bottom: 20px;
-                    text-decoration: underline;
-                }
-                
-                .stamp-area {
-                    width: 150px;
-                    height: 150px;
-                    border: 2px solid #000;
-                    border-radius: 50%;
-                    margin: 0 auto;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-size: 10px;
-                    color: #666;
-                }
-                
-                @media print {
-                    body { 
-                        margin: 0; 
-                        padding: 0;
-                        height: 297mm;
-                    }
-                    .document-container {
-                        height: 100%;
-                        page-break-inside: avoid;
-                    }
-                }
-            </style>
-        </head>
-        <body>
-            <div class="document-container">
-                <div class="header">
-                    <div class="company-name">PROMOTION FARTAS Yazid</div>
-                    <div class="company-address">Siège Social : El-Tarf</div>
-                </div>
-                
-                <div class="document-ref">
-                    EL-TARF Le : ${currentDate.toLocaleDateString('fr-FR')}. ${refNumber}
-                </div>
-                
-                <div class="document-title">Bordereau d'Envoi</div>
-                
-                <div class="destination">
-                    <div>A</div>
-                    <div class="bank-name">BADR EL-TARF</div>
-                </div>
-                
-                <div class="table-container">
-                    <table class="items-table">
-                        <thead>
-                            <tr>
-                                <th style="width: 8%;">N°</th>
-                                <th style="width: 60%;">Désignation</th>
-                                <th style="width: 12%;">Nbre</th>
-                                <th style="width: 20%;">Observations</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>01</td>
-                                <td class="designation-cell" >
-                                    Chèque BDL N° <strong>${checkNumber}</strong><br>
-                                    <strong>Montant: ${parseFloat(amount).toLocaleString('fr-FR', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    })} DA</strong><br>
-                                    <strong>Client: ${buyerName.toUpperCase()} ${prenom.toUpperCase()}</strong><br>
-                                </td>
-                                <td>01</td>
-                                <td></td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                
-                <div class="footer-section">
-                    <div class="signature-section">
-                        <div class="signature-title">BADR EL-TARF</div>
-                    </div>
-                    
-                    <div class="signature-section">
-                        <div class="signature-title">LE PROMOTEUR</div>
-                    </div>
-                </div>
-            </div>
-            
-            <script>
-                window.onload = function() {
-                    // Center the window
-                    if (window.screen) {
-                        const left = Math.max(0, (screen.width - 800) / 2);
-                        const top = Math.max(0, (screen.height - 1000) / 2);
-                        window.moveTo(left, top);
-                    }
-                    
-                    // Auto-print
-                    setTimeout(function() {
-                        window.print();
-                    }, 800);
-                };
-                
-                // Handle print completion
-                window.onafterprint = function() {
-                    if (confirm('Impression terminée. Fermer cette fenêtre ?')) {
-                        window.close();
-                    }
-                };
-            </script>
-        </body>
-        </html>
-    `;
-
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
-}
-
-// Make printBordereauEnvoi function globally accessible
-window.printBordereauEnvoi = printBordereauEnvoi;
 
 // Utility function to calculate maxEspece safely (never negative)
 function calculateMaxEspece(reducedTotalPrice, maxVersement) {
@@ -7327,7 +7143,11 @@ function printPaymentSummaryFromModal() {
     setTimeout(() => { w.print(); }, 500);
 }
 
-
+// Hook the top button after DOM ready
+document.addEventListener('DOMContentLoaded', () => {
+    const topBtn = document.getElementById('printPaymentSummaryTopBtn');
+    if (topBtn) topBtn.addEventListener('click', printPaymentSummaryFromModal);
+});
 
 // Make functions globally accessible
 window.showUserInfoModal = showUserInfoModal;
@@ -7379,14 +7199,14 @@ document.addEventListener('DOMContentLoaded', function () {
 async function exportToExcel() {
     try {
         console.log('🔄 Starting Excel export...');
-        
+
         // Get current project information
         const projectTitle = document.getElementById('pageTitle')?.textContent || 'Project Data';
         const cleanProjectTitle = projectTitle.replace(/\s*-\s*Buyers?\s*$/i, '').trim();
-        
+
         // Get all buyers data (visible and filtered)
         const allBuyers = await invoke('get_buyers_by_project', { projectId: PROJECT_ID });
-        
+
         if (!allBuyers || allBuyers.length === 0) {
             alert('No buyer data available to export.');
             return;
@@ -7395,7 +7215,7 @@ async function exportToExcel() {
         // Get project details
         const projectDetails = await invoke('get_projects');
         const currentProject = projectDetails.find(p => p.id === PROJECT_ID);
-        
+
         console.log(`📊 Exporting ${allBuyers.length} buyers for project: ${cleanProjectTitle}`);
 
         // Create a new workbook
@@ -7518,42 +7338,6 @@ async function exportToExcel() {
         ];
         worksheet['!cols'] = columnWidths;
 
-        // Style the headers and project summary
-        const range = XLSX.utils.decode_range(worksheet['!ref']);
-        
-        // Style project summary (first 9 rows)
-        for (let row = 0; row < 9; row++) {
-            for (let col = 0; col <= 3; col++) {
-                const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
-                if (worksheet[cellAddress]) {
-                    worksheet[cellAddress].s = {
-                        font: { bold: true, sz: 12 },
-                        fill: { fgColor: { rgb: "E3F2FD" } },
-                        alignment: { horizontal: "left" }
-                    };
-                }
-            }
-        }
-
-        // Style the buyers data headers (row 9, which is index 9)
-        const headerRow = 9;
-        for (let col = 0; col <= 14; col++) {
-            const cellAddress = XLSX.utils.encode_cell({ r: headerRow, c: col });
-            if (worksheet[cellAddress]) {
-                worksheet[cellAddress].s = {
-                    font: { bold: true, color: { rgb: "FFFFFF" }, sz: 11 },
-                    fill: { fgColor: { rgb: "2E7D32" } }, // Professional green
-                    alignment: { horizontal: "center" },
-                    border: {
-                        top: { style: "thin", color: { rgb: "000000" } },
-                        bottom: { style: "thin", color: { rgb: "000000" } },
-                        left: { style: "thin", color: { rgb: "000000" } },
-                        right: { style: "thin", color: { rgb: "000000" } }
-                    }
-                };
-            }
-        }
-
         // Add worksheet to workbook
         XLSX.utils.book_append_sheet(workbook, worksheet, 'Buyers Data');
 
@@ -7566,7 +7350,7 @@ async function exportToExcel() {
         XLSX.writeFile(workbook, filename);
 
         console.log(`✅ Excel export completed: ${filename}`);
-        
+
         // Show success message
         setTimeout(() => {
             const notification = document.createElement('div');
@@ -7590,7 +7374,7 @@ async function exportToExcel() {
                 <span>Excel file exported successfully!<br><small>${filename}</small></span>
             `;
             document.body.appendChild(notification);
-            
+
             setTimeout(() => notification.remove(), 5000);
         }, 500);
 
@@ -7608,3 +7392,304 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('✅ Excel export button initialized');
     }
 });
+
+// Print Bordereau d'Envoi function
+async function printBordereauEnvoi(trancheIndex) {
+    try {
+        const form = document.getElementById('addBuyerForm');
+        if (!form) {
+            alert('No form found');
+            return;
+        }
+
+        // Get buyer information from form inputs by ID
+        const buyerName = document.getElementById('nom')?.value || 'N/A';
+        const prenom = document.getElementById('prenom')?.value || '';
+
+        // Get tranche information from FormData
+        const formData = new FormData(form);
+        const trancheAmount = formData.get(`tranche_${trancheIndex}`) || '0';
+        const trancheDate = formData.get(`tranche_date_${trancheIndex}`) || new Date().toISOString().split('T')[0];
+        const trancheType = formData.get(`tranche_type_${trancheIndex}`) || 'versement';
+        const checkNumber = formData.get(`check_${trancheIndex}`) || '';
+
+        if (!trancheAmount || parseFloat(trancheAmount) <= 0) {
+            alert('Please enter a valid amount for this tranche before printing');
+            return;
+        }
+
+        if (trancheType !== 'versement') {
+            alert('Bordereau d\'envoi can only be printed for "versement" type tranches');
+            return;
+        }
+
+        if (!checkNumber.trim()) {
+            alert('Please enter a check number before printing the bordereau d\'envoi');
+            return;
+        }
+
+        // Get current project info
+        const projectTitle = document.getElementById('pageTitle')?.textContent || 'Project';
+
+        // Generate the bordereau d'envoi
+        generateBordereauEnvoi(buyerName, prenom, trancheIndex, trancheAmount, trancheDate, checkNumber, projectTitle);
+
+    } catch (error) {
+        console.error('Error generating Bordereau d\'Envoi:', error);
+        alert('Error generating Bordereau d\'Envoi: ' + error.message);
+    }
+}
+
+// Generate Bordereau d'Envoi Document
+function generateBordereauEnvoi(buyerName, prenom, trancheIndex, amount, date, checkNumber, projectTitle) {
+    const printWindow = window.open('', '_blank', 'width=800,height=1000,scrollbars=yes,resizable=yes');
+
+    // Set window title
+    if (printWindow) {
+        printWindow.document.title = `Bordereau d'Envoi - ${buyerName} ${prenom}`;
+    }
+
+    const currentDate = new Date();
+    const paymentDate = date ? new Date(date) : currentDate;
+    const refNumber = `N°02/08/PROMO 2025`;
+
+    const htmlContent = `
+        <!DOCTYPE html>
+        <html lang="fr">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Bordereau d'Envoi</title>
+            <style>
+                @page {
+                    size: A4;
+                    margin: 8mm;
+                }
+
+                * {
+                    margin: 0;
+                    padding: 0;
+                    box-sizing: border-box;
+                }
+
+                body {
+                    font-family: 'Times New Roman', serif;
+                    font-size: 14px;
+                    line-height: 1.4;
+                    color: #000;
+                    background: white;
+                    height: 100vh;
+                    display: flex;
+                    flex-direction: column;
+                }
+
+                .document-container {
+                    flex: 1;
+                    padding: 10px;
+                    display: flex;
+                    flex-direction: column;
+                    max-height: 100vh;
+                }
+
+                .header {
+                    text-align: center; 
+                    margin-bottom: 20px;
+                }
+
+                .company-name {
+                    font-size: 20px;
+                    font-weight: bold;
+                    margin-bottom: 10px;
+                    text-transform: uppercase;
+                    letter-spacing: 2px;
+                }
+
+                .company-address {
+                    font-size: 14px;
+                    margin-bottom: 20px;
+                }
+
+                .document-ref {
+                    text-align: left;
+                    margin-bottom: 15px;
+                    font-size: 12px;
+                }
+
+                .document-title {
+                    font-size: 24px;
+                    font-weight: bold;
+                    text-align: center;
+                    margin: 20px 0;
+                    text-decoration: underline;
+                    letter-spacing: 1px;
+                }
+
+                .destination {
+                    text-align: center;
+                    font-size: 16px;
+                    margin: 10px 0;
+                }
+
+                .bank-name {
+                    font-size: 18px;
+                    font-weight: bold;
+                    margin: 10px 0;
+                }
+
+                .table-container {
+                    margin: 20px 0 10px 0;
+                    flex: 1;
+                }
+
+                .items-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    border: 2px solid #000;
+                }
+
+                .items-table th,
+                .items-table td {
+                    border: 1px solid #000;
+                    padding: 12px 8px;
+                    text-align: center;
+                    vertical-align: middle;
+                }
+
+                .items-table th {
+                    background: #f0f0f0;
+                    font-weight: bold;
+                    font-size: 14px;
+                }
+
+                .items-table td {
+                    font-size: 13px;
+                    height: 60px;
+                }
+
+                .designation-cell {
+                    text-align: left;
+                    padding-left: 8px;
+                }
+
+                .footer-section {
+                    margin-top: 15px;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: flex-start;
+                    height: 80px;
+                }
+
+                .signature-section {
+                    text-align: center;
+                    width: 200px;
+                }
+
+                .signature-title {
+                    font-size: 14px;
+                    font-weight: bold;
+                    margin-bottom: 20px;
+                    text-decoration: underline;
+                }
+
+                @media print {
+                    body {
+                        margin: 0;
+                        padding: 0;
+                        height: 297mm;
+                    }
+                    .document-container {
+                        height: 100%;
+                        page-break-inside: avoid;
+                    }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="document-container">
+                <div class="header">
+                    <div class="company-name">PROMOTION FARTAS Yazid</div>
+                    <div class="company-address">Siège Social : El-Tarf</div>
+                </div>
+
+                <div class="document-ref">
+                    EL-TARF Le : ${currentDate.toLocaleDateString('fr-FR')}. ${refNumber}
+                </div>
+
+                <div class="document-title">Bordereau d'Envoi</div>
+
+                <div class="destination">
+                    <div>A</div>
+                    <div class="bank-name">BADR EL-TARF</div>
+                </div>
+
+                <div class="table-container">
+                    <table class="items-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 8%;">N°</th>
+                                <th style="width: 60%;">Désignation</th>
+                                <th style="width: 12%;">Nbre</th>
+                                <th style="width: 20%;">Observations</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>01</td>
+                                <td class="designation-cell">
+                                    Chèque BDL N° <strong>${checkNumber}</strong><br>
+                                    <strong>Montant: ${parseFloat(amount).toLocaleString('fr-FR', {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2
+                                    })} DA</strong><br>
+                                    <strong>Client: ${buyerName.toUpperCase()} ${prenom.toUpperCase()}</strong><br>
+                                </td>
+                                <td>01</td>
+                                <td></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="footer-section">
+                    <div class="signature-section">
+                        <div class="signature-title">BADR EL-TARF</div>
+                    </div>
+
+                    <div class="signature-section">
+                        <div class="signature-title">LE PROMOTEUR</div>
+                    </div>
+                </div>
+            </div>
+
+            <script>
+                window.onload = function() {
+                    // Center the window
+                    if (window.screen) {
+                        const left = Math.max(0, (screen.width - 800) / 2);
+                        const top = Math.max(0, (screen.height - 1000) / 2);
+                        window.moveTo(left, top);
+                    }
+
+                    // Auto-print
+                    setTimeout(function() {
+                        window.print();
+                    }, 800);
+                };
+
+                // Handle print completion
+                window.onafterprint = function() {
+                    if (confirm('Impression terminée. Fermer cette fenêtre ?')) {
+                        window.close();
+                    }
+                };
+            </script>
+        </body>
+        </html>
+    `;
+
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+}
+
+// Make printBordereauEnvoi function globally accessible
+window.printBordereauEnvoi = printBordereauEnvoi;

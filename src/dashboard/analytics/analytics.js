@@ -151,8 +151,8 @@ function displayFallbackData() {
     const employeesEl = document.getElementById('active-employees');
     if (employeesEl) employeesEl.textContent = '12';
     
-    // Show 0 DZD for monthly revenue in fallback mode
-    displayFallbackRevenue();
+    const revenueEl = document.getElementById('monthly-revenue');
+    if (revenueEl) revenueEl.textContent = '1,250,000 DZD';
 }
 
 // Display Charts with Real Data
@@ -372,7 +372,7 @@ async function calculateRealMonthlyRevenue() {
 
         // Get current month and year
         const now = new Date();
-        const currentMonth = now.getMonth() + 1; // JavaScript months are 0-based
+        const currentMonth = now.getMonth() + 1;
         const currentYear = now.getFullYear();
         const monthStart = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`;
         
@@ -425,8 +425,6 @@ async function calculateRealMonthlyRevenue() {
                                     totalMonthlyRevenue += amount;
                                     projectPayments++;
                                     totalPaymentsCount++;
-                                    
-                                    console.log(`💰 Payment found: ${buyer.nom} ${buyer.prenom} - ${trancheKey}: ${amount} DZD on ${paymentDate}`);
                                 }
                             }
                         }
@@ -486,7 +484,6 @@ async function calculateRealMonthlyRevenue() {
         console.log(`   💰 Total Revenue: ${formatCurrency(totalMonthlyRevenue)}`);
         console.log(`   📈 Total Payments: ${totalPaymentsCount}`);
         console.log(`   🏢 Projects with Payments: ${projectsWithPayments}/${projects.length}`);
-        console.log(`   📅 Period: ${monthStart} to ${monthEnd}`);
         
     } catch (error) {
         console.error('❌ Error calculating real monthly revenue:', error);
