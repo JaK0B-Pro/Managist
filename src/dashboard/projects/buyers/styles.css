@@ -44,35 +44,6 @@ body {
     box-shadow: 0 4px 8px rgba(0,0,0,0.3);
 }
 
-/* Export to Excel Button */
-.export-excel-btn {
-    background: #28a745; /* Professional green */
-    color: white;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 6px;
-    font-size: 16px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-weight: 500;
-    margin-left: 10px;
-}
-
-.export-excel-btn:hover {
-    background: #218838;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-}
-
-.export-excel-btn:active {
-    transform: translateY(0);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-}
-
 /* Search container styles */
 .search-container {
     display: flex;
@@ -2713,55 +2684,33 @@ header {
         width: 100%;
         justify-content: center;
     }
-}/
-* Total Calculation Row Styles */
-.total-calculation-row {
-    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
-    border-top: 2px solid #28a745 !important;
-    border-bottom: 1px solid #dee2e6 !important;
-    font-weight: bold !important;
-    font-size: 0.9em;
 }
 
-.total-calculation-row td {
-    padding: 6px 8px !important;
-    vertical-align: middle;
-    border-left: 1px solid #dee2e6;
-    border-right: 1px solid #dee2e6;
+/* Payment Limits Switch Styles */
+.payment-limits-switch input:checked + .slider {
+    background-color: #4CAF50 !important;
 }
 
-.total-calculation-row:hover {
-    background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%) !important;
-    transform: none !important;
+.payment-limits-switch input:checked + .slider span {
+    transform: translateX(26px) !important;
 }
 
-/* Highlight the total paid cell */
-.total-calculation-row td:nth-last-child(2) {
-    background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%) !important;
-    color: #155724 !important;
-    font-size: 1em !important;
-    font-weight: bold !important;
-    border: 1px solid #28a745 !important;
-    border-radius: 3px;
+.payment-limits-switch .slider {
+    transition: .4s;
 }
 
-/* Ensure buyer rows maintain hover effects (not total row) */
-tbody tr:not(.total-calculation-row):hover {
-    background: linear-gradient(135deg, #f8f9ff 0%, #f0f2ff 100%) !important;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 12px rgba(0,0,0,0.1);
-    transition: all 0.3s ease;
+.payment-limits-switch .slider span {
+    transition: .4s;
 }
 
-/* Specific buyer row hover with shadow */
-.buyer-row:not(.total-calculation-row):hover {
-    background: linear-gradient(135deg, #f8f9ff 0%, #f0f2ff 100%) !important;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
-    transition: all 0.3s ease;
+.payment-limits-control {
+    user-select: none;
 }
 
-/* Ensure hover actions appear on buyer rows */
-.buyer-row:not(.total-calculation-row):hover .hover-actions {
-    display: flex !important;
+.payment-limits-control h4 {
+    color: white !important;
+}
+
+.payment-limits-control p {
+    color: rgba(255, 255, 255, 0.9) !important;
 }
