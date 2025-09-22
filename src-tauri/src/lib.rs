@@ -173,6 +173,7 @@ pub struct Buyer {
     payment_status: String,
     total_paid: Decimal,
     is_sold: bool,
+    payment_limits_disabled: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -189,7 +190,9 @@ pub struct BuyerInput {
     date: String,
     prix_totale: f64,
     remise: f64,
-    payments: serde_json::Value, 
+    payments: serde_json::Value,
+    #[serde(default)]
+    payment_limits_disabled: bool,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
@@ -719,7 +722,7 @@ async fn add_buyer_to_database(pool: tauri::State<'_, PgPool>, buyer: BuyerInput
     
     debug_println!("Final price: {}, Is sold: {}, Payment status: {}", final_price, is_sold, payment_status);
 
-    let query = "INSERT INTO buyers (project_id, bloc, niveau, logt_num, nom, prenom, type_logt, type_of_logt, surface, date, prix_totale, remise, payments, payment_status, total_paid, is_sold) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)";
+    let query = "INSERT INTO buyers (project_id, bloc, niveau, logt_num, nom, prenom, type_logt, type_of_logt, surface, date, prix_totale, remise, payments, payment_status, total_paid, is_sold, payment_limits_disabled) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)";
 
     sqlx::query(query)
         .bind(&buyer.project_id)
@@ -738,6 +741,7 @@ async fn add_buyer_to_database(pool: tauri::State<'_, PgPool>, buyer: BuyerInput
         .bind(payment_status)
         .bind(Decimal::from_f64_retain(total_paid).unwrap_or_default())
         .bind(is_sold)
+        .bind(buyer.payment_limits_disabled)
         .execute(&*pool)
         .await
         .map_err(|e| {
@@ -785,6 +789,7 @@ async fn get_buyers_by_project(pool: tauri::State<'_, PgPool>, project_id: i32) 
             payment_status: row.try_get("payment_status").map_err(|e| e.to_string())?,
             total_paid: row.try_get("total_paid").map_err(|e| e.to_string())?,
             is_sold: row.try_get("is_sold").map_err(|e| e.to_string())?,
+            payment_limits_disabled: row.try_get("payment_limits_disabled").unwrap_or_else(|_| false),
         });
     }
     Ok(buyers)
@@ -872,7 +877,7 @@ async fn edit_buyer_in_database(pool: tauri::State<'_, PgPool>, buyer_id: i32, b
     let is_sold = total_paid >= final_price;
     let payment_status = if is_sold { "paid" } else if total_paid > 0.0 { "partial" } else { "unpaid" };
 
-    let query = "UPDATE buyers SET project_id = $1, bloc = $2, niveau = $3, logt_num = $4, nom = $5, prenom = $6, type_logt = $7, type_of_logt = $8, surface = $9, date = $10, prix_totale = $11, remise = $12, payments = $13, payment_status = $14, total_paid = $15, is_sold = $16 WHERE id = $17";
+    let query = "UPDATE buyers SET project_id = $1, bloc = $2, niveau = $3, logt_num = $4, nom = $5, prenom = $6, type_logt = $7, type_of_logt = $8, surface = $9, date = $10, prix_totale = $11, remise = $12, payments = $13, payment_status = $14, total_paid = $15, is_sold = $16, payment_limits_disabled = $17 WHERE id = $18";
 
     sqlx::query(query)
         .bind(&buyer.project_id)
@@ -891,6 +896,7 @@ async fn edit_buyer_in_database(pool: tauri::State<'_, PgPool>, buyer_id: i32, b
         .bind(payment_status)
         .bind(Decimal::from_f64_retain(total_paid).unwrap_or_default())
         .bind(is_sold)
+        .bind(buyer.payment_limits_disabled)
         .bind(buyer_id)
         .execute(&*pool)
         .await
@@ -1849,6 +1855,51 @@ fn emit_loading_complete(app: &AppHandle) {
 }
 
 // Helper function to ensure database pool is ready during setup
+// Function to ensure payment limits column exists
+async fn ensure_payment_limits_column(pool: &PgPool) -> Result<(), String> {
+    debug_println!("Checking if payment_limits_disabled column exists...");
+    
+    // Check if column exists
+    let column_exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'buyers' 
+            AND column_name = 'payment_limits_disabled'
+        )"
+    )
+    .fetch_one(pool)
+    .await
+    .map_err(|e| format!("Failed to check column existence: {}", e))?;
+
+    if !column_exists {
+        debug_println!("payment_limits_disabled column doesn't exist, creating it...");
+        
+        // Add the column with default value
+        sqlx::query("ALTER TABLE buyers ADD COLUMN payment_limits_disabled BOOLEAN DEFAULT false")
+            .execute(pool)
+            .await
+            .map_err(|e| format!("Failed to add payment_limits_disabled column: {}", e))?;
+        
+        // Set default values for existing records (false = limits enabled)
+        sqlx::query("UPDATE buyers SET payment_limits_disabled = false WHERE payment_limits_disabled IS NULL")
+            .execute(pool)
+            .await
+            .map_err(|e| format!("Failed to set default values: {}", e))?;
+        
+        // Make column NOT NULL
+        sqlx::query("ALTER TABLE buyers ALTER COLUMN payment_limits_disabled SET NOT NULL")
+            .execute(pool)
+            .await
+            .map_err(|e| format!("Failed to set NOT NULL constraint: {}", e))?;
+        
+        debug_println!("payment_limits_disabled column created successfully!");
+    } else {
+        debug_println!("payment_limits_disabled column already exists");
+    }
+    
+    Ok(())
+}
+
 async fn ensure_database_pool_ready(app: AppHandle) -> Result<(), String> {
     debug_println!("Ensuring database pool is ready during setup...");
     
@@ -1877,6 +1928,12 @@ async fn ensure_database_pool_ready(app: AppHandle) -> Result<(), String> {
         match PgPool::connect(&database_url).await {
             Ok(pool) => {
                 debug_println!("Database pool created successfully during setup");
+                
+                // Ensure payment_limits_disabled column exists
+                if let Err(e) = ensure_payment_limits_column(&pool).await {
+                    debug_println!("Warning: Failed to ensure payment_limits_disabled column: {}", e);
+                }
+                
                 app.manage(pool);
                 debug_println!("Database pool managed successfully");
                 return Ok(());
@@ -2132,12 +2189,28 @@ async fn setup_database_tables(pool: &PgPool) -> Result<(), String> {
             payments JSONB DEFAULT '{}',
             payment_status VARCHAR(20) DEFAULT 'unpaid',
             total_paid NUMERIC(15, 2) DEFAULT 0,
-            is_sold BOOLEAN DEFAULT FALSE
+            is_sold BOOLEAN DEFAULT FALSE,
+            payment_limits_disabled BOOLEAN DEFAULT FALSE
         )"
     )
     .execute(pool)
     .await
     .map_err(|e| e.to_string())?;
+
+    // Add payment_limits_disabled column to existing buyers table if it doesn't exist
+    let add_column_result = sqlx::query(
+        "ALTER TABLE buyers ADD COLUMN IF NOT EXISTS payment_limits_disabled BOOLEAN DEFAULT FALSE"
+    )
+    .execute(pool)
+    .await;
+
+    match add_column_result {
+        Ok(_) => debug_println!("Payment limits column added/verified successfully"),
+        Err(e) => {
+            debug_println!("Note: Could not add payment_limits_disabled column (might already exist): {}", e);
+            // This is not critical - the column might already exist
+        }
+    }
 
     // Project info table (apartment types and prices)
     sqlx::query(
@@ -2471,6 +2544,7 @@ async fn get_buyer(pool: tauri::State<'_, PgPool>, buyer_id: i32) -> Result<Opti
             payment_status: row.try_get("payment_status").map_err(|e| e.to_string())?,
             total_paid: row.try_get("total_paid").map_err(|e| e.to_string())?,
             is_sold: row.try_get("is_sold").map_err(|e| e.to_string())?,
+            payment_limits_disabled: row.try_get("payment_limits_disabled").unwrap_or_else(|_| false),
         }))
     } else {
         Ok(None)

@@ -2765,3 +2765,32 @@ tbody tr:not(.total-calculation-row):hover {
 .buyer-row:not(.total-calculation-row):hover .hover-actions {
     display: flex !important;
 }
+
+/* Payment Limits Switch Styles */
+.payment-limits-switch input:checked + .slider {
+    background-color: #4CAF50 !important;
+}
+
+.payment-limits-switch input:checked + .slider span {
+    transform: translateX(26px) !important;
+}
+
+.payment-limits-switch .slider {
+    transition: .4s;
+}
+
+.payment-limits-switch .slider span {
+    transition: .4s;
+}
+
+.payment-limits-control {
+    user-select: none;
+}
+
+.payment-limits-control h4 {
+    color: white !important;
+}
+
+.payment-limits-control p {
+    color: rgba(255, 255, 255, 0.9) !important;
+}

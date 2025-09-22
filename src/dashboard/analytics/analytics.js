@@ -67,7 +67,7 @@ async function loadAnalyticsData() {
         console.log('Data loaded:', { projects: projects.length, employees: employees.length });
         
         // Update cards with real data
-        await displayCards(projects, employees);
+        displayCards(projects, employees);
         
         // Display charts
         displayCharts(projects, employees);
@@ -91,7 +91,7 @@ async function loadAnalyticsData() {
 }
 
 // Display Analytics Cards
-async function displayCards(projects, employees) {
+function displayCards(projects, employees) {
     console.log('Updating cards...');
     
     // Calculate performance score (average progress)
@@ -134,8 +134,20 @@ async function displayCards(projects, employees) {
         console.log('Active employees updated:', employeeCount);
     }
 
-    // Calculate real monthly revenue from actual payments
-    await calculateRealMonthlyRevenue();
+    // Calculate monthly revenue
+    let totalRevenue = 0;
+    if (projects && projects.length > 0) {
+        totalRevenue = projects.reduce((sum, project) => {
+            const estimatedValue = project.nda_vendus * 50000; // 50,000 DZD per apartment
+            return sum + estimatedValue;
+        }, 0);
+    }
+    
+    const revenueEl = document.getElementById('monthly-revenue');
+    if (revenueEl) {
+        revenueEl.textContent = formatCurrency(totalRevenue);
+        console.log('Monthly revenue updated:', formatCurrency(totalRevenue));
+    }
 }
 
 // Fallback data display if API fails
@@ -356,148 +368,6 @@ function displayBasicProjectTable(projects, tableBody) {
             </td>
         </tr>
     `).join('');
-}
-
-// Calculate real monthly revenue from actual buyer payments
-async function calculateRealMonthlyRevenue() {
-    try {
-        console.log('🔄 Calculating real monthly revenue...');
-        
-        const invoke = window.__TAURI__.core.invoke;
-        if (!invoke) {
-            console.error('Tauri invoke function not available');
-            displayFallbackRevenue();
-            return;
-        }
-
-        // Get current month and year
-        const now = new Date();
-        const currentMonth = now.getMonth() + 1;
-        const currentYear = now.getFullYear();
-        const monthStart = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`;
-        
-        // Get last day of current month
-        const nextMonth = new Date(currentYear, currentMonth, 0);
-        const monthEnd = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(nextMonth.getDate()).padStart(2, '0')}`;
-        
-        console.log(`📅 Calculating revenue for: ${monthStart} to ${monthEnd}`);
-
-        // Get all projects to iterate through their buyers
-        const projects = await invoke('get_projects');
-        console.log(`📊 Found ${projects.length} projects`);
-        
-        let totalMonthlyRevenue = 0;
-        let totalPaymentsCount = 0;
-        let projectsWithPayments = 0;
-
-        // Iterate through all projects to get buyers and their payments
-        for (const project of projects) {
-            try {
-                const buyers = await invoke('get_buyers_by_project', { projectId: project.id });
-                let projectRevenue = 0;
-                let projectPayments = 0;
-                
-                for (const buyer of buyers) {
-                    if (buyer.payments) {
-                        let payments = {};
-                        
-                        // Parse payments safely
-                        try {
-                            payments = typeof buyer.payments === 'string' ? JSON.parse(buyer.payments) : buyer.payments;
-                        } catch (parseError) {
-                            console.warn(`Error parsing payments for buyer ${buyer.id}:`, parseError);
-                            continue;
-                        }
-                        
-                        // Check each payment tranche for current month
-                        for (const [trancheKey, tranche] of Object.entries(payments)) {
-                            // Skip if tranche is just a number (legacy format)
-                            if (typeof tranche !== 'object' || tranche === null) continue;
-                            
-                            // Check if payment date is in current month and amount > 0
-                            if (tranche.date && tranche.amount && parseFloat(tranche.amount) > 0) {
-                                const paymentDate = tranche.date;
-                                
-                                // Check if payment is within current month
-                                if (paymentDate >= monthStart && paymentDate <= monthEnd) {
-                                    const amount = parseFloat(tranche.amount);
-                                    projectRevenue += amount;
-                                    totalMonthlyRevenue += amount;
-                                    projectPayments++;
-                                    totalPaymentsCount++;
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                if (projectRevenue > 0) {
-                    projectsWithPayments++;
-                    console.log(`📈 Project "${project.project_name}": ${formatCurrency(projectRevenue)} (${projectPayments} payments)`);
-                }
-                
-            } catch (buyerError) {
-                console.warn(`Error loading buyers for project ${project.id}:`, buyerError);
-            }
-        }
-
-        // Update the monthly revenue display
-        const revenueEl = document.getElementById('monthly-revenue');
-        if (revenueEl) {
-            const formattedAmount = formatCurrency(totalMonthlyRevenue);
-            revenueEl.textContent = formattedAmount;
-            console.log(`✅ Real monthly revenue updated: ${formattedAmount}`);
-        }
-
-        // Update the trend indicator based on payment activity
-        const trendEl = revenueEl?.parentElement?.querySelector('.trend');
-        if (trendEl && totalPaymentsCount > 0) {
-            // Calculate a simple trend based on payment activity
-            const avgPaymentPerProject = totalPaymentsCount / Math.max(projectsWithPayments, 1);
-            let trendPercentage = 0;
-            let trendClass = 'neutral';
-            let trendIcon = 'fas fa-minus';
-            
-            if (avgPaymentPerProject >= 5) {
-                trendPercentage = '+15.2%';
-                trendClass = 'positive';
-                trendIcon = 'fas fa-arrow-up';
-            } else if (avgPaymentPerProject >= 2) {
-                trendPercentage = '+8.7%';
-                trendClass = 'positive';
-                trendIcon = 'fas fa-arrow-up';
-            } else if (avgPaymentPerProject >= 1) {
-                trendPercentage = '+2.1%';
-                trendClass = 'neutral';
-                trendIcon = 'fas fa-minus';
-            } else {
-                trendPercentage = '-5.3%';
-                trendClass = 'negative';
-                trendIcon = 'fas fa-arrow-down';
-            }
-            
-            trendEl.className = `trend ${trendClass}`;
-            trendEl.innerHTML = `<i class="${trendIcon}"></i> ${trendPercentage}`;
-        }
-
-        console.log(`📊 Monthly Revenue Summary:`);
-        console.log(`   💰 Total Revenue: ${formatCurrency(totalMonthlyRevenue)}`);
-        console.log(`   📈 Total Payments: ${totalPaymentsCount}`);
-        console.log(`   🏢 Projects with Payments: ${projectsWithPayments}/${projects.length}`);
-        
-    } catch (error) {
-        console.error('❌ Error calculating real monthly revenue:', error);
-        displayFallbackRevenue();
-    }
-}
-
-// Display fallback revenue if calculation fails
-function displayFallbackRevenue() {
-    const revenueEl = document.getElementById('monthly-revenue');
-    if (revenueEl) {
-        revenueEl.textContent = '0 DZD';
-        console.log('Fallback revenue displayed: 0 DZD');
-    }
 }
 
 // Helper Functions

@@ -77,6 +77,31 @@
                 <span class="close">&times;</span>
                 <h2>Add New Buyer</h2>
 
+                <!-- Payment Limits Control Switch -->
+                <div class="payment-limits-control" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px; margin: 15px 0; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div style="display: flex; flex-direction: column;">
+                            <h4 style="margin: 0 0 5px 0; font-size: 16px; font-weight: 600;">
+                                <i class="fas fa-shield-alt" style="margin-right: 8px;"></i>
+                                Payment Limits Control
+                            </h4>
+                            <p style="margin: 0; font-size: 13px; opacity: 0.9;">
+                                Enable or disable payment validation limits for this buyer
+                            </p>
+                        </div>
+                        <div class="switch-container" style="display: flex; align-items: center; gap: 12px;">
+                            <span style="font-size: 13px; opacity: 0.9;">Disabled</span>
+                            <label class="payment-limits-switch" style="position: relative; display: inline-block; width: 50px; height: 24px;">
+                                <input type="checkbox" id="paymentLimitsToggle" style="opacity: 0; width: 0; height: 0;">
+                                <span class="slider" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 24px;">
+                                    <span style="position: absolute; content: ''; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; transform: translateX(0px);"></span>
+                                </span>
+                            </label>
+                            <span style="font-size: 13px; opacity: 0.9;">Enabled</span>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Print Reservation Button - Separate Row -->
                 <div class="print-actions"
                     style="text-align: center; margin: 15px 0; padding: 10px; background-color: #f8f9fa; border-radius: 5px;">
@@ -159,23 +184,16 @@
                         </div>
                     </div>
 
-                    <div style="text-align: center; margin: 15px 0;">
-                        <button type="button" id="printPaymentSummaryBtn" class="btn-print-summary">
-                            <i class="fas fa-file-invoice"></i> Print Payment Summary
-                        </button>
-                    </div>
-
                     <!-- Tranches Section -->
                     <div class="tranches-section">
                         <!-- Print summary button (top of tranches) -->
-                        <div
-                            style="text-align: right; margin-bottom: 8px; display:flex; gap:8px; justify-content:flex-end;">
+                        <div style="text-align: right; margin-bottom: 8px; display:flex; gap:8px; justify-content:flex-end;">
                             <button type="button" id="printPaymentSummaryTopBtn" class="btn-print-summary-top"
                                 title="Imprimer le récapitulatif des paiements"
                                 style="background:#17a2b8;color:#fff;border:none;padding:8px 10px;border-radius:4px;">
                                 <i class="fas fa-print"></i>&nbsp;Imprimer le récapitulatif
                             </button>
-                            <!-- Facture print button, hidden by default; shown only for Lot / Lotissement types -->
+                            <!-- Facture print button -->
                             <button type="button" id="printFactureBtn" class="btn-print-facture"
                                 title="Imprimer la facture"
                                 style="background:#28a745;color:#fff;border:none;padding:8px 10px;border-radius:4px;">
