@@ -2205,7 +2205,9 @@ async fn setup_database_tables(pool: &PgPool) -> Result<(), String> {
     .await;
 
     match add_column_result {
-        Ok(_) => debug_println!("Payment limits column added/verified successfully"),
+        Ok(_) => {
+            debug_println!("Payment limits column added/verified successfully");
+        }
         Err(e) => {
             debug_println!("Note: Could not add payment_limits_disabled column (might already exist): {}", e);
             // This is not critical - the column might already exist

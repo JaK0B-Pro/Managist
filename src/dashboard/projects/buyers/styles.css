@@ -2713,8 +2713,9 @@ header {
         width: 100%;
         justify-content: center;
     }
-}/
-* Total Calculation Row Styles */
+}
+
+/* Total Calculation Row Styles */
 .total-calculation-row {
     background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
     border-top: 2px solid #28a745 !important;
