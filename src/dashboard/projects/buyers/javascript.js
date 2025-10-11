@@ -1300,6 +1300,93 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    // Function to add total calculation row
+    function addTotalCalculationRow(buyers) {
+        // Remove existing total row if it exists
+        const existingTotalRow = tbody.querySelector('.total-calculation-row');
+        if (existingTotalRow) {
+            existingTotalRow.remove();
+        }
+
+        // Handle empty buyers array (show zeros)
+        if (!buyers) {
+            buyers = [];
+        }
+
+        // Calculate totals
+        let totalPaidAmount = 0;
+        let totalPrixTotale = 0;
+        let totalRemise = 0;
+        const trancheTotals = {};
+
+        buyers.forEach(buyer => {
+            // Add to total paid
+            totalPaidAmount += parseFloat(buyer.total_paid || 0);
+            totalPrixTotale += parseFloat(buyer.prix_totale || 0);
+            totalRemise += parseFloat(buyer.remise || 0);
+
+            // Calculate tranche totals
+            let payments = {};
+            try {
+                payments = typeof buyer.payments === 'string' ? JSON.parse(buyer.payments) : buyer.payments || {};
+            } catch (e) {
+                payments = {};
+            }
+
+            Object.keys(payments).forEach(trancheKey => {
+                const trancheData = payments[trancheKey];
+                let amount = 0;
+
+                if (typeof trancheData === 'object' && trancheData !== null) {
+                    amount = parseFloat(trancheData.amount) || 0;
+                } else {
+                    amount = parseFloat(trancheData) || 0;
+                }
+
+                if (!trancheTotals[trancheKey]) {
+                    trancheTotals[trancheKey] = 0;
+                }
+                trancheTotals[trancheKey] += amount;
+            });
+        });
+
+        // Create total row
+        const totalRow = document.createElement('tr');
+        totalRow.className = 'total-calculation-row';
+        totalRow.style.backgroundColor = '#f8f9fa';
+        totalRow.style.fontWeight = 'bold';
+        totalRow.style.borderTop = '2px solid #dee2e6';
+
+        // Build row HTML - match the exact table structure
+        // Base headers: NIVEAU, N° LOGT, NOM, PRENOM, TYPE LOGT, SURFACE, DATE, PRIX TOTALE, REMISE
+        let totalRowHTML = `
+            <td style="text-align: center; font-weight: bold; color: #495057;">TOTAL</td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td style="text-align: right; color: #28a745;">${formatCurrency(totalPrixTotale)}</td>
+            <td style="text-align: right; color: #dc3545;">${formatCurrency(totalRemise)}</td>
+        `;
+
+        // Add tranche totals
+        for (let i = 0; i <= maxTranches; i++) {
+            const trancheTotal = trancheTotals[`T${i}`] || 0;
+            totalRowHTML += `<td style="text-align: right; color: #007bff;">${formatCurrency(trancheTotal)}</td>`;
+        }
+
+        // Add total paid and status columns
+        totalRowHTML += `
+            <td style="text-align: right; font-weight: bold; color: #28a745; font-size: 1.1em;">${formatCurrency(totalPaidAmount)}</td>
+            <td style="text-align: center; color: #6c757d;">${buyers.length} buyer${buyers.length !== 1 ? 's' : ''}</td>
+        `;
+
+        totalRow.innerHTML = totalRowHTML;
+        tbody.appendChild(totalRow);
+    }
+
     // Function to show loading state
     function showLoading() {
         tbody.innerHTML = `
@@ -1332,6 +1419,9 @@ document.addEventListener('DOMContentLoaded', function () {
             await loadPrixUnitaire();
 
             const buyers = await invoke('get_buyers_by_project', { projectId: PROJECT_ID });
+
+            // Store buyers globally for search functionality
+            window.allBuyers = buyers;
 
             tbody.innerHTML = '';
 
@@ -1475,6 +1565,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
             }
             updateBuyerCount(buyers.length);
+
+            // Add total calculation row
+            addTotalCalculationRow(filteredBuyers);
 
             // 🔍 Trigger validation for all loaded buyers to show warnings
             await validateAllLoadedBuyers(filteredBuyers);
@@ -2150,27 +2243,134 @@ document.addEventListener('DOMContentLoaded', function () {
         const filter = searchInput.value.toLowerCase().trim();
         const rows = tbody.getElementsByTagName('tr');
         let visibleCount = 0;
+        const visibleBuyers = [];
+
+        // If no filter, reload to restore original structure
+        if (!filter) {
+            filteredCountEl.style.display = 'none';
+            searchInput.style.borderColor = '#ddd';
+            loadBuyers();
+            return;
+        }
+
+        // First pass: determine visibility and collect visible buyers by BLOC + NIVEAU
+        const blocNiveauGroups = {};
+        const visibleRows = [];
 
         for (let i = 0; i < rows.length; i++) {
-            const rowText = rows[i].textContent.toLowerCase();
+            const row = rows[i];
+
+            // Skip total calculation row and separator rows
+            if (row.classList.contains('total-calculation-row') ||
+                row.classList.contains('bloc-separator') ||
+                row.classList.contains('bloc-header')) {
+                continue;
+            }
+
+            const rowText = row.textContent.toLowerCase();
             const isVisible = rowText.includes(filter);
-            rows[i].style.display = isVisible ? '' : 'none';
-            if (isVisible) visibleCount++;
+
+            if (isVisible && row.classList.contains('buyer-row')) {
+                visibleCount++;
+                visibleRows.push(row);
+
+                // Get NIVEAU from the row (first cell text content)
+                const niveauCell = row.querySelector('td:first-child');
+                const niveau = niveauCell ? niveauCell.textContent.trim() : 'Unknown';
+
+                // Get BLOC from buyer data if available
+                let bloc = 'Unknown';
+
+                const firstBuyerId = row.getAttribute('data-buyer-id');
+                if (firstBuyerId && window.allBuyers) {
+                    const buyer = window.allBuyers.find(b => b.id == firstBuyerId);
+                    if (buyer && buyer.bloc) {
+                        bloc = buyer.bloc;
+                    }
+                }
+
+                // Create unique key combining BLOC and NIVEAU
+                const groupKey = `${bloc}-${niveau}`;
+
+                if (!blocNiveauGroups[groupKey]) {
+                    blocNiveauGroups[groupKey] = [];
+                }
+                blocNiveauGroups[groupKey].push(row);
+
+                // Extract buyer data for total calculation
+                const secondBuyerId = row.getAttribute('data-buyer-id');
+                if (secondBuyerId && window.allBuyers) {
+                    const buyer = window.allBuyers.find(b => b.id == secondBuyerId);
+                    if (buyer) {
+                        visibleBuyers.push(buyer);
+                    }
+                }
+            }
+        }
+
+        // Second pass: apply visibility and intelligent rowspan management
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+
+            if (row.classList.contains('total-calculation-row') ||
+                row.classList.contains('bloc-separator') ||
+                row.classList.contains('bloc-header')) {
+                continue;
+            }
+
+            const rowText = row.textContent.toLowerCase();
+            const isVisible = rowText.includes(filter);
+
+            if (isVisible && row.classList.contains('buyer-row')) {
+                row.style.display = '';
+
+                const niveauCell = row.querySelector('td:first-child');
+                const niveau = niveauCell ? niveauCell.textContent.trim() : 'Unknown';
+
+                // Get BLOC for this row (same logic as first pass)
+                let bloc = 'Unknown';
+                const rowBuyerId = row.getAttribute('data-buyer-id');
+                if (rowBuyerId && window.allBuyers) {
+                    const buyer = window.allBuyers.find(b => b.id == rowBuyerId);
+                    if (buyer && buyer.bloc) {
+                        bloc = buyer.bloc;
+                    }
+                }
+
+                const groupKey = `${bloc}-${niveau}`;
+                const groupSize = blocNiveauGroups[groupKey] ? blocNiveauGroups[groupKey].length : 1;
+
+                // Intelligent rowspan management
+                if (groupSize === 1) {
+                    // Single buyer in BLOC-NIVEAU group - remove rowspan, show cell
+                    niveauCell.removeAttribute('rowspan');
+                    niveauCell.style.display = '';
+                } else {
+                    // Multiple buyers in BLOC-NIVEAU group - keep rowspan for first, hide for others
+                    const isFirstInGroup = blocNiveauGroups[groupKey][0] === row;
+                    if (isFirstInGroup) {
+                        niveauCell.setAttribute('rowspan', groupSize);
+                        niveauCell.style.display = '';
+                    } else {
+                        niveauCell.style.display = 'none';
+                    }
+                }
+            } else {
+                row.style.display = 'none';
+            }
         }
 
         // Update filtered count display
-        if (filter) {
-            filteredCountEl.textContent = `Showing: ${visibleCount} results`;
-            filteredCountEl.style.display = 'inline';
-        } else {
-            filteredCountEl.style.display = 'none';
-        }
+        filteredCountEl.textContent = `Showing: ${visibleCount} results`;
+        filteredCountEl.style.display = 'inline';
 
         // Visual feedback for search
-        if (filter && visibleCount === 0) {
+        if (visibleCount === 0) {
             searchInput.style.borderColor = '#e74c3c';
+            addTotalCalculationRow([]);
         } else {
-            searchInput.style.borderColor = filter ? '#27ae60' : '#ddd';
+            searchInput.style.borderColor = '#27ae60';
+            addTotalCalculationRow(visibleBuyers);
         }
     }
 
@@ -5845,10 +6045,6 @@ function generateRecuCheque(buyerName, prenom, trancheIndex, amount, date, check
                             <div class="detail-value">${projectTitle}</div>
                         </div>
                         <div class="detail-item">
-                            <div class="detail-label">Tranche:</div>
-                            <div class="detail-value">T${trancheIndex}</div>
-                        </div>
-                        <div class="detail-item">
                             <div class="detail-label">N° Chèque:</div>
                             <div class="detail-value">${checkNumber}</div>
                         </div>
@@ -5884,10 +6080,10 @@ function generateRecuCheque(buyerName, prenom, trancheIndex, amount, date, check
                 
                 <div class="date-location">
                     <strong>El Tarf, le ${currentDate.toLocaleDateString('fr-FR', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-    })}</strong>
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                    })}</strong>
                 </div>
                 
                 <div class="footer">
