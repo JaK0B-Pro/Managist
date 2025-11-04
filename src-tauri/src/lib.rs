@@ -3,7 +3,7 @@ use serde::{Serialize, Deserialize};
 use sqlx::Row;
 use sqlx::PgPool;
 use rust_decimal::Decimal;
-use chrono::NaiveDate;
+use chrono::{NaiveDate, Datelike};
 use std::env;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -32,11 +32,13 @@ macro_rules! debug_println {
 pub struct Employee {
     id: i32,
     nom_et_prenom: String,
+    tag: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct EmployeeInput {
     nom_et_prenom: String,
+    tag: Option<String>,
 }
 
 // Structure to represent Employee Salary (project-specific salary records)
@@ -50,6 +52,7 @@ pub struct EmployeeSalary {
     nombre_des_jours: i32,
     nombre_des_heurx: i32,
     travaux_attache: Decimal,
+    travaux_attachments: Option<serde_json::Value>,
     salaire: Decimal,
     acompte: Decimal,
     net_a_payer: Decimal,
@@ -65,6 +68,7 @@ pub struct EmployeeSalaryInput {
     nombre_des_jours: i32,
     nombre_des_heurx: i32,
     travaux_attache: f64,
+    travaux_attachments: Option<serde_json::Value>,
     salaire: f64,
     acompte: f64,
     net_a_payer: f64,
@@ -102,6 +106,8 @@ pub struct EmployeeWithSalary {
     acompte: Decimal,
     net_a_payer: Decimal,
     observation: String,
+    annee: i32,
+    mois: i32,
 }
 
 // Structure to represent a project
@@ -312,7 +318,7 @@ async fn update_user_password(app: AppHandle, pool: tauri::State<'_, PgPool>, us
 // Function to get employee data by name for dashboard
 #[tauri::command]
 async fn get_employee_by_name(pool: tauri::State<'_, PgPool>, employee_name: String) -> Result<Option<Employee>, String> {
-    let rows = sqlx::query("SELECT id, nom_et_prenom FROM employees WHERE nom_et_prenom = $1")
+    let rows = sqlx::query("SELECT id, nom_et_prenom, tag FROM employees WHERE nom_et_prenom = $1")
         .bind(&employee_name)
         .fetch_all(&*pool)
         .await
@@ -322,6 +328,7 @@ async fn get_employee_by_name(pool: tauri::State<'_, PgPool>, employee_name: Str
         let employee = Employee {
             id: row.try_get("id").map_err(|e| e.to_string())?,
             nom_et_prenom: row.try_get("nom_et_prenom").map_err(|e| e.to_string())?,
+            tag: row.try_get("tag").ok(),
         };
         Ok(Some(employee))
     } else {
@@ -331,7 +338,7 @@ async fn get_employee_by_name(pool: tauri::State<'_, PgPool>, employee_name: Str
 
 // Function to insert employee salary data into the database
 #[tauri::command]
-async fn insert_employee(app: AppHandle, pool: tauri::State<'_, PgPool>, employee: EmployeeAddInput) -> Result<(), String> {
+async fn insert_employee(app: AppHandle, pool: tauri::State<'_, PgPool>, employee: EmployeeAddInput, annee: i32, mois: i32) -> Result<(), String> {
     // First, insert or get the employee in the main employees table (basic info only)
     let employee_id = match sqlx::query("SELECT id FROM employees WHERE nom_et_prenom = $1")
         .bind(&employee.nom_et_prenom)
@@ -363,12 +370,14 @@ async fn insert_employee(app: AppHandle, pool: tauri::State<'_, PgPool>, employe
         .map_err(|e| e.to_string())?;
     
     // Insert salary record for this employee in each project
-    let salary_insert_query = "INSERT INTO employee_salary (employee_id, project_id, prix_jour, prix_hour, nombre_des_jours, nombre_des_heurx, travaux_attache, salaire, acompte, net_a_payer, observation) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)";
+    let salary_insert_query = "INSERT INTO employee_salary (employee_id, project_id, prix_jour, prix_hour, nombre_des_jours, nombre_des_heurx, travaux_attache, salaire, acompte, net_a_payer, observation, annee, mois) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)";
     
     // Add to administration project with user-provided data
-    let existing_admin = sqlx::query("SELECT id FROM employee_salary WHERE employee_id = $1 AND project_id = $2")
+    let existing_admin = sqlx::query("SELECT id FROM employee_salary WHERE employee_id = $1 AND project_id = $2 AND annee = $3 AND mois = $4")
         .bind(employee_id)
         .bind("administration")
+        .bind(annee)
+        .bind(mois)
         .fetch_optional(&*pool)
         .await
         .map_err(|e| e.to_string())?;
@@ -386,6 +395,8 @@ async fn insert_employee(app: AppHandle, pool: tauri::State<'_, PgPool>, employe
             .bind(Decimal::from_f64_retain(employee.acompte).unwrap_or_default())
             .bind(Decimal::from_f64_retain(employee.net_a_payer).unwrap_or_default())
             .bind(&employee.observation)
+            .bind(annee)
+            .bind(mois)
             .execute(&*pool)
             .await
             .map_err(|e| e.to_string())?;
@@ -396,9 +407,11 @@ async fn insert_employee(app: AppHandle, pool: tauri::State<'_, PgPool>, employe
         let project_id: i32 = project_row.try_get("id").map_err(|e| e.to_string())?;
         
         // Check if this employee already exists for this project
-        let existing_project = sqlx::query("SELECT id FROM employee_salary WHERE employee_id = $1 AND project_id = $2")
+        let existing_project = sqlx::query("SELECT id FROM employee_salary WHERE employee_id = $1 AND project_id = $2 AND annee = $3 AND mois = $4")
             .bind(employee_id)
             .bind(project_id.to_string())
+            .bind(annee)
+            .bind(mois)
             .fetch_optional(&*pool)
             .await
             .map_err(|e| e.to_string())?;
@@ -417,6 +430,8 @@ async fn insert_employee(app: AppHandle, pool: tauri::State<'_, PgPool>, employe
                 .bind(Decimal::new(0, 2)) // acompte = 0
                 .bind(Decimal::new(0, 2)) // net_a_payer = 0
                 .bind("") // observation = empty
+                .bind(annee)
+                .bind(mois)
                 .execute(&*pool)
                 .await
                 .map_err(|e| e.to_string())?;
@@ -433,15 +448,20 @@ async fn insert_employee(app: AppHandle, pool: tauri::State<'_, PgPool>, employe
 // Function to get all employees with salary data for a specific project
 #[tauri::command]
 async fn get_all_employees(pool: State<'_, PgPool>) -> Result<Vec<EmployeeWithSalary>, String> {
-    // Default to administration project if not specified
-    get_employees_by_project(pool, "administration".to_string()).await
+    // Default to administration project and current date if not specified
+    let now = chrono::Local::now();
+    let current_year = now.year();
+    let current_month = now.month() as i32;
+    get_employees_by_project(pool, "administration".to_string(), current_year, current_month).await
 }
 
 // Function to get employees by project from employee_salary table
 #[tauri::command]
-async fn get_employees_by_project(pool: State<'_, PgPool>, project_id: String) -> Result<Vec<EmployeeWithSalary>, String> {
-    let rows = sqlx::query("SELECT es.id, es.employee_id, e.nom_et_prenom, es.project_id, es.prix_jour, es.prix_hour, es.nombre_des_jours, es.nombre_des_heurx, es.travaux_attache, es.salaire, es.acompte, es.net_a_payer, es.observation FROM employee_salary es JOIN employees e ON es.employee_id = e.id WHERE es.project_id = $1 ORDER BY es.id ASC")
+async fn get_employees_by_project(pool: State<'_, PgPool>, project_id: String, annee: i32, mois: i32) -> Result<Vec<EmployeeWithSalary>, String> {
+    let rows = sqlx::query("SELECT es.id, es.employee_id, e.nom_et_prenom, es.project_id, es.prix_jour, es.prix_hour, es.nombre_des_jours, es.nombre_des_heurx, es.travaux_attache, es.salaire, es.acompte, es.net_a_payer, es.observation, es.annee, es.mois FROM employee_salary es JOIN employees e ON es.employee_id = e.id WHERE es.project_id = $1 AND es.annee = $2 AND es.mois = $3 ORDER BY es.id ASC")
         .bind(&project_id)
+        .bind(annee)
+        .bind(mois)
         .fetch_all(&*pool)
         .await
         .map_err(|e| e.to_string())?;
@@ -462,7 +482,9 @@ async fn get_employees_by_project(pool: State<'_, PgPool>, project_id: String) -
             salaire: row.try_get("salaire").map_err(|e| e.to_string())?,
             acompte: row.try_get("acompte").map_err(|e| e.to_string())?,
             net_a_payer: row.try_get("net_a_payer").map_err(|e| e.to_string())?,
-            observation: row.try_get("observation").map_err(|e| e.to_string())?
+            observation: row.try_get("observation").map_err(|e| e.to_string())?,
+            annee: row.try_get("annee").map_err(|e| e.to_string())?,
+            mois: row.try_get("mois").map_err(|e| e.to_string())?
         };
         employees.push(employee);
     }
@@ -523,6 +545,7 @@ async fn get_all_employees_original(pool: State<'_, PgPool>) -> Result<Vec<Emplo
         employees.push(Employee {
             id: row.try_get("id").map_err(|e| e.to_string())?,
             nom_et_prenom: row.try_get("nom_et_prenom").map_err(|e| e.to_string())?,
+            tag: row.try_get("tag").ok(),
         });
     }
     Ok(employees)
@@ -531,10 +554,11 @@ async fn get_all_employees_original(pool: State<'_, PgPool>) -> Result<Vec<Emplo
 // Function to update employee in the original employees table
 #[tauri::command]
 async fn update_employee_original(pool: tauri::State<'_, PgPool>, employee: Employee) -> Result<(), String> {
-    let query = "UPDATE employees SET nom_et_prenom = $1 WHERE id = $2";
+    let query = "UPDATE employees SET nom_et_prenom = $1, tag = $2 WHERE id = $3";
 
     sqlx::query(query)
         .bind(&employee.nom_et_prenom)
+        .bind(&employee.tag)
         .bind(&employee.id)
         .execute(&*pool)
         .await
@@ -836,7 +860,7 @@ async fn update_employee(pool: tauri::State<'_, PgPool>, employee: EmployeeWithS
         .map_err(|e| format!("Failed to update employee name: {}", e))?;
 
     // Then, update the salary data in the employee_salary table
-    let update_salary_query = "UPDATE employee_salary SET prix_jour = $1, prix_hour = $2, nombre_des_jours = $3, nombre_des_heurx = $4, travaux_attache = $5, salaire = $6, acompte = $7, net_a_payer = $8, observation = $9 WHERE employee_id = $10 AND project_id = $11";
+    let update_salary_query = "UPDATE employee_salary SET prix_jour = $1, prix_hour = $2, nombre_des_jours = $3, nombre_des_heurx = $4, travaux_attache = $5, salaire = $6, acompte = $7, net_a_payer = $8, observation = $9 WHERE employee_id = $10 AND project_id = $11 AND annee = $12 AND mois = $13";
 
     sqlx::query(update_salary_query)
         .bind(&employee.prix_jour)
@@ -850,6 +874,8 @@ async fn update_employee(pool: tauri::State<'_, PgPool>, employee: EmployeeWithS
         .bind(&employee.observation)
         .bind(&employee.employee_id)
         .bind(&employee.project_id)
+        .bind(&employee.annee)
+        .bind(&employee.mois)
         .execute(&*pool)
         .await
         .map_err(|e| format!("Failed to update salary data: {}", e))?;
@@ -1721,6 +1747,369 @@ async fn update_buyer(pool: tauri::State<'_, PgPool>, buyer_id: i32, buyer_data:
     edit_buyer_in_database(pool, buyer_id, buyer_data).await
 }
 
+// Save employee attachements (travaux details)
+#[tauri::command]
+async fn save_employee_attachements(
+    pool: tauri::State<'_, PgPool>,
+    employee_name: String,
+    project_name: String,
+    attachements: serde_json::Value,
+    annee: i32,
+    mois: i32
+) -> Result<(), String> {
+    // First, get the employee_id from the employee name
+    let rows = sqlx::query("SELECT id, nom_et_prenom FROM employees WHERE nom_et_prenom = $1")
+        .bind(&employee_name)
+        .fetch_all(&*pool)
+        .await
+        .map_err(|e| format!("Employee not found: {}", e))?;
+
+    let employee_id: i32 = if let Some(row) = rows.first() {
+        row.try_get("id").map_err(|e| e.to_string())?
+    } else {
+        return Err("Employee not found".to_string());
+    };
+
+    // Calculate the total from attachements
+    let total: f64 = if let Some(arr) = attachements.as_array() {
+        arr.iter()
+            .filter_map(|item| {
+                let qty = item.get("quantity")?.as_f64()?;
+                let prix = item.get("prix_unitaire")?.as_f64()?;
+                Some(qty * prix)
+            })
+            .sum()
+    } else {
+        0.0
+    };
+
+    // Update the employee_salary record with the attachements and update travaux_attache
+    sqlx::query(
+        "UPDATE employee_salary 
+         SET travaux_attachments = $1, travaux_attache = $2
+         WHERE employee_id = $3 AND project_id = $4 AND annee = $5 AND mois = $6"
+    )
+    .bind(&attachements)
+    .bind(Decimal::from_f64_retain(total).unwrap_or_default())
+    .bind(employee_id)
+    .bind(&project_name)
+    .bind(annee)
+    .bind(mois)
+    .execute(&*pool)
+    .await
+    .map_err(|e| format!("Failed to save attachements: {}", e))?;
+
+    Ok(())
+}
+
+// Get employee attachements
+#[tauri::command]
+async fn get_employee_attachements(
+    pool: tauri::State<'_, PgPool>,
+    employee_name: String,
+    project_name: String,
+    annee: i32,
+    mois: i32
+) -> Result<Option<serde_json::Value>, String> {
+    // First, get the employee_id from the employee name
+    let rows = sqlx::query("SELECT id, nom_et_prenom FROM employees WHERE nom_et_prenom = $1")
+        .bind(&employee_name)
+        .fetch_all(&*pool)
+        .await
+        .map_err(|e| format!("Employee not found: {}", e))?;
+
+    let employee_id: i32 = if let Some(row) = rows.first() {
+        row.try_get("id").map_err(|e| e.to_string())?
+    } else {
+        return Ok(None);
+    };
+
+    // Get the travaux_attachments from employee_salary
+    let result: Option<serde_json::Value> = sqlx::query_scalar(
+        "SELECT travaux_attachments FROM employee_salary 
+         WHERE employee_id = $1 AND project_id = $2 AND annee = $3 AND mois = $4"
+    )
+    .bind(employee_id)
+    .bind(&project_name)
+    .bind(annee)
+    .bind(mois)
+    .fetch_optional(&*pool)
+    .await
+    .map_err(|e| format!("Failed to fetch attachements: {}", e))?;
+
+    Ok(result)
+}
+
+// Get recap of all projects with total net_a_payer for each
+#[tauri::command]
+async fn get_projects_recap(pool: tauri::State<'_, PgPool>, annee: i32, mois: i32) -> Result<Vec<serde_json::Value>, String> {
+    let mut recap = Vec::new();
+    
+    // Get administration project total
+    let admin_rows = sqlx::query(
+        "SELECT COALESCE(SUM(net_a_payer), 0)::NUMERIC as total FROM employee_salary WHERE project_id = 'administration' AND annee = $1 AND mois = $2"
+    )
+    .bind(annee)
+    .bind(mois)
+    .fetch_all(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let admin_total: Decimal = if let Some(row) = admin_rows.first() {
+        row.try_get::<Decimal, _>("total").unwrap_or(Decimal::ZERO)
+    } else {
+        Decimal::ZERO
+    };
+
+    recap.push(serde_json::json!({
+        "project_id": "administration",
+        "project_name": "Administration",
+        "total_net_a_payer": admin_total.to_string()
+    }));
+
+    // Get all projects
+    let projects = sqlx::query("SELECT id, project_name FROM projects")
+        .fetch_all(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // For each project, calculate total net_a_payer
+    for project_row in projects {
+        let project_id: i32 = project_row.try_get("id").map_err(|e| e.to_string())?;
+        let project_name: String = project_row.try_get("project_name").map_err(|e| e.to_string())?;
+        
+        let total_rows = sqlx::query(
+            "SELECT COALESCE(SUM(net_a_payer), 0)::NUMERIC as total FROM employee_salary WHERE project_id = $1 AND annee = $2 AND mois = $3"
+        )
+        .bind(project_id.to_string())
+        .bind(annee)
+        .bind(mois)
+        .fetch_all(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        let total: Decimal = if let Some(row) = total_rows.first() {
+            row.try_get::<Decimal, _>("total").unwrap_or(Decimal::ZERO)
+        } else {
+            Decimal::ZERO
+        };
+
+        recap.push(serde_json::json!({
+            "project_id": project_id.to_string(),
+            "project_name": project_name,
+            "total_net_a_payer": total.to_string()
+        }));
+    }
+
+    Ok(recap)
+}
+
+// Get recap of all employees with their totals across all projects
+#[tauri::command]
+async fn get_employees_recap(pool: tauri::State<'_, PgPool>, annee: i32, mois: i32) -> Result<Vec<serde_json::Value>, String> {
+    // Get all employees
+    let employees = sqlx::query("SELECT id, nom_et_prenom, tag FROM employees ORDER BY id")
+        .fetch_all(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Get all projects
+    let projects = sqlx::query("SELECT id, project_name FROM projects ORDER BY id")
+        .fetch_all(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut recap = Vec::new();
+
+    for emp_row in employees {
+        let employee_id: i32 = emp_row.try_get("id").map_err(|e| e.to_string())?;
+        let employee_name: String = emp_row.try_get("nom_et_prenom").map_err(|e| e.to_string())?;
+        let employee_tag: Option<String> = emp_row.try_get("tag").ok();
+
+        let mut employee_data = serde_json::json!({
+            "employee_id": employee_id,
+            "nom_et_prenom": employee_name,
+            "tag": employee_tag,
+            "projects": {}
+        });
+
+        let mut total_jours = 0;
+        let mut total_salaire = Decimal::ZERO;
+        let mut total_acompte = Decimal::ZERO;
+        let mut total_net_a_payer = Decimal::ZERO;
+
+        // Get data for administration
+        let admin_data = sqlx::query(
+            "SELECT nombre_des_jours, nombre_des_heurx, salaire, acompte, net_a_payer 
+             FROM employee_salary 
+             WHERE employee_id = $1 AND project_id = 'administration' AND annee = $2 AND mois = $3"
+        )
+        .bind(employee_id)
+        .bind(annee)
+        .bind(mois)
+        .fetch_optional(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        if let Some(row) = admin_data {
+            let jours: Option<i32> = row.try_get("nombre_des_jours").ok();
+            let heurx: Option<i32> = row.try_get("nombre_des_heurx").ok();
+            let salaire: Option<Decimal> = row.try_get("salaire").ok();
+            let acompte: Option<Decimal> = row.try_get("acompte").ok();
+            let net: Option<Decimal> = row.try_get("net_a_payer").ok();
+
+            let jours_val = jours.unwrap_or(0);
+            total_jours += jours_val;
+            
+            if let Some(s) = salaire { total_salaire += s; }
+            if let Some(a) = acompte { total_acompte += a; }
+            if let Some(n) = net { total_net_a_payer += n; }
+
+            employee_data["projects"]["Administration"] = serde_json::json!({
+                "jours": jours_val,
+                "heurx": heurx.unwrap_or(0)
+            });
+        }
+
+        // Get data for each project
+        for project_row in &projects {
+            let project_id: i32 = project_row.try_get("id").map_err(|e| e.to_string())?;
+            let project_name: String = project_row.try_get("project_name").map_err(|e| e.to_string())?;
+
+            let project_data = sqlx::query(
+                "SELECT nombre_des_jours, nombre_des_heurx, salaire, acompte, net_a_payer 
+                 FROM employee_salary 
+                 WHERE employee_id = $1 AND project_id = $2 AND annee = $3 AND mois = $4"
+            )
+            .bind(employee_id)
+            .bind(project_id.to_string())
+            .bind(annee)
+            .bind(mois)
+            .fetch_optional(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+
+            if let Some(row) = project_data {
+                let jours: Option<i32> = row.try_get("nombre_des_jours").ok();
+                let heurx: Option<i32> = row.try_get("nombre_des_heurx").ok();
+                let salaire: Option<Decimal> = row.try_get("salaire").ok();
+                let acompte: Option<Decimal> = row.try_get("acompte").ok();
+                let net: Option<Decimal> = row.try_get("net_a_payer").ok();
+
+                let jours_val = jours.unwrap_or(0);
+                total_jours += jours_val;
+                
+                if let Some(s) = salaire { total_salaire += s; }
+                if let Some(a) = acompte { total_acompte += a; }
+                if let Some(n) = net { total_net_a_payer += n; }
+
+                employee_data["projects"][&project_name] = serde_json::json!({
+                    "jours": jours_val,
+                    "heurx": heurx.unwrap_or(0)
+                });
+            }
+        }
+
+        employee_data["total_jours"] = serde_json::json!(total_jours);
+        employee_data["total_salaire"] = serde_json::json!(total_salaire.to_string());
+        employee_data["total_acompte"] = serde_json::json!(total_acompte.to_string());
+        employee_data["total_net_a_payer"] = serde_json::json!(total_net_a_payer.to_string());
+
+        recap.push(employee_data);
+    }
+
+    Ok(recap)
+}
+
+// Bulk import employees
+#[tauri::command]
+async fn import_employees(pool: tauri::State<'_, PgPool>, employees: Vec<EmployeeInput>, annee: i32, mois: i32) -> Result<String, String> {
+    let mut imported_count = 0;
+    let mut skipped_count = 0;
+
+    for employee in employees {
+        // Check if employee already exists
+        let existing = sqlx::query("SELECT id FROM employees WHERE nom_et_prenom = $1")
+            .bind(&employee.nom_et_prenom)
+            .fetch_optional(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if existing.is_none() {
+            // Insert new employee and get their ID
+            let employee_insert_query = "INSERT INTO employees (nom_et_prenom, tag) VALUES ($1, $2) RETURNING id";
+            let row = sqlx::query(employee_insert_query)
+                .bind(&employee.nom_et_prenom)
+                .bind(&employee.tag)
+                .fetch_one(&*pool)
+                .await
+                .map_err(|e| e.to_string())?;
+            
+            let employee_id: i32 = row.try_get("id").map_err(|e| e.to_string())?;
+            
+            // Get all projects
+            let projects = sqlx::query("SELECT id FROM projects")
+                .fetch_all(&*pool)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            // Add employee to administration project with default values
+            sqlx::query(
+                "INSERT INTO employee_salary (employee_id, project_id, prix_jour, prix_hour, nombre_des_jours, nombre_des_heurx, travaux_attache, salaire, acompte, net_a_payer, observation, annee, mois) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)"
+            )
+            .bind(employee_id)
+            .bind("administration")
+            .bind(Decimal::new(0, 2))
+            .bind(Decimal::new(0, 2))
+            .bind(0)
+            .bind(0)
+            .bind(Decimal::new(0, 2))
+            .bind(Decimal::new(0, 2))
+            .bind(Decimal::new(0, 2))
+            .bind(Decimal::new(0, 2))
+            .bind("")
+            .bind(annee)
+            .bind(mois)
+            .execute(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+
+            // Add employee to all other projects with default values
+            for project_row in projects {
+                let project_id: i32 = project_row.try_get("id").map_err(|e| e.to_string())?;
+                
+                sqlx::query(
+                    "INSERT INTO employee_salary (employee_id, project_id, prix_jour, prix_hour, nombre_des_jours, nombre_des_heurx, travaux_attache, salaire, acompte, net_a_payer, observation, annee, mois) 
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)"
+                )
+                .bind(employee_id)
+                .bind(project_id.to_string())
+                .bind(Decimal::new(0, 2))
+                .bind(Decimal::new(0, 2))
+                .bind(0)
+                .bind(0)
+                .bind(Decimal::new(0, 2))
+                .bind(Decimal::new(0, 2))
+                .bind(Decimal::new(0, 2))
+                .bind(Decimal::new(0, 2))
+                .bind("")
+                .bind(annee)
+                .bind(mois)
+                .execute(&*pool)
+                .await
+                .map_err(|e| e.to_string())?;
+            }
+            
+            imported_count += 1;
+        } else {
+            skipped_count += 1;
+        }
+    }
+
+    Ok(format!("{} employés importés, {} déjà existants", imported_count, skipped_count))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() -> Result<(), String> {
     // Load environment variables from .env file if it exists
@@ -1775,7 +2164,12 @@ pub fn run() -> Result<(), String> {
             get_project_info,
             add_project_info,
             update_project_info,
-            delete_project_info
+            delete_project_info,
+            save_employee_attachements,
+            get_employee_attachements,
+            get_projects_recap,
+            get_employees_recap,
+            import_employees
         ])
         .setup(|app| {
             // Ensure loading window gets focus
@@ -2142,6 +2536,7 @@ async fn setup_database_tables(pool: &PgPool) -> Result<(), String> {
             nombre_des_jours INTEGER,
             nombre_des_heurx INTEGER DEFAULT 0,
             travaux_attache NUMERIC(10, 2),
+            travaux_attachments JSONB,
             salaire NUMERIC(10, 2),
             acompte NUMERIC(10, 2),
             net_a_payer NUMERIC(10, 2),

@@ -30,6 +30,26 @@
                 </div>
                 <div class="button-group">
                     <button type="submit" id="ajouter-un-emploee-button">Ajouter un employee</button>
+                    <button type="button" id="import-employees-button" class="import-btn">
+                        <i class="fas fa-file-import"></i> Importer
+                    </button>
+                    <select id="year-selector" class="date-dropdown">
+                        <!-- Years will be populated dynamically -->
+                    </select>
+                    <select id="month-selector" class="date-dropdown">
+                        <option value="1">Janvier</option>
+                        <option value="2">Février</option>
+                        <option value="3">Mars</option>
+                        <option value="4">Avril</option>
+                        <option value="5">Mai</option>
+                        <option value="6">Juin</option>
+                        <option value="7">Juillet</option>
+                        <option value="8">Août</option>
+                        <option value="9">Septembre</option>
+                        <option value="10">Octobre</option>
+                        <option value="11">Novembre</option>
+                        <option value="12">Décembre</option>
+                    </select>
                     <select id="project-selector" class="project-dropdown">
                         <option value="administration" selected>Administration</option>
                         <!-- Projects will be loaded here dynamically -->
@@ -38,7 +58,19 @@
                     <button type="button" id="generate-pdf-button" class="pdf-btn">
                         <i class="fas fa-file-pdf"></i> Generate PDF Report
                     </button>
+                    <button type="button" id="ajouter-attachement-button" class="attachement-btn">
+                        <i class="fas fa-paperclip"></i> Ajouter un Attachement
+                    </button>
                 </div>
+                
+                <!-- Recap filter checkbox (hidden by default, shown only in recap view) -->
+                <div id="recap-filter-container" style="display: none; margin: 15px 0; padding: 12px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #3498db;">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-weight: 600; color: #2c3e50;">
+                        <input type="checkbox" id="show-all-employees-checkbox" style="width: 18px; height: 18px; cursor: pointer;">
+                        <span>Afficher tous les employés (y compris ceux qui n'ont pas travaillé ce mois-ci)</span>
+                    </label>
+                </div>
+                
                 <table>
                         <thead>
                         <tr>
@@ -175,7 +207,12 @@
                     </div>
                     <div class="form-group">
                         <label for="editTravauxAttache">Travaux Attaché</label>
-                        <input type="text" id="editTravauxAttache" required>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <input type="text" id="editTravauxAttache" required style="flex: 1;">
+                            <button type="button" id="edit-attachement-btn" class="plus-attachement-btn" title="Ajouter/Modifier Attachement">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label for="editSalaire">Salaire</label>
@@ -305,7 +342,109 @@
             <div class="modal-footer">
                 <button class="success-ok-btn" id="successOk">OK</button>
             </div>        </div>
-    </div>    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    </div>
+
+    <!-- Attachement Modal -->
+    <div id="attachementModal" class="modal">
+        <div class="modal-content attachement-modal-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-paperclip"></i> Ajouter/Modifier Attachement</h2>
+                <span class="close-attachement">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form id="attachementForm">
+                    <div class="form-group">
+                        <label for="attachementEmployeeName">Nom de l'Employé</label>
+                        <input 
+                            type="text" 
+                            id="attachementEmployeeName" 
+                            list="employeeNamesList" 
+                            placeholder="Entrer ou sélectionner un employé..."
+                            autocomplete="off"
+                            required>
+                        <datalist id="employeeNamesList">
+                            <!-- Employees will be loaded dynamically -->
+                        </datalist>
+                    </div>
+
+                    <div class="attachement-items-header">
+                        <h3>Articles</h3>
+                    </div>
+
+                    <div id="attachementItemsContainer" class="attachement-items-container">
+                        <!-- First row (template) -->
+                        <div class="attachement-item-row">
+                            <div class="attachement-field">
+                                <label>Article</label>
+                                <input type="text" class="article-input" placeholder="Article..." required>
+                            </div>
+                            <div class="attachement-field">
+                                <label>Quantité</label>
+                                <input type="number" class="quantity-input" placeholder="Qté" min="0" step="1" required>
+                            </div>
+                            <div class="attachement-field">
+                                <label>Prix Unitaire</label>
+                                <input type="number" class="prix-unitaire-input" placeholder="Prix" min="0" step="0.01" required>
+                            </div>
+                            <button type="button" class="remove-item-btn" title="Supprimer">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <button type="button" id="addAttachementItemBtn" class="add-item-btn">
+                        <i class="fas fa-plus"></i> Ajouter un article
+                    </button>
+
+                    <div class="attachement-total">
+                        <strong>Total:</strong>
+                        <span id="attachementTotalAmount">0.00 DA</span>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="cancel-attachement-btn">Annuler</button>
+                <button class="save-attachement-btn">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Employees Modal -->
+    <div id="importEmployeesModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-file-import"></i> Importer des Employés</h2>
+                <span class="close-import">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom: 20px; color: #555;">
+                    Importez une liste d'employés depuis un fichier texte. 
+                    Format: <strong>Nom_Prenom, Tag (optionnel)</strong> - un par ligne.
+                </p>
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-family: monospace; font-size: 0.9em;">
+                    <strong>Exemple:</strong><br>
+                    Jean Dupont, G<br>
+                    Marie Martin<br>
+                    Pierre Bernard, M<br>
+                    Sophie Dubois, C
+                </div>
+                <textarea 
+                    id="importEmployeesText" 
+                    rows="10" 
+                    placeholder="Collez la liste des employés ici..."
+                    style="width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-family: monospace; font-size: 0.95em;"
+                ></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="cancel-import-btn">Annuler</button>
+                <button class="save-import-btn">
+                    <i class="fas fa-upload"></i> Importer
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
     <script src="../../debug-tools.js"></script>
     <script type="module" src="index.js" defer></script>

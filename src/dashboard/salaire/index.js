@@ -82,7 +82,13 @@ document.addEventListener('DOMContentLoaded', async function() {
     const employeeForm = document.getElementById('employeeForm');
     const modeDeSaisierButton = document.getElementById('mode-de-saisir-button');
     const projectSelector = document.getElementById('project-selector');
-      // Load employees from database when page loads (default to administration)
+    const yearSelector = document.getElementById('year-selector');
+    const monthSelector = document.getElementById('month-selector');
+
+    // Initialize year and month selectors
+    initializeDateSelectors();
+    
+    // Load employees from database when page loads (default to administration)
     await loadEmployeesByProject('administration');
     
     // Load projects into the dropdown
@@ -125,14 +131,46 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     });    
     
+    // Handle year/month selection change
+    yearSelector.addEventListener('change', async function() {
+        await reloadCurrentView();
+    });
+
+    monthSelector.addEventListener('change', async function() {
+        await reloadCurrentView();
+    });
+
     // Handle project selection change
     projectSelector.addEventListener('change', async function() {
         const selectedProject = this.value;
         if (selectedProject) {
             console.log(`Selected project: ${selectedProject}`);
-            await loadEmployeesByProject(selectedProject);
+            
+            // Hide filter checkbox when not in recap view
+            const filterContainer = document.getElementById('recap-filter-container');
+            if (filterContainer && selectedProject !== 'recap') {
+                filterContainer.style.display = 'none';
+            }
+            
+            if (selectedProject === 'recap') {
+                await loadEmployeesRecap();
+            } else if (selectedProject === 'recap_chantier') {
+                await loadRecapChantier();
+            } else {
+                await loadEmployeesByProject(selectedProject);
+            }
         }
     });
+
+    // Handle checkbox for showing all employees in recap view
+    const showAllCheckbox = document.getElementById('show-all-employees-checkbox');
+    if (showAllCheckbox) {
+        showAllCheckbox.addEventListener('change', function() {
+            if (currentRecapData && currentRecapProjects) {
+                displayEmployeesRecapTable(currentRecapData, currentRecapProjects, this.checked);
+            }
+        });
+    }
 
     // Handle form submission
     saveButton.addEventListener('click', async function() {
@@ -164,6 +202,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                 });
                 
                 // Call Tauri command to add employee to database (will be added to all projects)
+                const { annee, mois } = getCurrentYearMonth();
                 await invoke('insert_employee', {
                     employee: {
                         nom_et_prenom,
@@ -176,7 +215,9 @@ document.addEventListener('DOMContentLoaded', async function() {
                         acompte,
                         net_a_payer,
                         observation
-                    }
+                    },
+                    annee: annee,
+                    mois: mois
                 });// Reset form and close modal
                 employeeForm.reset();
                 modal.style.display = 'none';
@@ -630,7 +671,12 @@ async function loadEmployees() {
 // Function to load employees for a specific project
 async function loadEmployeesByProject(projectId) {
     try {
-        const employees = await invoke('get_employees_by_project', { projectId: projectId });
+        const { annee, mois } = getCurrentYearMonth();
+        const employees = await invoke('get_employees_by_project', { 
+            projectId: projectId,
+            annee: annee,
+            mois: mois
+        });
         updateEmployeeTable(employees);
     } catch (error) {
         console.error("Error loading employees for project:", error);
@@ -690,11 +736,284 @@ function updateProjectDropdown(projects) {
         option.textContent = project.name;
         dropdown.appendChild(option);
     });
+
+    // Add Recap option (employee recap across projects)
+    const recapEmployeesOption = document.createElement('option');
+    recapEmployeesOption.value = 'recap';
+    recapEmployeesOption.textContent = '📋 Recap';
+    dropdown.appendChild(recapEmployeesOption);
+
+    // Add Recap Chantier option at the end
+    const recapOption = document.createElement('option');
+    recapOption.value = 'recap_chantier';
+    recapOption.textContent = '📊 Recap Chantier';
+    dropdown.appendChild(recapOption);
+}
+
+// Global variable to store recap data for filtering
+let currentRecapData = null;
+let currentRecapProjects = null;
+
+// Function to load and display employee recap across all projects
+async function loadEmployeesRecap() {
+    try {
+        const { annee, mois } = getCurrentYearMonth();
+        const recapData = await invoke('get_employees_recap', {
+            annee: annee,
+            mois: mois
+        });
+        const projects = await invoke('get_project_names');
+        
+        // Store data globally for filtering
+        currentRecapData = recapData;
+        currentRecapProjects = projects;
+        
+        // Show the filter checkbox
+        const filterContainer = document.getElementById('recap-filter-container');
+        if (filterContainer) {
+            filterContainer.style.display = 'block';
+        }
+        
+        // Display with default filter (only active employees)
+        const showAll = document.getElementById('show-all-employees-checkbox')?.checked || false;
+        displayEmployeesRecapTable(recapData, projects, showAll);
+    } catch (error) {
+        console.error('Error loading employees recap:', error);
+        showNotification('Erreur lors du chargement du récapitulatif des employés', 'error');
+    }
+}
+
+// Function to load and display recap of all projects
+async function loadRecapChantier() {
+    try {
+        const { annee, mois } = getCurrentYearMonth();
+        const recapData = await invoke('get_projects_recap', {
+            annee: annee,
+            mois: mois
+        });
+        displayRecapTable(recapData);
+    } catch (error) {
+        console.error('Error loading recap chantier:', error);
+        showNotification('Erreur lors du chargement du récapitulatif', 'error');
+    }
+}
+
+// Function to display employee recap in a table with projects as columns
+function displayEmployeesRecapTable(recapData, projects, showAll = false) {
+    const table = document.querySelector('table');
+    const thead = table.querySelector('thead');
+    const tbody = table.querySelector('tbody');
+    
+    // Filter data based on showAll flag
+    let filteredData = recapData;
+    if (!showAll) {
+        // Only show employees who have worked (total_jours > 0)
+        filteredData = recapData.filter(employee => {
+            const totalJours = parseInt(employee.total_jours) || 0;
+            return totalJours > 0;
+        });
+    }
+    
+    // Build dynamic header with centered text
+    let headerHTML = `
+        <tr>
+            <th style="text-align: center;">#</th>
+            <th style="text-align: center;">Nom et Prénom</th>
+            <th style="text-align: center;">Administration</th>`;
+    
+    projects.forEach(project => {
+        headerHTML += `<th style="text-align: center;">${project.name}</th>`;
+    });
+    
+    headerHTML += `
+            <th style="text-align: center;">Jours Total</th>
+            <th style="text-align: center;">Salaire Total</th>
+            <th style="text-align: center;">Acompte Total</th>
+            <th style="text-align: center;">Net à Payer Total</th>
+        </tr>`;
+    
+    thead.innerHTML = headerHTML;
+    tbody.innerHTML = '';
+    
+    let grandTotalJours = 0;
+    let grandTotalSalaire = 0;
+    let grandTotalAcompte = 0;
+    let grandTotalNet = 0;
+    
+    filteredData.forEach((employee, index) => {
+        const row = document.createElement('tr');
+        row.style.cursor = 'default';
+        row.style.backgroundColor = index % 2 === 0 ? '#f8f9fa' : 'white';
+        
+        // Display name with optional tag badge
+        const tagBadge = employee.tag ? `<span style="display: inline-block; margin-left: 8px; padding: 2px 8px; background: #3498db; color: white; border-radius: 12px; font-size: 0.75em; font-weight: bold;">${employee.tag}</span>` : '';
+        
+        let rowHTML = `
+            <td style="text-align: center; font-weight: 600;">${employee.employee_id}</td>
+            <td style="text-align: left; font-weight: 600; padding-left: 15px;">${employee.nom_et_prenom}${tagBadge}</td>`;
+        
+        // Administration column
+        const adminData = employee.projects['Administration'];
+        if (adminData) {
+            rowHTML += `<td style="text-align: center;">${adminData.jours || 0}</td>`;
+        } else {
+            rowHTML += `<td style="text-align: center;">0</td>`;
+        }
+        
+        // Project columns
+        projects.forEach(project => {
+            const projectData = employee.projects[project.name];
+            if (projectData) {
+                rowHTML += `<td style="text-align: center;">${projectData.jours || 0}</td>`;
+            } else {
+                rowHTML += `<td style="text-align: center;">0</td>`;
+            }
+        });
+        
+        // Totals
+        const totalJours = parseInt(employee.total_jours) || 0;
+        const totalSalaire = parseFloat(employee.total_salaire) || 0;
+        const totalAcompte = parseFloat(employee.total_acompte) || 0;
+        const totalNet = parseFloat(employee.total_net_a_payer) || 0;
+        
+        grandTotalJours += totalJours;
+        grandTotalSalaire += totalSalaire;
+        grandTotalAcompte += totalAcompte;
+        grandTotalNet += totalNet;
+        
+        rowHTML += `
+            <td style="text-align: center; font-weight: 700; color: #3498db;">${totalJours}</td>
+            <td style="text-align: right; font-weight: 700; color: #27ae60;">${totalSalaire.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} DA</td>
+            <td style="text-align: right; font-weight: 700; color: #e67e22;">${totalAcompte.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} DA</td>
+            <td style="text-align: right; font-weight: 700; color: #2ecc71;">${totalNet.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} DA</td>`;
+        
+        row.innerHTML = rowHTML;
+        tbody.appendChild(row);
+    });
+    
+    // Add grand total row
+    const totalRow = document.createElement('tr');
+    totalRow.style.backgroundColor = '#3498db';
+    totalRow.style.color = 'white';
+    totalRow.style.fontWeight = 'bold';
+    totalRow.style.fontSize = '1.1em';
+    
+    const projectsCount = projects.length;
+    totalRow.innerHTML = `
+        <td colspan="${2 + 1 + projectsCount}" style="text-align: right; padding-right: 20px;">⭐ TOTAUX GÉNÉRAUX</td>
+        <td style="text-align: center; font-size: 1.2em;">${grandTotalJours}</td>
+        <td style="text-align: right; font-size: 1.2em;">${grandTotalSalaire.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} DA</td>
+        <td style="text-align: right; font-size: 1.2em;">${grandTotalAcompte.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} DA</td>
+        <td style="text-align: right; font-size: 1.2em;">${grandTotalNet.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} DA</td>`;
+    
+    tbody.appendChild(totalRow);
+    
+    // Update the total display at the bottom
+    const totalDisplay = document.querySelector('.total-display');
+    if (totalDisplay) {
+        totalDisplay.querySelector('.total-value').textContent = `${grandTotalNet.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} DA`;
+    }
+}
+
+// Function to display recap data in a special table
+function displayRecapTable(recapData) {
+    const table = document.querySelector('table');
+    const thead = table.querySelector('thead');
+    const tbody = table.querySelector('tbody');
+    
+    // Reset headers to default
+    thead.innerHTML = `
+        <tr>
+            <th>Id</th>
+            <th>Nom et Prenom</th>
+            <th>Prix de Jour</th>
+            <th>Prix de Hour</th>
+            <th>Nombre des Jours</th>
+            <th>Nombre des Heurx</th>
+            <th>Traveux Attache</th>
+            <th>Salaire</th>
+            <th>Acompte</th>
+            <th>Net a Payer</th>
+            <th>Observation</th>
+        </tr>`;
+    
+    tbody.innerHTML = '';
+    
+    let grandTotal = 0;
+    
+    recapData.forEach((project, index) => {
+        const netAPayer = parseFloat(project.total_net_a_payer) || 0;
+        grandTotal += netAPayer;
+        
+        const row = document.createElement('tr');
+        row.style.cursor = 'default';
+        row.style.backgroundColor = index % 2 === 0 ? '#f8f9fa' : 'white';
+        row.innerHTML = `
+            <td style="text-align: center; font-weight: 600; font-size: 1.1em;">${index + 1}</td>
+            <td colspan="8" style="text-align: left; font-weight: 600; padding-left: 30px; font-size: 1.05em;">
+                ${project.project_name}
+            </td>
+            <td style="font-weight: 700; color: #27ae60; font-size: 1.15em; text-align: right; padding-right: 20px;">
+                ${netAPayer.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} DA
+            </td>
+            <td></td>
+        `;
+        tbody.appendChild(row);
+    });
+    
+    // Add separator row
+    const separatorRow = document.createElement('tr');
+    separatorRow.innerHTML = `
+        <td colspan="11" style="border-top: 3px solid #34495e; border-bottom: 3px solid #34495e; height: 5px;"></td>
+    `;
+    tbody.appendChild(separatorRow);
+    
+    // Add grand total row
+    const totalRow = document.createElement('tr');
+    totalRow.style.backgroundColor = '#3498db';
+    totalRow.style.color = 'white';
+    totalRow.style.fontWeight = 'bold';
+    totalRow.style.fontSize = '1.3em';
+    totalRow.innerHTML = `
+        <td colspan="9" style="text-align: right; padding-right: 30px; letter-spacing: 1px;">
+            ⭐ TOTAL GÉNÉRAL
+        </td>
+        <td style="font-size: 1.4em; text-align: right; padding-right: 20px;">
+            ${grandTotal.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} DA
+        </td>
+        <td></td>
+    `;
+    tbody.appendChild(totalRow);
+    
+    // Update the total display at the bottom
+    const totalDisplay = document.querySelector('.total-display');
+    if (totalDisplay) {
+        totalDisplay.querySelector('.total-value').textContent = `${grandTotal.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} DA`;
+    }
 }
 
 // Function to update the employee table with data from database
 function updateEmployeeTable(employees) {
-    const tbody = document.querySelector('table tbody');
+    const table = document.querySelector('table');
+    const thead = table.querySelector('thead');
+    const tbody = table.querySelector('tbody');
+    
+    // Reset headers to default
+    thead.innerHTML = `
+        <tr>
+            <th>Id</th>
+            <th>Nom et Prenom</th>
+            <th>Prix de Jour</th>
+            <th>Prix de Hour</th>
+            <th>Nombre des Jours</th>
+            <th>Nombre des Heurx</th>
+            <th>Traveux Attache</th>
+            <th>Salaire</th>
+            <th>Acompte</th>
+            <th>Net a Payer</th>
+            <th>Observation</th>
+        </tr>`;
+    
     tbody.innerHTML = '';
     
     let totalNetAPayer = 0;
@@ -703,7 +1022,7 @@ function updateEmployeeTable(employees) {
         row.setAttribute('data-employee-id', employee.employee_id);
         row.setAttribute('data-project-id', employee.project_id);
         row.innerHTML = `
-            <td>${employee.id}</td>
+            <td>${employee.employee_id}</td>
             <td>${employee.nom_et_prenom}</td>
             <td>${employee.prix_jour}</td>
             <td>${employee.prix_hour}</td>
@@ -761,7 +1080,7 @@ function showDeleteConfirmationModal(button, employeeId, employeeName) {
             modal.style.display = 'none';
             
             // Delete from database
-            await invoke('delete_employee', { employeeId: parseInt(employeeId) });
+            await invoke('delete_employee', { employeeSalaryId: parseInt(employeeId) });
             
             // Remove row from table
             const row = button.closest('tr');            row.remove();
@@ -1163,3 +1482,487 @@ function displayCurrentUserName() {
 
 // Call displayCurrentUserName on page load
 document.addEventListener('DOMContentLoaded', displayCurrentUserName);
+
+// ========================================
+// ATTACHEMENT MODAL FUNCTIONALITY
+// ========================================
+
+// Global variable to store current employee for edit modal context
+let currentEmployeeForAttachement = null;
+
+// Function to open attachement modal
+function openAttachementModal(employeeName = null) {
+    const modal = document.getElementById('attachementModal');
+    const employeeInput = document.getElementById('attachementEmployeeName');
+    
+    // Load employees into datalist
+    loadEmployeesForAttachement();
+    
+    // If employee name is provided (from edit modal), pre-fill it
+    if (employeeName) {
+        currentEmployeeForAttachement = employeeName;
+        employeeInput.value = employeeName;
+        employeeInput.disabled = true; // Disable when coming from edit modal
+        employeeInput.style.backgroundColor = '#f0f0f0';
+        // Load existing attachments for this employee
+        setTimeout(() => {
+            loadExistingAttachements(employeeName);
+        }, 100);
+    } else {
+        employeeInput.value = '';
+        employeeInput.disabled = false;
+        employeeInput.style.backgroundColor = '';
+        currentEmployeeForAttachement = null;
+    }
+    
+    modal.style.display = 'block';
+    calculateAttachementTotal();
+}
+
+// Function to close attachement modal
+function closeAttachementModal() {
+    const modal = document.getElementById('attachementModal');
+    modal.style.display = 'none';
+    
+    // Reset form
+    document.getElementById('attachementForm').reset();
+    currentEmployeeForAttachement = null;
+    
+    // Reset to single row
+    const container = document.getElementById('attachementItemsContainer');
+    container.innerHTML = `
+        <div class="attachement-item-row">
+            <div class="attachement-field">
+                <label>Article</label>
+                <input type="text" class="article-input" placeholder="Article..." required>
+            </div>
+            <div class="attachement-field">
+                <label>Quantité</label>
+                <input type="number" class="quantity-input" placeholder="Qté" min="0" step="1" required>
+            </div>
+            <div class="attachement-field">
+                <label>Prix Unitaire</label>
+                <input type="number" class="prix-unitaire-input" placeholder="Prix" min="0" step="0.01" required>
+            </div>
+            <button type="button" class="remove-item-btn" title="Supprimer">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    `;
+    
+    calculateAttachementTotal();
+}
+
+// Function to load employees for the datalist
+async function loadEmployeesForAttachement() {
+    try {
+        const selectedProject = document.getElementById('project-selector').value || 'administration';
+        const employees = await invoke('get_employees_by_project', { projectName: selectedProject });
+        
+        const employeeDatalist = document.getElementById('employeeNamesList');
+        employeeDatalist.innerHTML = '';
+        
+        employees.forEach(emp => {
+            const option = document.createElement('option');
+            option.value = emp.nom_et_prenom;
+            employeeDatalist.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading employees for attachement:', error);
+    }
+}
+
+// Function to add a new attachement item row
+function addAttachementItemRow() {
+    const container = document.getElementById('attachementItemsContainer');
+    const newRow = document.createElement('div');
+    newRow.className = 'attachement-item-row';
+    newRow.innerHTML = `
+        <div class="attachement-field">
+            <label>Article</label>
+            <input type="text" class="article-input" placeholder="Article..." required>
+        </div>
+        <div class="attachement-field">
+            <label>Quantité</label>
+            <input type="number" class="quantity-input" placeholder="Qté" min="0" step="1" required>
+        </div>
+        <div class="attachement-field">
+            <label>Prix Unitaire</label>
+            <input type="number" class="prix-unitaire-input" placeholder="Prix" min="0" step="0.01" required>
+        </div>
+        <button type="button" class="remove-item-btn" title="Supprimer">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    
+    container.appendChild(newRow);
+    calculateAttachementTotal();
+}
+
+// Function to remove an attachement item row
+function removeAttachementItemRow(button) {
+    const container = document.getElementById('attachementItemsContainer');
+    const rows = container.getElementsByClassName('attachement-item-row');
+    
+    // Keep at least one row
+    if (rows.length > 1) {
+        button.closest('.attachement-item-row').remove();
+        calculateAttachementTotal();
+    } else {
+        showNotification('Au moins un article est requis!', 'error');
+    }
+}
+
+// Function to calculate total amount
+function calculateAttachementTotal() {
+    const rows = document.querySelectorAll('.attachement-item-row');
+    let total = 0;
+    
+    rows.forEach(row => {
+        const quantity = parseFloat(row.querySelector('.quantity-input').value) || 0;
+        const prixUnitaire = parseFloat(row.querySelector('.prix-unitaire-input').value) || 0;
+        total += quantity * prixUnitaire;
+    });
+    
+    document.getElementById('attachementTotalAmount').textContent = total.toFixed(2) + ' DA';
+}
+
+// Function to collect attachement data from form
+function collectAttachementData() {
+    const rows = document.querySelectorAll('.attachement-item-row');
+    const items = [];
+    
+    rows.forEach(row => {
+        const article = row.querySelector('.article-input').value.trim();
+        const quantity = parseFloat(row.querySelector('.quantity-input').value) || 0;
+        const prixUnitaire = parseFloat(row.querySelector('.prix-unitaire-input').value) || 0;
+        
+        if (article && quantity > 0 && prixUnitaire > 0) {
+            items.push({
+                article: article,
+                quantity: quantity,
+                prix_unitaire: prixUnitaire
+            });
+        }
+    });
+    
+    return items;
+}
+
+// Function to save attachements
+async function saveAttachements() {
+    // Use currentEmployeeForAttachement if set (from edit modal), otherwise get from input
+    const employeeName = currentEmployeeForAttachement || document.getElementById('attachementEmployeeName').value.trim();
+    
+    if (!employeeName) {
+        showNotification('Veuillez entrer le nom de l\'employé!', 'error');
+        return;
+    }
+    
+    const items = collectAttachementData();
+    
+    if (items.length === 0) {
+        showNotification('Veuillez ajouter au moins un article!', 'error');
+        return;
+    }
+    
+    try {
+        const selectedProject = document.getElementById('project-selector').value || 'administration';
+        const { annee, mois } = getCurrentYearMonth();
+        
+        await invoke('save_employee_attachements', {
+            employeeName: employeeName,
+            projectName: selectedProject,
+            attachements: items,
+            annee: annee,
+            mois: mois
+        });
+        
+        // Calculate total and update travaux_attache field
+        const total = items.reduce((sum, item) => sum + (item.quantity * item.prix_unitaire), 0);
+        
+        // Update the travaux_attache value in the edit modal if it's open
+        const editTravauxInput = document.getElementById('editTravauxAttache');
+        if (editTravauxInput && currentEmployeeForAttachement === employeeName) {
+            editTravauxInput.value = total.toFixed(2);
+        }
+        
+        showNotification('Attachement enregistré avec succès!', 'success');
+        closeAttachementModal();
+        
+        // Reload employees to reflect changes
+        await loadEmployeesByProject(selectedProject);
+    } catch (error) {
+        console.error('Error saving attachements:', error);
+        showNotification('Erreur lors de l\'enregistrement: ' + error, 'error');
+    }
+}
+
+// Function to load existing attachements for an employee
+async function loadExistingAttachements(employeeName) {
+    try {
+        const selectedProject = document.getElementById('project-selector').value || 'administration';
+        const { annee, mois } = getCurrentYearMonth();
+        const attachements = await invoke('get_employee_attachements', {
+            employeeName: employeeName,
+            projectName: selectedProject,
+            annee: annee,
+            mois: mois
+        });
+        
+        if (attachements && attachements.length > 0) {
+            const container = document.getElementById('attachementItemsContainer');
+            container.innerHTML = ''; // Clear existing rows
+            
+            attachements.forEach(item => {
+                const row = document.createElement('div');
+                row.className = 'attachement-item-row';
+                row.innerHTML = `
+                    <div class="attachement-field">
+                        <label>Article</label>
+                        <input type="text" class="article-input" placeholder="Article..." value="${item.article}" required>
+                    </div>
+                    <div class="attachement-field">
+                        <label>Quantité</label>
+                        <input type="number" class="quantity-input" placeholder="Qté" value="${item.quantity}" min="0" step="1" required>
+                    </div>
+                    <div class="attachement-field">
+                        <label>Prix Unitaire</label>
+                        <input type="number" class="prix-unitaire-input" placeholder="Prix" value="${item.prix_unitaire}" min="0" step="0.01" required>
+                    </div>
+                    <button type="button" class="remove-item-btn" title="Supprimer">
+                        <i class="fas fa-times"></i>
+                    </button>
+                `;
+                container.appendChild(row);
+            });
+            
+            calculateAttachementTotal();
+        }
+    } catch (error) {
+        console.error('Error loading existing attachements:', error);
+    }
+}
+
+// Function to show notification
+function showNotification(message, type = 'success') {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 15px 25px;
+        border-radius: 8px;
+        z-index: 10000;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        font-weight: 600;
+        animation: slideInRight 0.3s ease;
+        background: ${type === 'success' ? '#27ae60' : '#e74c3c'};
+        color: white;
+    `;
+    notification.textContent = message;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => notification.remove(), 3000);
+}
+
+// Set up event listeners for attachement modal
+document.addEventListener('DOMContentLoaded', function() {
+    // Main page "Ajouter un Attachement" button
+    const ajouterAttachementBtn = document.getElementById('ajouter-attachement-button');
+    if (ajouterAttachementBtn) {
+        ajouterAttachementBtn.addEventListener('click', () => openAttachementModal());
+    }
+    
+    // Edit modal plus button
+    const editAttachementBtn = document.getElementById('edit-attachement-btn');
+    if (editAttachementBtn) {
+        editAttachementBtn.addEventListener('click', function() {
+            const employeeName = document.getElementById('editNomPrenom').value;
+            if (employeeName) {
+                openAttachementModal(employeeName);
+            } else {
+                showNotification('Nom de l\'employé introuvable!', 'error');
+            }
+        });
+    }
+    
+    // Close button
+    const closeAttachementBtn = document.querySelector('.close-attachement');
+    if (closeAttachementBtn) {
+        closeAttachementBtn.addEventListener('click', closeAttachementModal);
+    }
+    
+    // Cancel button
+    const cancelAttachementBtn = document.querySelector('.cancel-attachement-btn');
+    if (cancelAttachementBtn) {
+        cancelAttachementBtn.addEventListener('click', closeAttachementModal);
+    }
+    
+    // Save button
+    const saveAttachementBtn = document.querySelector('.save-attachement-btn');
+    if (saveAttachementBtn) {
+        saveAttachementBtn.addEventListener('click', saveAttachements);
+    }
+    
+    // Add item button
+    const addItemBtn = document.getElementById('addAttachementItemBtn');
+    if (addItemBtn) {
+        addItemBtn.addEventListener('click', addAttachementItemRow);
+    }
+    
+    // Delegate event for remove buttons and input changes
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.remove-item-btn')) {
+            removeAttachementItemRow(e.target.closest('.remove-item-btn'));
+        }
+    });
+    
+    document.addEventListener('input', function(e) {
+        if (e.target.matches('.quantity-input, .prix-unitaire-input')) {
+            calculateAttachementTotal();
+        }
+    });
+    
+    // Close modal when clicking outside
+    const attachementModal = document.getElementById('attachementModal');
+    if (attachementModal) {
+        window.addEventListener('click', function(event) {
+            if (event.target === attachementModal) {
+                closeAttachementModal();
+            }
+        });
+    }
+    
+    // ===== Import Employees Functionality =====
+    const importEmployeesBtn = document.getElementById('import-employees-button');
+    const importModal = document.getElementById('importEmployeesModal');
+    const closeImportBtn = document.querySelector('.close-import');
+    const cancelImportBtn = document.querySelector('.cancel-import-btn');
+    const saveImportBtn = document.querySelector('.save-import-btn');
+    
+    if (importEmployeesBtn) {
+        importEmployeesBtn.addEventListener('click', () => {
+            importModal.style.display = 'block';
+            document.getElementById('importEmployeesText').value = '';
+        });
+    }
+    
+    if (closeImportBtn) {
+        closeImportBtn.addEventListener('click', () => {
+            importModal.style.display = 'none';
+        });
+    }
+    
+    if (cancelImportBtn) {
+        cancelImportBtn.addEventListener('click', () => {
+            importModal.style.display = 'none';
+        });
+    }
+    
+    if (saveImportBtn) {
+        saveImportBtn.addEventListener('click', async () => {
+            const text = document.getElementById('importEmployeesText').value.trim();
+            if (!text) {
+                showNotification('Veuillez entrer au moins un employé!', 'error');
+                return;
+            }
+            
+            // Parse the input
+            const lines = text.split('\n').filter(line => line.trim());
+            const employees = [];
+            
+            for (const line of lines) {
+                const parts = line.split(',').map(p => p.trim());
+                if (parts.length >= 1) {
+                    employees.push({
+                        nom_et_prenom: parts[0],
+                        tag: parts.length > 1 ? parts[1] : null
+                    });
+                }
+            }
+            
+            if (employees.length === 0) {
+                showNotification('Aucun employé valide trouvé!', 'error');
+                return;
+            }
+            
+            try {
+                const { annee, mois } = getCurrentYearMonth();
+                const result = await invoke('import_employees', { 
+                    employees,
+                    annee: annee,
+                    mois: mois
+                });
+                showNotification(result, 'success');
+                importModal.style.display = 'none';
+                
+                // Reload employees for current project
+                const currentProject = getCurrentSelectedProject();
+                if (currentProject && currentProject !== 'recap' && currentProject !== 'recap_chantier') {
+                    await loadEmployeesByProject(currentProject);
+                }
+            } catch (error) {
+                console.error('Error importing employees:', error);
+                showNotification('Erreur lors de l\'importation: ' + error, 'error');
+            }
+        });
+    }
+    
+    if (importModal) {
+        window.addEventListener('click', function(event) {
+            if (event.target === importModal) {
+                importModal.style.display = 'none';
+            }
+        });
+    }
+});
+
+// Initialize year and month selectors with current date
+function initializeDateSelectors() {
+    const yearSelector = document.getElementById('year-selector');
+    const monthSelector = document.getElementById('month-selector');
+    
+    const currentDate = new Date();
+    const currentYear = currentDate.getFullYear();
+    const currentMonth = currentDate.getMonth() + 1; // JavaScript months are 0-based
+    
+    // Populate years (current year - 5 to current year + 2)
+    for (let year = currentYear - 5; year <= currentYear + 2; year++) {
+        const option = document.createElement('option');
+        option.value = year;
+        option.textContent = year;
+        if (year === currentYear) {
+            option.selected = true;
+        }
+        yearSelector.appendChild(option);
+    }
+    
+    // Set current month as selected
+    monthSelector.value = currentMonth.toString();
+}
+
+// Get current selected year and month
+function getCurrentYearMonth() {
+    const yearSelector = document.getElementById('year-selector');
+    const monthSelector = document.getElementById('month-selector');
+    
+    return {
+        annee: parseInt(yearSelector.value),
+        mois: parseInt(monthSelector.value)
+    };
+}
+
+// Reload current view with selected year/month
+async function reloadCurrentView() {
+    const projectSelector = document.getElementById('project-selector');
+    const selectedProject = projectSelector.value;
+    
+    if (selectedProject === 'recap') {
+        await loadEmployeesRecap();
+    } else if (selectedProject === 'recap_chantier') {
+        await loadRecapChantier();
+    } else {
+        await loadEmployeesByProject(selectedProject);
+    }
+}
