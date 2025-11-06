@@ -2421,9 +2421,7 @@ async function exportToExcel() {
     }
 }
 
-
-
-// Export Recap view to Excel with project columns (styled)
+// Export Recap view to Excel with project columns
 async function exportRecapToExcel(annee, monthName) {
     try {
         const { annee: year, mois } = getCurrentYearMonth();
@@ -2432,33 +2430,69 @@ async function exportRecapToExcel(annee, monthName) {
             mois: mois
         });
         const projects = await invoke('get_project_names');
-            const excelData = [];
-            const headers = ['ID', 'Nom et Prénom'];
-            projects.forEach(project => headers.push(project.name));
-            headers.push('Jours Total', 'Acompte Total', 'Net à Payer Total');
-            excelData.push(headers);
-            const workingEmployees = recapData.filter(employee => parseInt(employee.total_jours) > 0);
-            workingEmployees.forEach(employee => {
-                const row = [employee.employee_id || employee.id || '', employee.nom_et_prenom];
-                projects.forEach(project => {
-                    const projectData = employee.projects && (employee.projects[project.name] || employee.projects[project.project_name]);
-                    row.push(projectData ? projectData.jours : 0);
-                });
-                row.push(parseInt(employee.total_jours) || 0, parseFloat(employee.total_acompte) || 0, parseFloat(employee.total_net_a_payer) || 0);
-                excelData.push(row);
+        
+        // Prepare data for Excel
+        const excelData = [];
+        
+        // Add header row
+        const headers = ['ID', 'Nom et Prénom'];
+        projects.forEach(project => {
+            headers.push(project.project_name);
+        });
+        headers.push('Jours Total', 'Acompte Total', 'Net à Payer Total');
+        excelData.push(headers);
+        
+        // Filter employees who worked (total_jours > 0)
+        const workingEmployees = recapData.filter(employee => parseInt(employee.total_jours) > 0);
+        
+        // Add employee rows
+        workingEmployees.forEach(employee => {
+            const row = [employee.id, employee.nom_et_prenom];
+            
+            // Add days worked for each project
+            projects.forEach(project => {
+                const projectData = employee.projects && employee.projects[project.project_name];
+                row.push(projectData ? projectData.jours : 0);
             });
-            const wb = XLSX.utils.book_new();
-            const ws = XLSX.utils.aoa_to_sheet(excelData);
-            XLSX.utils.book_append_sheet(wb, ws, 'Recap Employés');
-            XLSX.writeFile(wb, filename);
-            showNotification('Export Excel réussi (fallback)!', 'success');
+            
+            // Add totals
+            row.push(
+                parseInt(employee.total_jours) || 0,
+                parseFloat(employee.total_acompte) || 0,
+                parseFloat(employee.total_net_a_payer) || 0
+            );
+            
+            excelData.push(row);
+        });
+        
+        // Create workbook and worksheet
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(excelData);
+        
+        // Set column widths
+        const colWidths = [
+            { wch: 5 },  // ID
+            { wch: 25 }, // Nom et Prénom
+        ];
+        projects.forEach(() => colWidths.push({ wch: 12 })); // Project columns
+        colWidths.push({ wch: 12 }, { wch: 15 }, { wch: 18 }); // Totals
+        ws['!cols'] = colWidths;
+        
+        // Add worksheet to workbook
+        XLSX.utils.book_append_sheet(wb, ws, 'Recap Employés');
+        
+        // Generate filename and save
+        const filename = `Recap_Employes_${monthName}_${annee}.xlsx`;
+        XLSX.writeFile(wb, filename);
+        
+        showNotification('Export Excel réussi!', 'success');
     } catch (error) {
         console.error('Error exporting recap to Excel:', error);
-        throw error;
+        showNotification('Erreur lors de l\'export Excel', 'error');
     }
 }
 
-// Export Recap Chantier to Excel (styled)
+// Export Recap Chantier to Excel
 async function exportRecapChantierToExcel(annee, monthName) {
     try {
         const { annee: year, mois } = getCurrentYearMonth();
@@ -2466,23 +2500,35 @@ async function exportRecapChantierToExcel(annee, monthName) {
             annee: year,
             mois: mois
         });
-            showNotification('Export Excel réussi!', 'success');
-        } else {
-            const excelData = [['Projet', 'Net à Payer Total']];
-            recapData.forEach(project => excelData.push([project.project_name, parseFloat(project.total_net_a_payer) || 0]));
-            const wb = XLSX.utils.book_new();
-            const ws = XLSX.utils.aoa_to_sheet(excelData);
-            XLSX.utils.book_append_sheet(wb, ws, 'Recap Chantier');
-            XLSX.writeFile(wb, filename);
-            showNotification('Export Excel réussi (fallback)!', 'success');
-        }
+        
+        const excelData = [];
+        excelData.push(['Projet', 'Net à Payer Total']);
+        
+        recapData.forEach(project => {
+            excelData.push([
+                project.project_name,
+                parseFloat(project.total_net_a_payer) || 0
+            ]);
+        });
+        
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(excelData);
+        
+        ws['!cols'] = [{ wch: 30 }, { wch: 20 }];
+        
+        XLSX.utils.book_append_sheet(wb, ws, 'Recap Chantier');
+        
+        const filename = `Recap_Chantier_${monthName}_${annee}.xlsx`;
+        XLSX.writeFile(wb, filename);
+        
+        showNotification('Export Excel réussi!', 'success');
     } catch (error) {
         console.error('Error exporting recap chantier to Excel:', error);
-        throw error;
+        showNotification('Erreur lors de l\'export Excel', 'error');
     }
 }
 
-// Export single project to Excel (styled)
+// Export single project to Excel
 async function exportProjectToExcel(projectId, annee, monthName) {
     try {
         const { annee: year, mois } = getCurrentYearMonth();
@@ -2491,24 +2537,56 @@ async function exportProjectToExcel(projectId, annee, monthName) {
             annee: year,
             mois: mois
         });
-            showNotification('Export Excel réussi!', 'success');
-        } else {
-            // Fallback basic export
-            const excelData = [['ID','Nom et Prénom','Prix de Jour','Prix de Hour','Nombre des Jours','Nombre des Heurx','Travaux Attaché','Salaire','Acompte','Net à Payer','Observation']];
-            employees.forEach(e => excelData.push([
-                e.employee_id, e.nom_et_prenom, parseFloat(e.prix_jour)||0, parseFloat(e.prix_hour)||0,
-                parseInt(e.nombre_des_jours)||0, parseFloat(e.nombre_des_heurx)||0, parseFloat(e.travaux_attache)||0,
-                parseFloat(e.salaire)||0, parseFloat(e.acompte)||0, parseFloat(e.net_a_payer)||0, e.observation||''
-            ]));
-            const wb = XLSX.utils.book_new();
-            const ws = XLSX.utils.aoa_to_sheet(excelData);
-            XLSX.utils.book_append_sheet(wb, ws, 'Salaires');
-            XLSX.writeFile(wb, filename);
-            showNotification('Export Excel réussi (fallback)!', 'success');
-        }
+        
+        const excelData = [];
+        excelData.push([
+            'ID',
+            'Nom et Prénom',
+            'Prix de Jour',
+            'Prix de Hour',
+            'Nombre des Jours',
+            'Nombre des Heurx',
+            'Travaux Attaché',
+            'Salaire',
+            'Acompte',
+            'Net à Payer',
+            'Observation'
+        ]);
+        
+        employees.forEach(employee => {
+            excelData.push([
+                employee.employee_id,
+                employee.nom_et_prenom,
+                parseFloat(employee.prix_jour) || 0,
+                parseFloat(employee.prix_hour) || 0,
+                parseInt(employee.nombre_des_jours) || 0,
+                parseFloat(employee.nombre_des_heurx) || 0,
+                parseFloat(employee.travaux_attache) || 0,
+                parseFloat(employee.salaire) || 0,
+                parseFloat(employee.acompte) || 0,
+                parseFloat(employee.net_a_payer) || 0,
+                employee.observation || ''
+            ]);
+        });
+        
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(excelData);
+        
+        ws['!cols'] = [
+            { wch: 5 }, { wch: 25 }, { wch: 12 }, { wch: 12 }, { wch: 15 },
+            { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 30 }
+        ];
+        
+        XLSX.utils.book_append_sheet(wb, ws, 'Salaires');
+        
+        const projectName = projectId === 'administration' ? 'Administration' : `Projet_${projectId}`;
+        const filename = `${projectName}_${monthName}_${annee}.xlsx`;
+        XLSX.writeFile(wb, filename);
+        
+        showNotification('Export Excel réussi!', 'success');
     } catch (error) {
         console.error('Error exporting project to Excel:', error);
-        throw error;
+        showNotification('Erreur lors de l\'export Excel', 'error');
     }
 }
 
