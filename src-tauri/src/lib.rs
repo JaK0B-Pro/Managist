@@ -456,39 +456,104 @@ async fn get_all_employees(pool: State<'_, PgPool>) -> Result<Vec<EmployeeWithSa
 }
 
 // Function to get employees by project from employee_salary table
+// Returns ALL employees for the project, creating zero-value records if they don't exist for this month
 #[tauri::command]
 async fn get_employees_by_project(pool: State<'_, PgPool>, project_id: String, annee: i32, mois: i32) -> Result<Vec<EmployeeWithSalary>, String> {
-    let rows = sqlx::query("SELECT es.id, es.employee_id, e.nom_et_prenom, es.project_id, es.prix_jour, es.prix_hour, es.nombre_des_jours, es.nombre_des_heurx, es.travaux_attache, es.salaire, es.acompte, es.net_a_payer, es.observation, es.annee, es.mois FROM employee_salary es JOIN employees e ON es.employee_id = e.id WHERE es.project_id = $1 AND es.annee = $2 AND es.mois = $3 ORDER BY es.id ASC")
-        .bind(&project_id)
-        .bind(annee)
-        .bind(mois)
+    // Get all employees from the employees table
+    let all_employees = sqlx::query("SELECT id, nom_et_prenom FROM employees ORDER BY id")
         .fetch_all(&*pool)
         .await
         .map_err(|e| e.to_string())?;
-
-    let mut employees = Vec::new();
     
-    for row in rows {
-        let employee = EmployeeWithSalary {
-            id: row.try_get("id").map_err(|e| e.to_string())?,
-            employee_id: row.try_get("employee_id").map_err(|e| e.to_string())?,
-            nom_et_prenom: row.try_get("nom_et_prenom").map_err(|e| e.to_string())?,
-            project_id: row.try_get("project_id").map_err(|e| e.to_string())?,
-            prix_jour: row.try_get("prix_jour").map_err(|e| e.to_string())?,
-            prix_hour: row.try_get("prix_hour").map_err(|e| e.to_string())?,
-            nombre_des_jours: row.try_get("nombre_des_jours").map_err(|e| e.to_string())?,
-            nombre_des_heurx: row.try_get("nombre_des_heurx").map_err(|e| e.to_string())?,
-            travaux_attache: row.try_get("travaux_attache").map_err(|e| e.to_string())?,
-            salaire: row.try_get("salaire").map_err(|e| e.to_string())?,
-            acompte: row.try_get("acompte").map_err(|e| e.to_string())?,
-            net_a_payer: row.try_get("net_a_payer").map_err(|e| e.to_string())?,
-            observation: row.try_get("observation").map_err(|e| e.to_string())?,
-            annee: row.try_get("annee").map_err(|e| e.to_string())?,
-            mois: row.try_get("mois").map_err(|e| e.to_string())?
-        };
-        employees.push(employee);
+    let mut result = Vec::new();
+    
+    for emp_row in all_employees {
+        let employee_id: i32 = emp_row.try_get("id").map_err(|e| e.to_string())?;
+        let nom_et_prenom: String = emp_row.try_get("nom_et_prenom").map_err(|e| e.to_string())?;
+        
+        // Try to get existing salary data for this employee, project, year, and month
+        let salary_data = sqlx::query(
+            "SELECT id, prix_jour, prix_hour, nombre_des_jours, nombre_des_heurx, travaux_attache, salaire, acompte, net_a_payer, observation 
+             FROM employee_salary 
+             WHERE employee_id = $1 AND project_id = $2 AND annee = $3 AND mois = $4"
+        )
+        .bind(employee_id)
+        .bind(&project_id)
+        .bind(annee)
+        .bind(mois)
+        .fetch_optional(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+        
+        if let Some(row) = salary_data {
+            // Employee has data for this month - use it
+            let employee = EmployeeWithSalary {
+                id: row.try_get("id").map_err(|e| e.to_string())?,
+                employee_id,
+                nom_et_prenom,
+                project_id: project_id.clone(),
+                prix_jour: row.try_get("prix_jour").map_err(|e| e.to_string())?,
+                prix_hour: row.try_get("prix_hour").map_err(|e| e.to_string())?,
+                nombre_des_jours: row.try_get("nombre_des_jours").map_err(|e| e.to_string())?,
+                nombre_des_heurx: row.try_get("nombre_des_heurx").map_err(|e| e.to_string())?,
+                travaux_attache: row.try_get("travaux_attache").map_err(|e| e.to_string())?,
+                salaire: row.try_get("salaire").map_err(|e| e.to_string())?,
+                acompte: row.try_get("acompte").map_err(|e| e.to_string())?,
+                net_a_payer: row.try_get("net_a_payer").map_err(|e| e.to_string())?,
+                observation: row.try_get("observation").map_err(|e| e.to_string())?,
+                annee,
+                mois
+            };
+            result.push(employee);
+        } else {
+            // Employee has no data for this month - create record with zeros and insert it
+            let insert_result = sqlx::query(
+                "INSERT INTO employee_salary (employee_id, project_id, prix_jour, prix_hour, nombre_des_jours, nombre_des_heurx, travaux_attache, salaire, acompte, net_a_payer, observation, annee, mois) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) 
+                 RETURNING id"
+            )
+            .bind(employee_id)
+            .bind(&project_id)
+            .bind(Decimal::new(0, 2))
+            .bind(Decimal::new(0, 2))
+            .bind(0)
+            .bind(0)
+            .bind(Decimal::new(0, 2))
+            .bind(Decimal::new(0, 2))
+            .bind(Decimal::new(0, 2))
+            .bind(Decimal::new(0, 2))
+            .bind("")
+            .bind(annee)
+            .bind(mois)
+            .fetch_one(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+            
+            let new_id: i32 = insert_result.try_get("id").map_err(|e| e.to_string())?;
+            
+            // Return the newly created record with zeros
+            let employee = EmployeeWithSalary {
+                id: new_id,
+                employee_id,
+                nom_et_prenom,
+                project_id: project_id.clone(),
+                prix_jour: Decimal::new(0, 2),
+                prix_hour: Decimal::new(0, 2),
+                nombre_des_jours: 0,
+                nombre_des_heurx: 0,
+                travaux_attache: Decimal::new(0, 2),
+                salaire: Decimal::new(0, 2),
+                acompte: Decimal::new(0, 2),
+                net_a_payer: Decimal::new(0, 2),
+                observation: String::new(),
+                annee,
+                mois
+            };
+            result.push(employee);
+        }
     }
-    Ok(employees)
+    
+    Ok(result)
 }
 
 // Functions for the original employees table (for backward compatibility)
@@ -836,13 +901,34 @@ async fn delete_buyer_from_database(pool: tauri::State<'_, PgPool>, buyer_id: i3
 // Function to delete employee salary record from database
 #[tauri::command]
 async fn delete_employee(pool: tauri::State<'_, PgPool>, employee_salary_id: i32) -> Result<(), String> {
-    let query = "DELETE FROM employee_salary WHERE id = $1";
-
-    sqlx::query(query)
-        .bind(employee_salary_id)
+    // The employee_salary_id parameter is actually the employee_id from the frontend
+    // (due to how the table displays employee_id instead of salary record id)
+    let employee_id = employee_salary_id;
+    
+    // Check if employee exists
+    let employee_exists = sqlx::query("SELECT id FROM employees WHERE id = $1")
+        .bind(employee_id)
+        .fetch_optional(&*pool)
+        .await
+        .map_err(|e| format!("Database error: {}", e))?;
+    
+    if employee_exists.is_none() {
+        return Err(format!("Employee with id {} not found", employee_id));
+    }
+    
+    // Delete all salary records for this employee across all projects and months
+    sqlx::query("DELETE FROM employee_salary WHERE employee_id = $1")
+        .bind(employee_id)
         .execute(&*pool)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("Error deleting salary records: {}", e))?;
+    
+    // Delete the employee from the employees table
+    sqlx::query("DELETE FROM employees WHERE id = $1")
+        .bind(employee_id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| format!("Error deleting employee: {}", e))?;
 
     Ok(())
 }
@@ -850,6 +936,11 @@ async fn delete_employee(pool: tauri::State<'_, PgPool>, employee_salary_id: i32
 // Function to update employee salary in database
 #[tauri::command]
 async fn update_employee(pool: tauri::State<'_, PgPool>, employee: EmployeeWithSalary) -> Result<(), String> {
+    debug_println!("[update_employee] Incoming update -> emp_id: {}, project_id: {}, annee: {}, mois: {}", employee.employee_id, employee.project_id, employee.annee, employee.mois);
+    debug_println!(
+        "[update_employee] prix_jour: {:?}, prix_hour: {:?}, jours: {}, heures: {}, travaux: {:?}, salaire: {:?}, acompte: {:?}, net: {:?}",
+        employee.prix_jour, employee.prix_hour, employee.nombre_des_jours, employee.nombre_des_heurx, employee.travaux_attache, employee.salaire, employee.acompte, employee.net_a_payer
+    );
     // First, update the employee name in the employees table
     let update_employee_query = "UPDATE employees SET nom_et_prenom = $1 WHERE id = $2";
     sqlx::query(update_employee_query)
@@ -880,7 +971,79 @@ async fn update_employee(pool: tauri::State<'_, PgPool>, employee: EmployeeWithS
         .await
         .map_err(|e| format!("Failed to update salary data: {}", e))?;
 
+    debug_println!("[update_employee] Update completed for emp_id: {}", employee.employee_id);
+
     Ok(())
+}
+
+// Function to update employee ID
+#[tauri::command]
+async fn update_employee_id(pool: tauri::State<'_, PgPool>, old_id: i32, new_id: i32) -> Result<(), String> {
+    // Start a transaction
+    let mut tx = pool.begin().await.map_err(|e| format!("Failed to start transaction: {}", e))?;
+    
+    // Check if new_id already exists
+    let exists: (bool,) = sqlx::query_as("SELECT EXISTS(SELECT 1 FROM employees WHERE id = $1)")
+        .bind(new_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| format!("Failed to check if new ID exists: {}", e))?;
+    
+    if exists.0 {
+        return Err(format!("L'ID {} est déjà utilisé par un autre employé", new_id));
+    }
+    
+    // Check if old_id exists
+    let old_exists: (bool,) = sqlx::query_as("SELECT EXISTS(SELECT 1 FROM employees WHERE id = $1)")
+        .bind(old_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| format!("Failed to check if old ID exists: {}", e))?;
+    
+    if !old_exists.0 {
+        return Err(format!("L'employé avec l'ID {} n'existe pas", old_id));
+    }
+    
+    // Update employee_salary table to reference new ID
+    sqlx::query("UPDATE employee_salary SET employee_id = $1 WHERE employee_id = $2")
+        .bind(new_id)
+        .bind(old_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("Failed to update employee_salary records: {}", e))?;
+    
+    // Update employees table ID
+    sqlx::query("UPDATE employees SET id = $1 WHERE id = $2")
+        .bind(new_id)
+        .bind(old_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("Failed to update employee ID: {}", e))?;
+    
+    // Commit transaction
+    tx.commit().await.map_err(|e| format!("Failed to commit transaction: {}", e))?;
+    
+    Ok(())
+}
+
+// Function to reset employee ID sequence
+#[tauri::command]
+async fn reset_employee_sequence(pool: tauri::State<'_, PgPool>) -> Result<String, String> {
+    // Get the current max ID
+    let max_id: Option<i32> = sqlx::query_scalar("SELECT MAX(id) FROM employees")
+        .fetch_one(&*pool)
+        .await
+        .map_err(|e| format!("Failed to get max ID: {}", e))?;
+    
+    let next_id = max_id.unwrap_or(0) + 1;
+    
+    // Reset the sequence to max_id + 1 or 1 if table is empty
+    sqlx::query(&format!("ALTER SEQUENCE employees_id_seq RESTART WITH {}", next_id))
+        .execute(&*pool)
+        .await
+        .map_err(|e| format!("Failed to reset sequence: {}", e))?;
+    
+    Ok(format!("Séquence réinitialisée. Le prochain ID sera: {}", next_id))
 }
 
 // Function to edit buyer in database
@@ -1757,17 +1920,24 @@ async fn save_employee_attachements(
     annee: i32,
     mois: i32
 ) -> Result<(), String> {
-    // First, get the employee_id from the employee name
-    let rows = sqlx::query("SELECT id, nom_et_prenom FROM employees WHERE nom_et_prenom = $1")
-        .bind(&employee_name)
+    debug_println!("[save_employee_attachements] Looking for employee: '{}', project: '{}', year: {}, month: {}", employee_name, project_name, annee, mois);
+    
+    // First, get the employee_id from the employee name (case-insensitive, trimmed)
+    let trimmed_name = employee_name.trim();
+    let rows = sqlx::query("SELECT id, nom_et_prenom FROM employees WHERE LOWER(TRIM(nom_et_prenom)) = LOWER($1)")
+        .bind(trimmed_name)
         .fetch_all(&*pool)
         .await
-        .map_err(|e| format!("Employee not found: {}", e))?;
+        .map_err(|e| format!("Database error while searching for employee: {}", e))?;
 
     let employee_id: i32 = if let Some(row) = rows.first() {
-        row.try_get("id").map_err(|e| e.to_string())?
+        let found_name: String = row.try_get("nom_et_prenom").unwrap_or_default();
+        let emp_id = row.try_get("id").map_err(|e| e.to_string())?;
+        debug_println!("[save_employee_attachements] Found employee: '{}' with ID: {}", found_name, emp_id);
+        emp_id
     } else {
-        return Err("Employee not found".to_string());
+        debug_println!("[save_employee_attachements] Employee '{}' not found in database", trimmed_name);
+        return Err(format!("Employee '{}' not found. Please ensure the employee exists in the system.", trimmed_name));
     };
 
     // Calculate the total from attachements
@@ -1782,9 +1952,29 @@ async fn save_employee_attachements(
     } else {
         0.0
     };
+    
+    debug_println!("[save_employee_attachements] Calculated total: {}, attachements count: {}", total, attachements.as_array().map(|a| a.len()).unwrap_or(0));
+
+    // Check if employee_salary record exists for this employee/project/year/month
+    let salary_exists = sqlx::query(
+        "SELECT id FROM employee_salary 
+         WHERE employee_id = $1 AND project_id = $2 AND annee = $3 AND mois = $4"
+    )
+    .bind(employee_id)
+    .bind(&project_name)
+    .bind(annee)
+    .bind(mois)
+    .fetch_optional(&*pool)
+    .await
+    .map_err(|e| format!("Database error checking salary record: {}", e))?;
+    
+    if salary_exists.is_none() {
+        debug_println!("[save_employee_attachements] No salary record found for employee {} in project '{}' for {}/{}", employee_id, project_name, mois, annee);
+        return Err(format!("No salary record found for this employee in project '{}' for {}/{}. Please create a salary entry first.", project_name, mois, annee));
+    }
 
     // Update the employee_salary record with the attachements and update travaux_attache
-    sqlx::query(
+    let updated = sqlx::query(
         "UPDATE employee_salary 
          SET travaux_attachments = $1, travaux_attache = $2
          WHERE employee_id = $3 AND project_id = $4 AND annee = $5 AND mois = $6"
@@ -1798,6 +1988,8 @@ async fn save_employee_attachements(
     .execute(&*pool)
     .await
     .map_err(|e| format!("Failed to save attachements: {}", e))?;
+    
+    debug_println!("[save_employee_attachements] Updated {} row(s) successfully", updated.rows_affected());
 
     Ok(())
 }
@@ -2129,6 +2321,8 @@ pub fn run() -> Result<(), String> {
             get_employees_by_project,
             delete_employee,
             update_employee,
+            update_employee_id,
+            reset_employee_sequence,
             insert_employee_original,
             get_all_employees_original,
             update_employee_original,

@@ -2,6 +2,11 @@ const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
 const { getCurrentWindow } = window.__TAURI__.window;
 
+// Undo stack to store recent actions
+let undoStack = [];
+const MAX_UNDO_ACTIONS = 10; // Keep last 10 actions
+let employeeBeforeEdit = null; // Store employee data before editing for undo
+
 // Role-based access control check
 function checkPageAccess() {
     const storedUser = localStorage.getItem('currentUser');
@@ -107,9 +112,20 @@ document.addEventListener('DOMContentLoaded', async function() {
 
 
     // open modal when modeDeSaisier button is clicked
-    modeDeSaisierButton.addEventListener('click', function() {
+    modeDeSaisierButton.addEventListener('click', async function() {
         // Open the mode de saisir modal instead of the regular add modal
         const modeDeSaisirModal = document.getElementById('modeDeSaisirModal');
+        
+        // Load projects into the dropdown
+        await loadModeSaisirProjects();
+        
+        // Set the current project as default selection
+        const currentProject = getCurrentSelectedProject();
+        const modeSaisirProjectSelect = document.getElementById('modeSaisirProject');
+        if (currentProject && currentProject !== 'recap' && currentProject !== 'recap_chantier') {
+            modeSaisirProjectSelect.value = currentProject;
+        }
+        
         modeDeSaisirModal.style.display = 'block';
     });
 
@@ -224,6 +240,9 @@ document.addEventListener('DOMContentLoaded', async function() {
 
                 // Reload employees from database
                 await reloadCurrentEmployees();
+                
+                // Refresh the employee names list for autocomplete in mode de saisir
+                await loadEmployeeNames();
             } catch (error) {
                 console.error("Error adding employee:", error);
                 alert("Failed to add employee. Please try again.");
@@ -264,6 +283,28 @@ document.addEventListener('DOMContentLoaded', async function() {
             // Get data attributes
             const employeeId = row.getAttribute('data-employee-id');
             const projectId = row.getAttribute('data-project-id');
+            
+            // Get current year/month
+            const { annee, mois } = getCurrentYearMonth();
+            
+            // Store current values before editing for undo
+            employeeBeforeEdit = {
+                id: parseInt(cells[0].textContent.trim()),
+                employee_id: parseInt(employeeId),
+                nom_et_prenom: cells[1].textContent.trim(),
+                project_id: projectId,
+                prix_jour: parseFloat(cells[2].textContent.trim()),
+                prix_hour: parseFloat(cells[3].textContent.trim()),
+                nombre_des_jours: parseInt(cells[4].textContent.trim()),
+                nombre_des_heurx: parseFloat(cells[5].textContent.trim()),
+                travaux_attache: parseFloat(cells[6].textContent.trim()),
+                salaire: parseFloat(cells[7].textContent.trim()),
+                acompte: parseFloat(cells[8].textContent.trim()),
+                net_a_payer: parseFloat(cells[9].textContent.trim()),
+                observation: cells[10].childNodes[0].textContent.trim(),
+                annee: annee,
+                mois: mois
+            };
             
             // Fill modal fields
             document.getElementById('editId').value = cells[0].textContent.trim();
@@ -318,6 +359,9 @@ document.addEventListener('DOMContentLoaded', async function() {
         const salaire = (prix_jour * nombre_des_jours) + (prix_hour * nombreHeurx) + travaux_attache;
         const net_a_payer = salaire - acompte;
         
+        // Get current year/month
+        const { annee, mois } = getCurrentYearMonth();
+        
         // Create the updated employee object
         const updatedEmployee = {
             id: id, // ID is never changed, only used for WHERE clause
@@ -332,12 +376,24 @@ document.addEventListener('DOMContentLoaded', async function() {
             salaire: salaire,
             acompte: acompte,
             net_a_payer: net_a_payer,
-            observation: observation
+            observation: observation,
+            annee: annee,
+            mois: mois
         };
           try {
+            // Save to undo stack before updating
+            if (employeeBeforeEdit) {
+                addToUndoStack({
+                    type: 'update',
+                    previousData: employeeBeforeEdit,
+                    newData: updatedEmployee
+                });
+            }
+            
             // Call backend to update employee
             await invoke('update_employee', { employee: updatedEmployee });
             closeEditModal();
+            employeeBeforeEdit = null; // Clear after successful update
             await reloadCurrentEmployees();
         } catch (error) {
             console.error('Update error:', error);
@@ -356,7 +412,13 @@ document.addEventListener('DOMContentLoaded', async function() {
         const editSalaire = document.getElementById('editSalaire');
         const editNetAPayer = document.getElementById('editNetAPayer');
         
+        let isCalculatingFromEditSalaire = false;
+        let lastEditedEditField = null; // Track which field was last edited
+        
+        // Calculate from Prix de Jour -> Salaire (forward calculation)
         function calculateEditValues() {
+            if (isCalculatingFromEditSalaire) return; // Prevent circular calculation
+            
             const prixJour = parseFloat(editPrixJour.value) || 0;
             const nombreJours = parseInt(editNombreJours.value) || 0;
             const nombreHeurx = parseFloat(editNombreHeurx.value) || 0;
@@ -365,23 +427,97 @@ document.addEventListener('DOMContentLoaded', async function() {
             
             // Calculate prix_hour (prix de jour / 8)
             const prixHour = prixJour / 8;
-            editPrixHour.value = prixHour.toFixed(2);
+            editPrixHour.value = prixHour;
             
             // Calculate salaire: (prix_jour * nombre_des_jours) + (prix_hour * nombre_heurx) + travaux_attache
             const salaire = (prixJour * nombreJours) + (prixHour * nombreHeurx) + travauxAttache;
-            editSalaire.value = salaire.toFixed(2);
+            editSalaire.value = salaire;
             
             // Calculate net_a_payer: salaire - acompte
             const netAPayer = salaire - acompte;
-            editNetAPayer.value = netAPayer.toFixed(2);
+            editNetAPayer.value = netAPayer;
         }
         
-        // Add event listeners to all relevant fields
-        editPrixJour.addEventListener('input', calculateEditValues);
-        editNombreJours.addEventListener('input', calculateEditValues);
-        editNombreHeurx.addEventListener('input', calculateEditValues);
-        editTravauxAttache.addEventListener('input', calculateEditValues);
-        editAcompte.addEventListener('input', calculateEditValues);
+        // Calculate from Salaire -> Prix de Jour (reverse calculation)
+        function calculateEditPrixJourFromSalaire() {
+            isCalculatingFromEditSalaire = true;
+            
+            const salaire = parseFloat(editSalaire.value) || 0;
+            const nombreJours = parseInt(editNombreJours.value) || 0;
+            const nombreHeurx = parseFloat(editNombreHeurx.value) || 0;
+            const travauxAttache = parseFloat(editTravauxAttache.value) || 0;
+            const acompte = parseFloat(editAcompte.value) || 0;
+            
+            // If nombre de jours is 0, we can't calculate prix_jour
+            if (nombreJours === 0) {
+                editPrixJour.value = '';
+                editPrixHour.value = '';
+                isCalculatingFromEditSalaire = false;
+                return;
+            }
+            
+            // Reverse calculation: prix_jour = (salaire - travaux_attache) / (nombre_jours + (nombre_heurx / 8))
+            const totalDaysEquivalent = nombreJours + (nombreHeurx / 8);
+            const prixJour = (salaire - travauxAttache) / totalDaysEquivalent;
+            
+            // Store the EXACT value without rounding to avoid precision loss
+            editPrixJour.value = prixJour;
+            editPrixHour.value = prixJour / 8;
+            
+            // DON'T recalculate salaire - keep it exactly as user entered
+            // Only update net_a_payer
+            const netAPayer = salaire - acompte;
+            editNetAPayer.value = netAPayer;
+            
+            isCalculatingFromEditSalaire = false;
+        }
+        
+        // Add event listeners with field tracking
+        editPrixJour.addEventListener('input', function() {
+            lastEditedEditField = 'prixJour';
+            calculateEditValues();
+        });
+        
+        editNombreJours.addEventListener('input', function() {
+            // Only recalculate if user was editing salaire before
+            if (lastEditedEditField === 'salaire') {
+                calculateEditPrixJourFromSalaire();
+            } else {
+                calculateEditValues();
+            }
+        });
+        
+        editNombreHeurx.addEventListener('input', function() {
+            // Only recalculate if user was editing salaire before
+            if (lastEditedEditField === 'salaire') {
+                calculateEditPrixJourFromSalaire();
+            } else {
+                calculateEditValues();
+            }
+        });
+        
+        editTravauxAttache.addEventListener('input', function() {
+            // Only recalculate if user was editing salaire before
+            if (lastEditedEditField === 'salaire') {
+                calculateEditPrixJourFromSalaire();
+            } else {
+                calculateEditValues();
+            }
+        });
+        
+        editAcompte.addEventListener('input', function() {
+            // Only update net a payer when acompte changes
+            const salaire = parseFloat(editSalaire.value) || 0;
+            const acompte = parseFloat(editAcompte.value) || 0;
+            const netAPayer = salaire - acompte;
+            editNetAPayer.value = netAPayer.toFixed(2);
+        });
+        
+        // Add event listener for reverse calculation (Salaire -> Prix Jour)
+        editSalaire.addEventListener('input', function() {
+            lastEditedEditField = 'salaire';
+            calculateEditPrixJourFromSalaire();
+        });
     }
     
     // Call this function when the page loads
@@ -524,7 +660,13 @@ document.addEventListener('DOMContentLoaded', async function() {
         const salaire = document.getElementById('modeSaisirSalaire');
         const netAPayer = document.getElementById('modeSaisirNetAPayer');
         
+        let isCalculatingFromSalaire = false;
+        let lastEditedField = null; // Track which field was last edited
+        
+        // Calculate from Prix de Jour -> Salaire (forward calculation)
         function calculateModeSaisirValues() {
+            if (isCalculatingFromSalaire) return; // Prevent circular calculation
+            
             const prixJourVal = parseFloat(prixJour.value) || 0;
             const nombreJoursVal = parseInt(nombreJours.value) || 0;
             const nombreHeurxVal = parseFloat(nombreHeurx.value) || 0;
@@ -533,23 +675,98 @@ document.addEventListener('DOMContentLoaded', async function() {
             
             // Calculate prix_hour (prix de jour / 8)
             const prixHourVal = prixJourVal / 8;
-            prixHour.value = prixHourVal.toFixed(2);
+            prixHour.value = prixHourVal;
             
             // Calculate salaire: (prix_jour * nombre_des_jours) + (prix_hour * nombre_heurx) + travaux_attache
             const salaireVal = (prixJourVal * nombreJoursVal) + (prixHourVal * nombreHeurxVal) + travauxAttacheVal;
-            salaire.value = salaireVal.toFixed(2);
+            salaire.value = salaireVal;
             
             // Calculate net_a_payer: salaire - acompte
             const netAPayerVal = salaireVal - acompteVal;
-            netAPayer.value = netAPayerVal.toFixed(2);
+            netAPayer.value = netAPayerVal;
         }
         
-        // Add event listeners to all relevant fields
-        prixJour.addEventListener('input', calculateModeSaisirValues);
-        nombreJours.addEventListener('input', calculateModeSaisirValues);
-        nombreHeurx.addEventListener('input', calculateModeSaisirValues);
-        travauxAttache.addEventListener('input', calculateModeSaisirValues);
-        acompte.addEventListener('input', calculateModeSaisirValues);
+        // Calculate from Salaire -> Prix de Jour (reverse calculation)
+        function calculatePrixJourFromSalaire() {
+            isCalculatingFromSalaire = true;
+            
+            const salaireVal = parseFloat(salaire.value) || 0;
+            const nombreJoursVal = parseInt(nombreJours.value) || 0;
+            const nombreHeurxVal = parseFloat(nombreHeurx.value) || 0;
+            const travauxAttacheVal = parseFloat(travauxAttache.value) || 0;
+            const acompteVal = parseFloat(acompte.value) || 0;
+            
+            // If nombre de jours is 0, we can't calculate prix_jour
+            if (nombreJoursVal === 0) {
+                prixJour.value = '';
+                prixHour.value = '';
+                isCalculatingFromSalaire = false;
+                return;
+            }
+            
+            // Reverse calculation: prix_jour = (salaire - travaux_attache) / (nombre_jours + (nombre_heurx / 8))
+            // This assumes: salaire = (prix_jour * nombre_jours) + (prix_jour/8 * nombre_heurx) + travaux_attache
+            const totalDaysEquivalent = nombreJoursVal + (nombreHeurxVal / 8);
+            const prixJourVal = (salaireVal - travauxAttacheVal) / totalDaysEquivalent;
+            
+            // Store the EXACT value without rounding to avoid precision loss
+            prixJour.value = prixJourVal;
+            prixHour.value = prixJourVal / 8;
+            
+            // DON'T recalculate salaire - keep it exactly as user entered
+            // Only update net_a_payer
+            const netAPayerVal = salaireVal - acompteVal;
+            netAPayer.value = netAPayerVal;
+            
+            isCalculatingFromSalaire = false;
+        }
+        
+        // Add event listeners for forward calculation (Prix Jour -> Salaire)
+        prixJour.addEventListener('input', function() {
+            lastEditedField = 'prixJour';
+            calculateModeSaisirValues();
+        });
+        
+        nombreJours.addEventListener('input', function() {
+            // Only recalculate if user was editing salaire before
+            if (lastEditedField === 'salaire') {
+                calculatePrixJourFromSalaire();
+            } else {
+                calculateModeSaisirValues();
+            }
+        });
+        
+        nombreHeurx.addEventListener('input', function() {
+            // Only recalculate if user was editing salaire before
+            if (lastEditedField === 'salaire') {
+                calculatePrixJourFromSalaire();
+            } else {
+                calculateModeSaisirValues();
+            }
+        });
+        
+        travauxAttache.addEventListener('input', function() {
+            // Only recalculate if user was editing salaire before
+            if (lastEditedField === 'salaire') {
+                calculatePrixJourFromSalaire();
+            } else {
+                calculateModeSaisirValues();
+            }
+        });
+        
+        acompte.addEventListener('input', function() {
+            // Only update net a payer when acompte changes
+            const salaireVal = parseFloat(salaire.value) || 0;
+            const acompteVal = parseFloat(acompte.value) || 0;
+            const netAPayerVal = salaireVal - acompteVal;
+            netAPayer.value = netAPayerVal.toFixed(2);
+        });
+        
+        // Add event listener for reverse calculation (Salaire -> Prix Jour)
+        salaire.addEventListener('input', function() {
+            lastEditedField = 'salaire';
+            calculatePrixJourFromSalaire();
+        });
         
         // Store function globally for external access
         window.calculateModeSaisirValues = calculateModeSaisirValues;
@@ -558,22 +775,67 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Handle save button for mode de saisir
     saveModeSaisirButton.addEventListener('click', async function(e) {
         e.preventDefault();
+        // Helper to robustly parse localized numbers (handles spaces, NBSP, commas)
+        const parseNumber = (val) => {
+            if (typeof val === 'number') return val;
+            if (!val) return 0;
+            let s = String(val).trim();
+            // remove spaces and NBSP
+            s = s.replace(/[\s\u00A0\u202F]/g, '');
+            // European format like 1.234,56 -> 1234.56
+            if (/^\d{1,3}(\.\d{3})+,\d+$/.test(s)) {
+                s = s.replace(/\./g, '').replace(',', '.');
+                return parseFloat(s);
+            }
+            // US format like 1,234.56 -> 1234.56
+            if (/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(s)) {
+                s = s.replace(/,/g, '');
+                return parseFloat(s);
+            }
+            // If only comma present, treat as decimal separator
+            if (s.includes(',') && !s.includes('.')) {
+                s = s.replace(',', '.');
+            }
+            return parseFloat(s);
+        };
         
-        // Check if an employee is selected
-        if (!window.selectedEmployeeId) {
-            alert("Veuillez sélectionner un employé à modifier.");
+        // Get the employee name
+    const nom_et_prenom = document.getElementById('modeSaisirNomPrenom').value;
+        if (!nom_et_prenom || nom_et_prenom.trim() === '') {
+            alert("Veuillez entrer le nom de l'employé.");
+            return;
+        }
+        
+        // Get the selected project
+    const selectedProjectId = document.getElementById('modeSaisirProject').value;
+        if (!selectedProjectId || selectedProjectId === '') {
+            alert("Veuillez sélectionner un projet.");
             return;
         }
         
         try {
-            // First, get the current employee data from database
+            // Get all employees
             const employees = await invoke('get_all_employees');
-            const currentEmployee = employees.find(emp => emp.id === window.selectedEmployeeId);
+            
+            // If selectedEmployeeId is not set, try to find employee by name
+            let currentEmployee = null;
+            if (window.selectedEmployeeId) {
+                currentEmployee = employees.find(emp => emp.id === window.selectedEmployeeId);
+            } else {
+                // Try to find by name (exact match)
+                currentEmployee = employees.find(emp => emp.nom_et_prenom.toLowerCase() === nom_et_prenom.trim().toLowerCase());
+                if (currentEmployee) {
+                    window.selectedEmployeeId = currentEmployee.id;
+                }
+            }
             
             if (!currentEmployee) {
-                alert("Employé introuvable dans la base de données.");
+                alert("Employé introuvable. Veuillez sélectionner un employé existant depuis la liste.");
                 return;
             }
+            
+            // Debug: log current employee from database
+            console.log('[Mode de Saisir] Current employee from DB:', currentEmployee);
             
             // Start with current employee data
             const updatedEmployee = { ...currentEmployee };
@@ -586,28 +848,29 @@ document.addEventListener('DOMContentLoaded', async function() {
             
             const prixJourVal = document.getElementById('modeSaisirPrixJour').value;
             if (prixJourVal && prixJourVal.trim() !== '') {
-                updatedEmployee.prix_jour = parseFloat(prixJourVal);
-                updatedEmployee.prix_hour = parseFloat(prixJourVal) / 8;
+                const pj = parseNumber(prixJourVal);
+                updatedEmployee.prix_jour = pj;
+                updatedEmployee.prix_hour = pj / 8;
             }
             
             const nombreJoursVal = document.getElementById('modeSaisirNombreJours').value;
             if (nombreJoursVal && nombreJoursVal.trim() !== '') {
-                updatedEmployee.nombre_des_jours = parseInt(nombreJoursVal);
+                updatedEmployee.nombre_des_jours = Math.trunc(parseNumber(nombreJoursVal));
             }
             
             const nombreHeurxVal = document.getElementById('modeSaisirNombreHeurx').value;
             if (nombreHeurxVal && nombreHeurxVal.trim() !== '') {
-                updatedEmployee.nombre_des_heurx = parseFloat(nombreHeurxVal);
+                updatedEmployee.nombre_des_heurx = parseNumber(nombreHeurxVal);
             }
             
             const travauxAttacheVal = document.getElementById('modeSaisirTravauxAttache').value;
             if (travauxAttacheVal && travauxAttacheVal.trim() !== '') {
-                updatedEmployee.travaux_attache = parseFloat(travauxAttacheVal);
+                updatedEmployee.travaux_attache = parseNumber(travauxAttacheVal);
             }
             
             const acompteVal = document.getElementById('modeSaisirAcompte').value;
             if (acompteVal && acompteVal.trim() !== '') {
-                updatedEmployee.acompte = parseFloat(acompteVal);
+                updatedEmployee.acompte = parseNumber(acompteVal);
             }
             
             const observationVal = document.getElementById('modeSaisirObservation').value;
@@ -615,18 +878,50 @@ document.addEventListener('DOMContentLoaded', async function() {
                 updatedEmployee.observation = observationVal.trim();
             }
             
-            // Ensure all numeric fields have valid values for calculation
-            const prixJour = updatedEmployee.prix_jour || 0;
-            const prixHour = updatedEmployee.prix_hour || 0;
-            const nombreJours = updatedEmployee.nombre_des_jours || 0;
-            const nombreHeurx = updatedEmployee.nombre_des_heurx || 0;
-            const travauxAttache = updatedEmployee.travaux_attache || 0;
-            const acompte = updatedEmployee.acompte || 0;
+            // Ensure all numeric fields have valid NUMBER values for calculation
+            // CRITICAL: Convert strings from DB to numbers to avoid concatenation bugs!
+            const prixJour = Number(updatedEmployee.prix_jour) || 0;
+            const prixHour = Number(updatedEmployee.prix_hour) || 0;
+            const nombreJours = Number(updatedEmployee.nombre_des_jours) || 0;
+            const nombreHeurx = Number(updatedEmployee.nombre_des_heurx) || 0;
+            const travauxAttache = Number(updatedEmployee.travaux_attache) || 0;
+            const acompte = Number(updatedEmployee.acompte) || 0;
             
             // Recalculate salary with updated values
             const salaire = (prixJour * nombreJours) + (prixHour * nombreHeurx) + travauxAttache;
+            console.log('[Mode de Saisir] Calculated salaire:', {
+                prixJour,
+                nombreJours,
+                prixHour,
+                nombreHeurx,
+                travauxAttache,
+                formula: `(${prixJour} * ${nombreJours}) + (${prixHour} * ${nombreHeurx}) + ${travauxAttache}`,
+                result: salaire
+            });
             updatedEmployee.salaire = salaire;
             updatedEmployee.net_a_payer = salaire - acompte;
+            
+            // Set the project_id to the selected project
+            updatedEmployee.project_id = selectedProjectId;
+            
+            // Set the current year and month
+            const { annee, mois } = getCurrentYearMonth();
+            updatedEmployee.annee = annee;
+            updatedEmployee.mois = mois;
+
+            // Debug log what we're about to send (helps trace 10x issues)
+            console.log('[Mode de Saisir] Updating employee', {
+                employee_id: updatedEmployee.employee_id,
+                project_id: updatedEmployee.project_id,
+                prix_jour: updatedEmployee.prix_jour,
+                prix_hour: updatedEmployee.prix_hour,
+                nombre_des_jours: updatedEmployee.nombre_des_jours,
+                nombre_des_heurx: updatedEmployee.nombre_des_heurx,
+                travaux_attache: updatedEmployee.travaux_attache,
+                salaire: updatedEmployee.salaire,
+                acompte: updatedEmployee.acompte,
+                net_a_payer: updatedEmployee.net_a_payer,
+            });
 
             // Call Tauri command to update employee
             await invoke('update_employee', { employee: updatedEmployee });
@@ -635,8 +930,14 @@ document.addEventListener('DOMContentLoaded', async function() {
             modeDeSaisirForm.reset();
             closeModeDeSaisirModal();            window.selectedEmployeeId = null; // Reset selected employee
 
-            // Reload employees from database
-            await reloadCurrentEmployees();            await loadEmployeeNames(); // Refresh autocomplete data
+            // Reload employees from database - load the project where data was saved
+            if (selectedProjectId === 'administration') {
+                await loadEmployeesByProject('administration');
+            } else {
+                await loadEmployeesByProject(selectedProjectId);
+            }
+            
+            await loadEmployeeNames(); // Refresh autocomplete data
             
             // Show success modal instead of alert
             showSuccessModal();
@@ -748,6 +1049,33 @@ function updateProjectDropdown(projects) {
     recapOption.value = 'recap_chantier';
     recapOption.textContent = '📊 Recap Chantier';
     dropdown.appendChild(recapOption);
+}
+
+// Function to load projects into mode de saisir dropdown
+async function loadModeSaisirProjects() {
+    try {
+        const projects = await invoke('get_project_names');
+        const dropdown = document.getElementById('modeSaisirProject');
+        
+        // Clear and add placeholder
+        dropdown.innerHTML = '<option value="">-- Sélectionner un projet --</option>';
+        
+        // Add Administration option
+        const adminOption = document.createElement('option');
+        adminOption.value = 'administration';
+        adminOption.textContent = 'Administration';
+        dropdown.appendChild(adminOption);
+        
+        // Add all projects
+        projects.forEach(project => {
+            const option = document.createElement('option');
+            option.value = project.id;
+            option.textContent = project.name;
+            dropdown.appendChild(option);
+        });
+    } catch (error) {
+        console.error("Error loading projects for mode de saisir:", error);
+    }
 }
 
 // Global variable to store recap data for filtering
@@ -1079,11 +1407,33 @@ function showDeleteConfirmationModal(button, employeeId, employeeName) {
             // Close modal first
             modal.style.display = 'none';
             
+            // Get employee data before deletion for undo
+            const row = button.closest('tr');
+            const employeeData = {
+                id: employeeId,
+                nom_et_prenom: employeeName,
+                prix_jour: parseFloat(row.cells[2].textContent) || 0,
+                prix_hour: parseFloat(row.cells[3].textContent) || 0,
+                nombre_des_jours: parseInt(row.cells[4].textContent) || 0,
+                nombre_des_heurx: parseInt(row.cells[5].textContent) || 0,
+                travaux_attache: parseFloat(row.cells[6].textContent) || 0,
+                salaire: parseFloat(row.cells[7].textContent) || 0,
+                acompte: parseFloat(row.cells[8].textContent) || 0,
+                net_a_payer: parseFloat(row.cells[9].textContent) || 0,
+                observation: row.cells[10].textContent || ''
+            };
+            
             // Delete from database
             await invoke('delete_employee', { employeeSalaryId: parseInt(employeeId) });
             
             // Remove row from table
-            const row = button.closest('tr');            row.remove();
+            row.remove();
+            
+            // Add to undo stack
+            addToUndoStack({
+                type: 'delete',
+                data: employeeData
+            });
             
             // Reload employees to update the table and total
             await reloadCurrentEmployees();
@@ -1902,6 +2252,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (currentProject && currentProject !== 'recap' && currentProject !== 'recap_chantier') {
                     await loadEmployeesByProject(currentProject);
                 }
+                
+                // Refresh the employee names list for autocomplete in mode de saisir
+                await loadEmployeeNames();
             } catch (error) {
                 console.error('Error importing employees:', error);
                 showNotification('Erreur lors de l\'importation: ' + error, 'error');
@@ -1966,3 +2319,323 @@ async function reloadCurrentView() {
         await loadEmployeesByProject(selectedProject);
     }
 }
+
+// Undo functionality
+function addToUndoStack(action) {
+    undoStack.push(action);
+    
+    // Keep only last MAX_UNDO_ACTIONS
+    if (undoStack.length > MAX_UNDO_ACTIONS) {
+        undoStack.shift();
+    }
+    
+    // Show undo button
+    updateUndoButtonVisibility();
+}
+
+function updateUndoButtonVisibility() {
+    const undoBtn = document.getElementById('undo-button');
+    if (undoBtn) {
+        undoBtn.style.display = undoStack.length > 0 ? 'inline-flex' : 'none';
+    }
+}
+
+async function performUndo() {
+    if (undoStack.length === 0) return;
+    
+    const action = undoStack.pop();
+    updateUndoButtonVisibility();
+    
+    try {
+        if (action.type === 'delete') {
+            // Restore deleted employee
+            const { annee, mois } = getCurrentYearMonth();
+            await invoke('insert_employee', {
+                employee: {
+                    nom_et_prenom: action.data.nom_et_prenom,
+                    prix_jour: action.data.prix_jour,
+                    prix_hour: action.data.prix_hour,
+                    nombre_des_jours: action.data.nombre_des_jours,
+                    nombre_des_heurx: action.data.nombre_des_heurx,
+                    travaux_attache: action.data.travaux_attache,
+                    salaire: action.data.salaire,
+                    acompte: action.data.acompte,
+                    net_a_payer: action.data.net_a_payer,
+                    observation: action.data.observation
+                },
+                annee: annee,
+                mois: mois
+            });
+            
+            showNotification('Suppression annulée avec succès', 'success');
+            await reloadCurrentEmployees();
+        } else if (action.type === 'update') {
+            // Restore previous values
+            await invoke('update_employee', { employee: action.previousData });
+            
+            showNotification('Modification annulée avec succès', 'success');
+            await reloadCurrentEmployees();
+        }
+    } catch (error) {
+        console.error('Error performing undo:', error);
+        showNotification('Erreur lors de l\'annulation: ' + error, 'error');
+    }
+}
+
+// Setup undo button listener
+document.addEventListener('DOMContentLoaded', function() {
+    const undoBtn = document.getElementById('undo-button');
+    if (undoBtn) {
+        undoBtn.addEventListener('click', performUndo);
+    }
+    
+    // Setup Excel export button listener
+    const excelBtn = document.getElementById('export-excel-button');
+    if (excelBtn) {
+        excelBtn.addEventListener('click', exportToExcel);
+    }
+});
+
+// Excel Export Functionality
+async function exportToExcel() {
+    try {
+        const projectSelector = document.getElementById('project-selector');
+        const selectedProject = projectSelector.value;
+        const { annee, mois } = getCurrentYearMonth();
+        
+        // Get month name in French
+        const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 
+                           'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+        const monthName = monthNames[mois - 1];
+        
+        if (selectedProject === 'recap') {
+            await exportRecapToExcel(annee, monthName);
+        } else if (selectedProject === 'recap_chantier') {
+            await exportRecapChantierToExcel(annee, monthName);
+        } else {
+            await exportProjectToExcel(selectedProject, annee, monthName);
+        }
+    } catch (error) {
+        console.error('Error exporting to Excel:', error);
+        showNotification('Erreur lors de l\'export Excel: ' + error, 'error');
+    }
+}
+
+
+
+// Export Recap view to Excel with project columns (styled)
+async function exportRecapToExcel(annee, monthName) {
+    try {
+        const { annee: year, mois } = getCurrentYearMonth();
+        const recapData = await invoke('get_employees_recap', {
+            annee: year,
+            mois: mois
+        });
+        const projects = await invoke('get_project_names');
+            const excelData = [];
+            const headers = ['ID', 'Nom et Prénom'];
+            projects.forEach(project => headers.push(project.name));
+            headers.push('Jours Total', 'Acompte Total', 'Net à Payer Total');
+            excelData.push(headers);
+            const workingEmployees = recapData.filter(employee => parseInt(employee.total_jours) > 0);
+            workingEmployees.forEach(employee => {
+                const row = [employee.employee_id || employee.id || '', employee.nom_et_prenom];
+                projects.forEach(project => {
+                    const projectData = employee.projects && (employee.projects[project.name] || employee.projects[project.project_name]);
+                    row.push(projectData ? projectData.jours : 0);
+                });
+                row.push(parseInt(employee.total_jours) || 0, parseFloat(employee.total_acompte) || 0, parseFloat(employee.total_net_a_payer) || 0);
+                excelData.push(row);
+            });
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(excelData);
+            XLSX.utils.book_append_sheet(wb, ws, 'Recap Employés');
+            XLSX.writeFile(wb, filename);
+            showNotification('Export Excel réussi (fallback)!', 'success');
+    } catch (error) {
+        console.error('Error exporting recap to Excel:', error);
+        throw error;
+    }
+}
+
+// Export Recap Chantier to Excel (styled)
+async function exportRecapChantierToExcel(annee, monthName) {
+    try {
+        const { annee: year, mois } = getCurrentYearMonth();
+        const recapData = await invoke('get_projects_recap', {
+            annee: year,
+            mois: mois
+        });
+            showNotification('Export Excel réussi!', 'success');
+        } else {
+            const excelData = [['Projet', 'Net à Payer Total']];
+            recapData.forEach(project => excelData.push([project.project_name, parseFloat(project.total_net_a_payer) || 0]));
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(excelData);
+            XLSX.utils.book_append_sheet(wb, ws, 'Recap Chantier');
+            XLSX.writeFile(wb, filename);
+            showNotification('Export Excel réussi (fallback)!', 'success');
+        }
+    } catch (error) {
+        console.error('Error exporting recap chantier to Excel:', error);
+        throw error;
+    }
+}
+
+// Export single project to Excel (styled)
+async function exportProjectToExcel(projectId, annee, monthName) {
+    try {
+        const { annee: year, mois } = getCurrentYearMonth();
+        const employees = await invoke('get_employees_by_project', {
+            projectId: projectId,
+            annee: year,
+            mois: mois
+        });
+            showNotification('Export Excel réussi!', 'success');
+        } else {
+            // Fallback basic export
+            const excelData = [['ID','Nom et Prénom','Prix de Jour','Prix de Hour','Nombre des Jours','Nombre des Heurx','Travaux Attaché','Salaire','Acompte','Net à Payer','Observation']];
+            employees.forEach(e => excelData.push([
+                e.employee_id, e.nom_et_prenom, parseFloat(e.prix_jour)||0, parseFloat(e.prix_hour)||0,
+                parseInt(e.nombre_des_jours)||0, parseFloat(e.nombre_des_heurx)||0, parseFloat(e.travaux_attache)||0,
+                parseFloat(e.salaire)||0, parseFloat(e.acompte)||0, parseFloat(e.net_a_payer)||0, e.observation||''
+            ]));
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(excelData);
+            XLSX.utils.book_append_sheet(wb, ws, 'Salaires');
+            XLSX.writeFile(wb, filename);
+            showNotification('Export Excel réussi (fallback)!', 'success');
+        }
+    } catch (error) {
+        console.error('Error exporting project to Excel:', error);
+        throw error;
+    }
+}
+
+// ========================================
+// EMPLOYEE ID MANAGEMENT
+// ========================================
+
+// Reset employee sequence button
+const resetSequenceButton = document.getElementById('reset-sequence-button');
+if (resetSequenceButton) {
+    resetSequenceButton.addEventListener('click', async () => {
+        const confirmed = confirm('Voulez-vous vraiment réinitialiser la séquence des IDs?\n\nCela définira le prochain ID automatique basé sur l\'ID maximum actuel.');
+        
+        if (confirmed) {
+            try {
+                const result = await invoke('reset_employee_sequence');
+                showNotification(result, 'success');
+            } catch (error) {
+                console.error('Error resetting sequence:', error);
+                showNotification(`Erreur: ${error}`, 'error');
+            }
+        }
+    });
+}
+
+// Change Employee ID Modal
+const changeIdModal = document.getElementById('changeIdModal');
+const closeChangeIdBtn = document.querySelector('.close-change-id');
+const cancelChangeIdBtn = document.querySelector('.cancel-change-id-btn');
+const saveChangeIdBtn = document.querySelector('.save-change-id-btn');
+const changeIdEmployeeSelect = document.getElementById('changeIdEmployeeName');
+const currentIdDisplay = document.getElementById('currentIdDisplay');
+const newEmployeeIdInput = document.getElementById('newEmployeeId');
+
+// Add click event to table rows to open change ID modal
+document.addEventListener('click', async (e) => {
+    // Check if clicked element is the ID cell or within it
+    const idCell = e.target.closest('td:first-child');
+    if (idCell && idCell.parentElement.querySelector('.edit-btn')) {
+        const employeeId = parseInt(idCell.textContent);
+        const employeeName = idCell.parentElement.children[1].textContent;
+        
+        try {
+            // Load all employees for the dropdown
+            const allEmployees = await invoke('get_all_employees');
+            changeIdEmployeeSelect.innerHTML = '<option value="">-- Sélectionner un employé --</option>';
+            
+            allEmployees.forEach(emp => {
+                const option = document.createElement('option');
+                option.value = emp.id;
+                option.textContent = `${emp.nom_et_prenom} (ID: ${emp.id})`;
+                if (emp.id === employeeId) {
+                    option.selected = true;
+                }
+                changeIdEmployeeSelect.appendChild(option);
+            });
+            
+            // Set current values
+            currentIdDisplay.value = employeeId;
+            newEmployeeIdInput.value = '';
+            
+            // Show modal
+            changeIdModal.style.display = 'block';
+        } catch (error) {
+            console.error('Error loading employees:', error);
+            showNotification('Erreur lors du chargement des employés', 'error');
+        }
+    }
+});
+
+// Update current ID display when employee is selected
+changeIdEmployeeSelect.addEventListener('change', function() {
+    const selectedOption = this.options[this.selectedIndex];
+    if (selectedOption.value) {
+        currentIdDisplay.value = selectedOption.value;
+        newEmployeeIdInput.value = '';
+    } else {
+        currentIdDisplay.value = '';
+    }
+});
+
+// Close modal handlers
+if (closeChangeIdBtn) {
+    closeChangeIdBtn.addEventListener('click', () => {
+        changeIdModal.style.display = 'none';
+    });
+}
+
+if (cancelChangeIdBtn) {
+    cancelChangeIdBtn.addEventListener('click', () => {
+        changeIdModal.style.display = 'none';
+    });
+}
+
+// Save new ID
+if (saveChangeIdBtn) {
+    saveChangeIdBtn.addEventListener('click', async () => {
+        const oldId = parseInt(currentIdDisplay.value);
+        const newId = parseInt(newEmployeeIdInput.value);
+        
+        if (!oldId || !newId) {
+            showNotification('Veuillez sélectionner un employé et entrer un nouvel ID', 'error');
+            return;
+        }
+        
+        if (oldId === newId) {
+            showNotification('Le nouvel ID doit être différent de l\'ID actuel', 'error');
+            return;
+        }
+        
+        try {
+            await invoke('update_employee_id', { oldId, newId });
+            showNotification(`ID modifié avec succès: ${oldId} → ${newId}`, 'success');
+            changeIdModal.style.display = 'none';
+            
+            // Reload the current view
+            reloadCurrentView();
+        } catch (error) {
+            console.error('Error updating employee ID:', error);
+            showNotification(`Erreur: ${error}`, 'error');
+        }
+    });
+}
+
+// Close modal when clicking outside
+window.addEventListener('click', (event) => {
+    if (event.target === changeIdModal) {
+        changeIdModal.style.display = 'none';
+    }
+});
