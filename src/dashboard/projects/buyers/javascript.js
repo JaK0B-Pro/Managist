@@ -2783,7 +2783,7 @@ document.addEventListener('mouseover', function (e) {
         }
     }
 });
-
+    
 document.addEventListener('mouseout', function (e) {
     if (e.target.closest('.buyer-row')) {
         const row = e.target.closest('.buyer-row');
@@ -3102,7 +3102,7 @@ function createPaymentLimitsDisplay(buyer) {
     // Calculate maximum amounts
     const maxVersement = prixUnitaire * surface;
     const maxEspece = reducedTotalPrice - maxVersement;
-    const padAmount = maxVersement / 5; // PAD calculation
+    const padAmount = maxVersement * 4 / 5; // PAD calculation
 
     // Calculate used amounts from existing tranches
     let usedVersement = 0;
@@ -3159,7 +3159,7 @@ function createPaymentLimitsDisplay(buyer) {
                 <span class="remaining-value" id="remainingEspeceValue">${remainingEspece.toLocaleString()} DA</span>
             </div>
             <div class="limit-item pad-limit">
-                <span class="limit-label">📊 PAD / 5:</span>
+                <span class="limit-label">📊 PAD 4 / 5:</span>
                 <span class="limit-value" id="padValue">${padAmount.toLocaleString()} DA</span>
             </div>
         </div>
@@ -5588,6 +5588,8 @@ async function printRecuCheque(trancheIndex) {
         // Get buyer information from form inputs by ID
         const buyerName = document.getElementById('nom')?.value || 'N/A';
         const prenom = document.getElementById('prenom')?.value || '';
+        const buyerId = form.getAttribute('data-buyer-id');
+        const projectId = parseInt(form.querySelector('[name="project_id"]')?.value || currentProjectId);
 
         // Get tranche information from FormData (these have name attributes)
         const formData = new FormData(form);
@@ -5614,8 +5616,8 @@ async function printRecuCheque(trancheIndex) {
         // Get current project info
         const projectTitle = document.getElementById('pageTitle')?.textContent || 'Project';
 
-        // Generate the receipt
-        generateRecuCheque(buyerName, prenom, trancheIndex, trancheAmount, trancheDate, checkNumber, projectTitle);
+        // Generate the receipt with buyer_id and project_id
+        await generateRecuCheque(buyerName, prenom, trancheIndex, trancheAmount, trancheDate, checkNumber, projectTitle, buyerId, projectId);
 
     } catch (error) {
         console.error('Error generating Reçu de Chèque:', error);
@@ -5623,7 +5625,7 @@ async function printRecuCheque(trancheIndex) {
     }
 }
 // Compact French Check Receipt Document Generator - Single Page
-function generateRecuCheque(buyerName, prenom, trancheIndex, amount, date, checkNumber, projectTitle) {
+async function generateRecuCheque(buyerName, prenom, trancheIndex, amount, date, checkNumber, projectTitle, buyerId, projectId) {
     const printWindow = window.open('', '_blank', 'width=800,height=1000,scrollbars=yes,resizable=yes');
 
     // Set window title to avoid 'about:blank'
@@ -5633,7 +5635,37 @@ function generateRecuCheque(buyerName, prenom, trancheIndex, amount, date, check
 
     const currentDate = new Date();
     const paymentDate = date ? new Date(date) : currentDate;
-    const refNumber = `RÇ${String(Math.floor(Math.random() * 9999)).padStart(4, '0')}/2025`;
+    
+    // Get or create receipt reference from database
+    let refNumber = 'N°000/2025';
+    try {
+        if (buyerId && buyerId !== 'NEW') {
+            // Try to get existing reference
+            const existingRef = await invoke('get_receipt_reference', {
+                buyerId: parseInt(buyerId),
+                trancheIndex: trancheIndex
+            });
+            
+            if (existingRef) {
+                refNumber = existingRef;
+            } else {
+                // Create new reference
+                refNumber = await invoke('create_receipt_reference', {
+                    receipt: {
+                        buyer_id: parseInt(buyerId),
+                        project_id: projectId,
+                        tranche_index: trancheIndex,
+                        amount: parseFloat(amount),
+                        check_number: checkNumber
+                    }
+                });
+            }
+        }
+    } catch (error) {
+        console.error('Error getting receipt reference:', error);
+        // Fall back to random number if backend fails
+        refNumber = `N°${String(Math.floor(Math.random() * 9999)).padStart(4, '0')}/2025`;
+    }
 
     // Convert number to French words (corrected)
     function numberToFrenchWords(num) {

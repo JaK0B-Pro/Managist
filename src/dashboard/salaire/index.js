@@ -549,17 +549,22 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     });
 
-    // Autocomplete functionality for names
+    // Autocomplete functionality for names (global scope)
     let employeeNames = [];
     
-    async function loadEmployeeNames() {
+    // Make loadEmployeeNames globally accessible
+    window.loadEmployeeNames = async function() {
         try {
-            const employees = await invoke('get_all_employees');
+            // Use get_all_employees_original to get ALL employees regardless of salary data
+            const employees = await invoke('get_all_employees_original');
             employeeNames = employees.map(emp => emp.nom_et_prenom);
         } catch (error) {
             console.error("Error loading employee names:", error);
         }
-    }
+    };
+    
+    // Alias for convenience
+    const loadEmployeeNames = window.loadEmployeeNames;
 
     function setupAutocomplete() {
         const input = document.getElementById('modeSaisirNomPrenom');
@@ -1135,10 +1140,11 @@ function displayEmployeesRecapTable(recapData, projects, showAll = false) {
     // Filter data based on showAll flag
     let filteredData = recapData;
     if (!showAll) {
-        // Only show employees who have worked (total_jours > 0)
+        // Only show employees who have worked (total_jours > 0 OR net_a_payer > 0)
         filteredData = recapData.filter(employee => {
             const totalJours = parseInt(employee.total_jours) || 0;
-            return totalJours > 0;
+            const netAPayer = parseFloat(employee.total_net_a_payer) || 0;
+            return totalJours > 0 || netAPayer > 0;
         });
     }
     
@@ -2435,29 +2441,38 @@ async function exportRecapToExcel(annee, monthName) {
         const excelData = [];
         
         // Add header row
-        const headers = ['ID', 'Nom et Prénom'];
+        const headers = ['ID', 'Nom et Prénom', 'Administration'];
         projects.forEach(project => {
-            headers.push(project.project_name);
+            headers.push(project.name);
         });
-        headers.push('Jours Total', 'Acompte Total', 'Net à Payer Total');
+        headers.push('Jours Total', 'Salaire Total', 'Acompte Total', 'Net à Payer Total');
         excelData.push(headers);
         
-        // Filter employees who worked (total_jours > 0)
-        const workingEmployees = recapData.filter(employee => parseInt(employee.total_jours) > 0);
+        // Filter employees who worked (total_jours > 0 OR net_a_payer > 0)
+        const workingEmployees = recapData.filter(employee => {
+            const totalJours = parseInt(employee.total_jours) || 0;
+            const netAPayer = parseFloat(employee.total_net_a_payer) || 0;
+            return totalJours > 0 || netAPayer > 0;
+        });
         
         // Add employee rows
         workingEmployees.forEach(employee => {
-            const row = [employee.id, employee.nom_et_prenom];
+            const row = [employee.employee_id, employee.nom_et_prenom];
+            
+            // Add Administration days
+            const adminData = employee.projects && employee.projects['Administration'];
+            row.push(adminData ? adminData.jours : 0);
             
             // Add days worked for each project
             projects.forEach(project => {
-                const projectData = employee.projects && employee.projects[project.project_name];
+                const projectData = employee.projects && employee.projects[project.name];
                 row.push(projectData ? projectData.jours : 0);
             });
             
             // Add totals
             row.push(
                 parseInt(employee.total_jours) || 0,
+                parseFloat(employee.total_salaire) || 0,
                 parseFloat(employee.total_acompte) || 0,
                 parseFloat(employee.total_net_a_payer) || 0
             );
@@ -2469,21 +2484,69 @@ async function exportRecapToExcel(annee, monthName) {
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.aoa_to_sheet(excelData);
         
+        // Get the range
+        const range = XLSX.utils.decode_range(ws['!ref']);
+        
+        // Apply BOLD and STYLING to ALL cells
+        for (let R = range.s.r; R <= range.e.r; ++R) {
+            for (let C = range.s.c; C <= range.e.c; ++C) {
+                const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+                if (!ws[cellAddress]) continue;
+                
+                // Initialize cell style
+                ws[cellAddress].s = {
+                    font: { bold: true, sz: 11, name: "Calibri" },
+                    alignment: { vertical: "center", horizontal: C > 1 ? "center" : "left" },
+                    border: {
+                        top: { style: "thin", color: { rgb: "000000" } },
+                        bottom: { style: "thin", color: { rgb: "000000" } },
+                        left: { style: "thin", color: { rgb: "000000" } },
+                        right: { style: "thin", color: { rgb: "000000" } }
+                    }
+                };
+                
+                // Header row styling - Blue background, white bold text
+                if (R === 0) {
+                    ws[cellAddress].s.fill = { patternType: "solid", fgColor: { rgb: "4472C4" } };
+                    ws[cellAddress].s.font = { bold: true, sz: 11, name: "Calibri", color: { rgb: "FFFFFF" } };
+                    ws[cellAddress].s.alignment = { horizontal: "center", vertical: "center" };
+                } else {
+                    // Data rows - alternating light blue
+                    if (R % 2 === 0) {
+                        ws[cellAddress].s.fill = { patternType: "solid", fgColor: { rgb: "D9E1F2" } };
+                    } else {
+                        ws[cellAddress].s.fill = { patternType: "solid", fgColor: { rgb: "FFFFFF" } };
+                    }
+                    
+                    // Format numbers with thousands separator
+                    if (C > 1 && typeof ws[cellAddress].v === 'number') {
+                        ws[cellAddress].z = '#,##0';
+                        ws[cellAddress].s.alignment.horizontal = "center";
+                    }
+                }
+            }
+        }
+        
         // Set column widths
         const colWidths = [
-            { wch: 5 },  // ID
-            { wch: 25 }, // Nom et Prénom
+            { wch: 8 },  // ID
+            { wch: 28 }, // Nom et Prénom
+            { wch: 15 }, // Administration
         ];
-        projects.forEach(() => colWidths.push({ wch: 12 })); // Project columns
-        colWidths.push({ wch: 12 }, { wch: 15 }, { wch: 18 }); // Totals
+        projects.forEach(() => colWidths.push({ wch: 14 })); // Project columns
+        colWidths.push({ wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 18 }); // Totals
         ws['!cols'] = colWidths;
         
         // Add worksheet to workbook
         XLSX.utils.book_append_sheet(wb, ws, 'Recap Employés');
         
-        // Generate filename and save
+        // Generate filename and save with proper options
         const filename = `Recap_Employes_${monthName}_${annee}.xlsx`;
-        XLSX.writeFile(wb, filename);
+        XLSX.writeFile(wb, filename, { 
+            bookType: 'xlsx',
+            cellStyles: true,
+            type: 'binary'
+        });
         
         showNotification('Export Excel réussi!', 'success');
     } catch (error) {
@@ -2511,15 +2574,71 @@ async function exportRecapChantierToExcel(annee, monthName) {
             ]);
         });
         
+        // Add grand total row
+        const grandTotal = recapData.reduce((sum, project) => {
+            return sum + (parseFloat(project.total_net_a_payer) || 0);
+        }, 0);
+        excelData.push(['TOTAL GÉNÉRAL', grandTotal]);
+        
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.aoa_to_sheet(excelData);
         
-        ws['!cols'] = [{ wch: 30 }, { wch: 20 }];
+        // Apply styling - Blue theme with bold text
+        const range = XLSX.utils.decode_range(ws['!ref']);
+        
+        for (let R = range.s.r; R <= range.e.r; ++R) {
+            for (let C = range.s.c; C <= range.e.c; ++C) {
+                const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+                if (!ws[cellAddress]) continue;
+                
+                // Initialize cell style with borders
+                ws[cellAddress].s = {
+                    font: { bold: true, sz: 11, name: "Calibri" },
+                    alignment: { vertical: "center", horizontal: C === 0 ? "left" : "right" },
+                    border: {
+                        top: { style: "thin", color: { rgb: "000000" } },
+                        bottom: { style: "thin", color: { rgb: "000000" } },
+                        left: { style: "thin", color: { rgb: "000000" } },
+                        right: { style: "thin", color: { rgb: "000000" } }
+                    }
+                };
+                
+                // Header row - blue background with white text
+                if (R === 0) {
+                    ws[cellAddress].s.fill = { patternType: "solid", fgColor: { rgb: "4472C4" } };
+                    ws[cellAddress].s.font = { bold: true, sz: 12, name: "Calibri", color: { rgb: "FFFFFF" } };
+                    ws[cellAddress].s.alignment = { horizontal: "center", vertical: "center" };
+                } else if (R === range.e.r) {
+                    // Total row - dark blue
+                    ws[cellAddress].s.fill = { patternType: "solid", fgColor: { rgb: "2E5090" } };
+                    ws[cellAddress].s.font = { bold: true, sz: 13, name: "Calibri", color: { rgb: "FFFFFF" } };
+                    ws[cellAddress].s.alignment = { horizontal: C === 0 ? "left" : "right", vertical: "center" };
+                } else {
+                    // Data rows - alternating light blue
+                    if (R % 2 === 0) {
+                        ws[cellAddress].s.fill = { patternType: "solid", fgColor: { rgb: "D9E1F2" } };
+                    } else {
+                        ws[cellAddress].s.fill = { patternType: "solid", fgColor: { rgb: "FFFFFF" } };
+                    }
+                }
+                
+                // Format numbers
+                if (C === 1 && typeof ws[cellAddress].v === 'number') {
+                    ws[cellAddress].z = '#,##0.00" DA"';
+                }
+            }
+        }
+        
+        ws['!cols'] = [{ wch: 35 }, { wch: 25 }];
         
         XLSX.utils.book_append_sheet(wb, ws, 'Recap Chantier');
         
         const filename = `Recap_Chantier_${monthName}_${annee}.xlsx`;
-        XLSX.writeFile(wb, filename);
+        XLSX.writeFile(wb, filename, { 
+            bookType: 'xlsx',
+            cellStyles: true,
+            type: 'binary'
+        });
         
         showNotification('Export Excel réussi!', 'success');
     } catch (error) {
@@ -2572,16 +2691,70 @@ async function exportProjectToExcel(projectId, annee, monthName) {
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.aoa_to_sheet(excelData);
         
+        // Apply styling - Blue theme with bold text
+        const range = XLSX.utils.decode_range(ws['!ref']);
+        
+        for (let R = range.s.r; R <= range.e.r; ++R) {
+            for (let C = range.s.c; C <= range.e.c; ++C) {
+                const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+                if (!ws[cellAddress]) continue;
+                
+                // Initialize cell style with borders
+                ws[cellAddress].s = {
+                    font: { bold: true, sz: 11, name: "Calibri" },
+                    alignment: { vertical: "center", horizontal: "left" },
+                    border: {
+                        top: { style: "thin", color: { rgb: "000000" } },
+                        bottom: { style: "thin", color: { rgb: "000000" } },
+                        left: { style: "thin", color: { rgb: "000000" } },
+                        right: { style: "thin", color: { rgb: "000000" } }
+                    }
+                };
+                
+                // Header row - blue background with white text
+                if (R === 0) {
+                    ws[cellAddress].s.fill = { patternType: "solid", fgColor: { rgb: "4472C4" } };
+                    ws[cellAddress].s.font = { bold: true, sz: 11, name: "Calibri", color: { rgb: "FFFFFF" } };
+                    ws[cellAddress].s.alignment = { horizontal: "center", vertical: "center" };
+                } else {
+                    // Data rows - alternating light blue
+                    if (R % 2 === 0) {
+                        ws[cellAddress].s.fill = { patternType: "solid", fgColor: { rgb: "D9E1F2" } };
+                    } else {
+                        ws[cellAddress].s.fill = { patternType: "solid", fgColor: { rgb: "FFFFFF" } };
+                    }
+                    
+                    // Numbers right-aligned for numeric columns (2-9)
+                    if (C >= 2 && C <= 9) {
+                        ws[cellAddress].s.alignment = { horizontal: "right", vertical: "center" };
+                        if (typeof ws[cellAddress].v === 'number') {
+                            ws[cellAddress].z = '#,##0.00';
+                        }
+                    } else if (C === 1) {
+                        // Name column - left aligned
+                        ws[cellAddress].s.alignment = { horizontal: "left", vertical: "center" };
+                    } else if (C === 0) {
+                        // ID column - centered
+                        ws[cellAddress].s.alignment = { horizontal: "center", vertical: "center" };
+                    }
+                }
+            }
+        }
+        
         ws['!cols'] = [
-            { wch: 5 }, { wch: 25 }, { wch: 12 }, { wch: 12 }, { wch: 15 },
-            { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 30 }
+            { wch: 8 }, { wch: 28 }, { wch: 13 }, { wch: 13 }, { wch: 16 },
+            { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 35 }
         ];
         
         XLSX.utils.book_append_sheet(wb, ws, 'Salaires');
         
         const projectName = projectId === 'administration' ? 'Administration' : `Projet_${projectId}`;
         const filename = `${projectName}_${monthName}_${annee}.xlsx`;
-        XLSX.writeFile(wb, filename);
+        XLSX.writeFile(wb, filename, { 
+            bookType: 'xlsx',
+            cellStyles: true,
+            type: 'binary'
+        });
         
         showNotification('Export Excel réussi!', 'success');
     } catch (error) {
@@ -2606,6 +2779,26 @@ if (resetSequenceButton) {
                 showNotification(result, 'success');
             } catch (error) {
                 console.error('Error resetting sequence:', error);
+                showNotification(`Erreur: ${error}`, 'error');
+            }
+        }
+    });
+}
+
+// Cleanup duplicate records button
+const cleanupDuplicatesButton = document.getElementById('cleanup-duplicates-button');
+if (cleanupDuplicatesButton) {
+    cleanupDuplicatesButton.addEventListener('click', async () => {
+        const confirmed = confirm('⚠️ ATTENTION ⚠️\n\nCette opération va supprimer les enregistrements de salaire en double dans la base de données.\n\nCela peut résoudre les erreurs "duplicate key violation".\n\nVoulez-vous continuer?');
+        
+        if (confirmed) {
+            try {
+                const result = await invoke('cleanup_duplicate_salary_records');
+                showNotification(result, 'success');
+                // Reload the current view to reflect changes
+                reloadCurrentView();
+            } catch (error) {
+                console.error('Error cleaning up duplicates:', error);
                 showNotification(`Erreur: ${error}`, 'error');
             }
         }

@@ -180,6 +180,8 @@ pub struct Buyer {
     total_paid: Decimal,
     is_sold: bool,
     payment_limits_disabled: bool,
+    #[serde(default)]
+    complementary_info: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -199,6 +201,30 @@ pub struct BuyerInput {
     payments: serde_json::Value,
     #[serde(default)]
     payment_limits_disabled: bool,
+    #[serde(default)]
+    complementary_info: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+pub struct ReceiptReference {
+    id: i32,
+    year: i32,
+    sequence_number: i32,
+    buyer_id: i32,
+    project_id: i32,
+    tranche_index: i32,
+    amount: Decimal,
+    check_number: Option<String>,
+    date_issued: chrono::NaiveDateTime,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+pub struct ReceiptInput {
+    buyer_id: i32,
+    project_id: i32,
+    tranche_index: i32,
+    amount: f64,
+    check_number: Option<String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
@@ -506,34 +532,11 @@ async fn get_employees_by_project(pool: State<'_, PgPool>, project_id: String, a
             };
             result.push(employee);
         } else {
-            // Employee has no data for this month - create record with zeros and insert it
-            let insert_result = sqlx::query(
-                "INSERT INTO employee_salary (employee_id, project_id, prix_jour, prix_hour, nombre_des_jours, nombre_des_heurx, travaux_attache, salaire, acompte, net_a_payer, observation, annee, mois) 
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) 
-                 RETURNING id"
-            )
-            .bind(employee_id)
-            .bind(&project_id)
-            .bind(Decimal::new(0, 2))
-            .bind(Decimal::new(0, 2))
-            .bind(0)
-            .bind(0)
-            .bind(Decimal::new(0, 2))
-            .bind(Decimal::new(0, 2))
-            .bind(Decimal::new(0, 2))
-            .bind(Decimal::new(0, 2))
-            .bind("")
-            .bind(annee)
-            .bind(mois)
-            .fetch_one(&*pool)
-            .await
-            .map_err(|e| e.to_string())?;
-            
-            let new_id: i32 = insert_result.try_get("id").map_err(|e| e.to_string())?;
-            
-            // Return the newly created record with zeros
+            // Employee has no data for this month - return with zeros but DON'T insert yet
+            // The record will be created when the user actually edits/saves data
+            // Use a temporary negative ID to indicate this is not yet in the database
             let employee = EmployeeWithSalary {
-                id: new_id,
+                id: -employee_id, // Negative ID indicates not yet saved for this month
                 employee_id,
                 nom_et_prenom,
                 project_id: project_id.clone(),
@@ -811,7 +814,7 @@ async fn add_buyer_to_database(pool: tauri::State<'_, PgPool>, buyer: BuyerInput
     
     debug_println!("Final price: {}, Is sold: {}, Payment status: {}", final_price, is_sold, payment_status);
 
-    let query = "INSERT INTO buyers (project_id, bloc, niveau, logt_num, nom, prenom, type_logt, type_of_logt, surface, date, prix_totale, remise, payments, payment_status, total_paid, is_sold, payment_limits_disabled) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)";
+    let query = "INSERT INTO buyers (project_id, bloc, niveau, logt_num, nom, prenom, type_logt, type_of_logt, surface, date, prix_totale, remise, payments, payment_status, total_paid, is_sold, payment_limits_disabled, complementary_info) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)";
 
     sqlx::query(query)
         .bind(&buyer.project_id)
@@ -831,6 +834,7 @@ async fn add_buyer_to_database(pool: tauri::State<'_, PgPool>, buyer: BuyerInput
         .bind(Decimal::from_f64_retain(total_paid).unwrap_or_default())
         .bind(is_sold)
         .bind(buyer.payment_limits_disabled)
+        .bind(&buyer.complementary_info)
         .execute(&*pool)
         .await
         .map_err(|e| {
@@ -879,6 +883,7 @@ async fn get_buyers_by_project(pool: tauri::State<'_, PgPool>, project_id: i32) 
             total_paid: row.try_get("total_paid").map_err(|e| e.to_string())?,
             is_sold: row.try_get("is_sold").map_err(|e| e.to_string())?,
             payment_limits_disabled: row.try_get("payment_limits_disabled").unwrap_or_else(|_| false),
+            complementary_info: row.try_get("complementary_info").unwrap_or_else(|_| "".to_string()),
         });
     }
     Ok(buyers)
@@ -950,26 +955,39 @@ async fn update_employee(pool: tauri::State<'_, PgPool>, employee: EmployeeWithS
         .await
         .map_err(|e| format!("Failed to update employee name: {}", e))?;
 
-    // Then, update the salary data in the employee_salary table
-    let update_salary_query = "UPDATE employee_salary SET prix_jour = $1, prix_hour = $2, nombre_des_jours = $3, nombre_des_heurx = $4, travaux_attache = $5, salaire = $6, acompte = $7, net_a_payer = $8, observation = $9 WHERE employee_id = $10 AND project_id = $11 AND annee = $12 AND mois = $13";
-
-    sqlx::query(update_salary_query)
-        .bind(&employee.prix_jour)
-        .bind(&employee.prix_hour)
-        .bind(&employee.nombre_des_jours)
-        .bind(&employee.nombre_des_heurx)
-        .bind(&employee.travaux_attache)
-        .bind(&employee.salaire)
-        .bind(&employee.acompte)
-        .bind(&employee.net_a_payer)
-        .bind(&employee.observation)
-        .bind(&employee.employee_id)
-        .bind(&employee.project_id)
-        .bind(&employee.annee)
-        .bind(&employee.mois)
-        .execute(&*pool)
-        .await
-        .map_err(|e| format!("Failed to update salary data: {}", e))?;
+    // Use UPSERT (INSERT ... ON CONFLICT ... DO UPDATE) to handle both insert and update
+    // This is more robust and handles race conditions better
+    sqlx::query(
+        "INSERT INTO employee_salary (employee_id, project_id, prix_jour, prix_hour, nombre_des_jours, nombre_des_heurx, travaux_attache, salaire, acompte, net_a_payer, observation, annee, mois) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+         ON CONFLICT (employee_id, project_id, annee, mois) 
+         DO UPDATE SET 
+            prix_jour = EXCLUDED.prix_jour,
+            prix_hour = EXCLUDED.prix_hour,
+            nombre_des_jours = EXCLUDED.nombre_des_jours,
+            nombre_des_heurx = EXCLUDED.nombre_des_heurx,
+            travaux_attache = EXCLUDED.travaux_attache,
+            salaire = EXCLUDED.salaire,
+            acompte = EXCLUDED.acompte,
+            net_a_payer = EXCLUDED.net_a_payer,
+            observation = EXCLUDED.observation"
+    )
+    .bind(&employee.employee_id)
+    .bind(&employee.project_id)
+    .bind(&employee.prix_jour)
+    .bind(&employee.prix_hour)
+    .bind(&employee.nombre_des_jours)
+    .bind(&employee.nombre_des_heurx)
+    .bind(&employee.travaux_attache)
+    .bind(&employee.salaire)
+    .bind(&employee.acompte)
+    .bind(&employee.net_a_payer)
+    .bind(&employee.observation)
+    .bind(&employee.annee)
+    .bind(&employee.mois)
+    .execute(&*pool)
+    .await
+    .map_err(|e| format!("Failed to upsert salary data: {}", e))?;
 
     debug_println!("[update_employee] Update completed for emp_id: {}", employee.employee_id);
 
@@ -1004,21 +1022,39 @@ async fn update_employee_id(pool: tauri::State<'_, PgPool>, old_id: i32, new_id:
         return Err(format!("L'employé avec l'ID {} n'existe pas", old_id));
     }
     
-    // Update employee_salary table to reference new ID
+    // Use a temporary negative ID to avoid constraint violations during the swap
+    // This ensures we don't conflict with the unique constraint (employee_id, project_id)
+    let temp_id = -999999;
+    
+    // Step 1: Move old records to temporary ID
+    sqlx::query("UPDATE employee_salary SET employee_id = $1 WHERE employee_id = $2")
+        .bind(temp_id)
+        .bind(old_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("Failed to move employee_salary to temp ID: {}", e))?;
+    
+    sqlx::query("UPDATE employees SET id = $1 WHERE id = $2")
+        .bind(temp_id)
+        .bind(old_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("Failed to move employee to temp ID: {}", e))?;
+    
+    // Step 2: Move from temporary ID to new ID
     sqlx::query("UPDATE employee_salary SET employee_id = $1 WHERE employee_id = $2")
         .bind(new_id)
-        .bind(old_id)
+        .bind(temp_id)
         .execute(&mut *tx)
         .await
-        .map_err(|e| format!("Failed to update employee_salary records: {}", e))?;
+        .map_err(|e| format!("Failed to update employee_salary to new ID: {}", e))?;
     
-    // Update employees table ID
     sqlx::query("UPDATE employees SET id = $1 WHERE id = $2")
         .bind(new_id)
-        .bind(old_id)
+        .bind(temp_id)
         .execute(&mut *tx)
         .await
-        .map_err(|e| format!("Failed to update employee ID: {}", e))?;
+        .map_err(|e| format!("Failed to update employee to new ID: {}", e))?;
     
     // Commit transaction
     tx.commit().await.map_err(|e| format!("Failed to commit transaction: {}", e))?;
@@ -1046,6 +1082,39 @@ async fn reset_employee_sequence(pool: tauri::State<'_, PgPool>) -> Result<Strin
     Ok(format!("Séquence réinitialisée. Le prochain ID sera: {}", next_id))
 }
 
+// Function to clean up duplicate records in employee_salary table
+#[tauri::command]
+async fn cleanup_duplicate_salary_records(pool: tauri::State<'_, PgPool>) -> Result<String, String> {
+    let mut tx = pool.begin().await.map_err(|e| format!("Failed to start transaction: {}", e))?;
+    
+    // Find and delete duplicate records, keeping only the most recent one (highest id)
+    let deleted = sqlx::query(
+        r#"
+        DELETE FROM employee_salary
+        WHERE id IN (
+            SELECT id FROM (
+                SELECT id,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY employee_id, project_id, annee, mois
+                           ORDER BY id DESC
+                       ) AS rn
+                FROM employee_salary
+            ) t
+            WHERE t.rn > 1
+        )
+        "#
+    )
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| format!("Failed to delete duplicates: {}", e))?;
+    
+    let rows_affected = deleted.rows_affected();
+    
+    tx.commit().await.map_err(|e| format!("Failed to commit: {}", e))?;
+    
+    Ok(format!("Nettoyage terminé. {} enregistrements en double supprimés.", rows_affected))
+}
+
 // Function to edit buyer in database
 #[tauri::command]
 async fn edit_buyer_in_database(pool: tauri::State<'_, PgPool>, buyer_id: i32, buyer: BuyerInput) -> Result<(), String> {
@@ -1066,7 +1135,7 @@ async fn edit_buyer_in_database(pool: tauri::State<'_, PgPool>, buyer_id: i32, b
     let is_sold = total_paid >= final_price;
     let payment_status = if is_sold { "paid" } else if total_paid > 0.0 { "partial" } else { "unpaid" };
 
-    let query = "UPDATE buyers SET project_id = $1, bloc = $2, niveau = $3, logt_num = $4, nom = $5, prenom = $6, type_logt = $7, type_of_logt = $8, surface = $9, date = $10, prix_totale = $11, remise = $12, payments = $13, payment_status = $14, total_paid = $15, is_sold = $16, payment_limits_disabled = $17 WHERE id = $18";
+    let query = "UPDATE buyers SET project_id = $1, bloc = $2, niveau = $3, logt_num = $4, nom = $5, prenom = $6, type_logt = $7, type_of_logt = $8, surface = $9, date = $10, prix_totale = $11, remise = $12, payments = $13, payment_status = $14, total_paid = $15, is_sold = $16, payment_limits_disabled = $17, complementary_info = $18 WHERE id = $19";
 
     sqlx::query(query)
         .bind(&buyer.project_id)
@@ -1086,6 +1155,7 @@ async fn edit_buyer_in_database(pool: tauri::State<'_, PgPool>, buyer_id: i32, b
         .bind(Decimal::from_f64_retain(total_paid).unwrap_or_default())
         .bind(is_sold)
         .bind(buyer.payment_limits_disabled)
+        .bind(&buyer.complementary_info)
         .bind(buyer_id)
         .execute(&*pool)
         .await
@@ -1955,41 +2025,43 @@ async fn save_employee_attachements(
     
     debug_println!("[save_employee_attachements] Calculated total: {}, attachements count: {}", total, attachements.as_array().map(|a| a.len()).unwrap_or(0));
 
-    // Check if employee_salary record exists for this employee/project/year/month
-    let salary_exists = sqlx::query(
-        "SELECT id FROM employee_salary 
-         WHERE employee_id = $1 AND project_id = $2 AND annee = $3 AND mois = $4"
+    // Use UPSERT to create or update the salary record with attachments
+    // When updating, recalculate salaire and net_a_payer to include travaux_attache
+    let _updated = sqlx::query(
+        "INSERT INTO employee_salary 
+         (employee_id, project_id, prix_jour, prix_hour, nombre_des_jours, nombre_des_heurx, 
+          travaux_attache, salaire, acompte, net_a_payer, observation, annee, mois, travaux_attachments)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+         ON CONFLICT (employee_id, project_id, annee, mois)
+         DO UPDATE SET 
+            travaux_attachments = EXCLUDED.travaux_attachments,
+            travaux_attache = EXCLUDED.travaux_attache,
+            salaire = (employee_salary.prix_jour * employee_salary.nombre_des_jours) + 
+                      (employee_salary.prix_hour * employee_salary.nombre_des_heurx) + 
+                      EXCLUDED.travaux_attache,
+            net_a_payer = (employee_salary.prix_jour * employee_salary.nombre_des_jours) + 
+                          (employee_salary.prix_hour * employee_salary.nombre_des_heurx) + 
+                          EXCLUDED.travaux_attache - employee_salary.acompte"
     )
     .bind(employee_id)
     .bind(&project_name)
+    .bind(Decimal::new(0, 2))  // prix_jour
+    .bind(Decimal::new(0, 2))  // prix_hour
+    .bind(0)                   // nombre_des_jours
+    .bind(0)                   // nombre_des_heurx
+    .bind(Decimal::from_f64_retain(total).unwrap_or_default())  // travaux_attache
+    .bind(Decimal::new(0, 2))  // salaire
+    .bind(Decimal::new(0, 2))  // acompte
+    .bind(Decimal::new(0, 2))  // net_a_payer
+    .bind("")                  // observation
     .bind(annee)
     .bind(mois)
-    .fetch_optional(&*pool)
-    .await
-    .map_err(|e| format!("Database error checking salary record: {}", e))?;
-    
-    if salary_exists.is_none() {
-        debug_println!("[save_employee_attachements] No salary record found for employee {} in project '{}' for {}/{}", employee_id, project_name, mois, annee);
-        return Err(format!("No salary record found for this employee in project '{}' for {}/{}. Please create a salary entry first.", project_name, mois, annee));
-    }
-
-    // Update the employee_salary record with the attachements and update travaux_attache
-    let updated = sqlx::query(
-        "UPDATE employee_salary 
-         SET travaux_attachments = $1, travaux_attache = $2
-         WHERE employee_id = $3 AND project_id = $4 AND annee = $5 AND mois = $6"
-    )
-    .bind(&attachements)
-    .bind(Decimal::from_f64_retain(total).unwrap_or_default())
-    .bind(employee_id)
-    .bind(&project_name)
-    .bind(annee)
-    .bind(mois)
+    .bind(&attachements)       // travaux_attachments
     .execute(&*pool)
     .await
     .map_err(|e| format!("Failed to save attachements: {}", e))?;
     
-    debug_println!("[save_employee_attachements] Updated {} row(s) successfully", updated.rows_affected());
+    debug_println!("[save_employee_attachements] Saved attachments successfully for employee {} in project '{}' for {}/{}", employee_id, project_name, mois, annee);
 
     Ok(())
 }
@@ -2030,6 +2102,77 @@ async fn get_employee_attachements(
     .map_err(|e| format!("Failed to fetch attachements: {}", e))?;
 
     Ok(result)
+}
+
+// ==================================
+// RECEIPT REFERENCE SYSTEM
+// ==================================
+
+// Create a new receipt reference and return the reference number
+#[tauri::command]
+async fn create_receipt_reference(
+    pool: tauri::State<'_, PgPool>,
+    receipt: ReceiptInput
+) -> Result<String, String> {
+    let current_year = chrono::Local::now().year();
+    
+    // Get the next sequence number for this year
+    let next_seq: (i32,) = sqlx::query_as(
+        "SELECT COALESCE(MAX(sequence_number), 0) + 1 FROM receipt_references WHERE year = $1"
+    )
+    .bind(current_year)
+    .fetch_one(&*pool)
+    .await
+    .map_err(|e| format!("Failed to get next sequence number: {}", e))?;
+    
+    let sequence_number = next_seq.0;
+    
+    // Insert the receipt reference
+    sqlx::query(
+        "INSERT INTO receipt_references 
+         (year, sequence_number, buyer_id, project_id, tranche_index, amount, check_number) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7)"
+    )
+    .bind(current_year)
+    .bind(sequence_number)
+    .bind(receipt.buyer_id)
+    .bind(receipt.project_id)
+    .bind(receipt.tranche_index)
+    .bind(Decimal::from_f64_retain(receipt.amount).unwrap_or_default())
+    .bind(receipt.check_number)
+    .execute(&*pool)
+    .await
+    .map_err(|e| format!("Failed to create receipt reference: {}", e))?;
+    
+    // Return the reference number in format: N°17/2025
+    Ok(format!("N°{}/{}", sequence_number, current_year))
+}
+
+// Get receipt reference by buyer and tranche
+#[tauri::command]
+async fn get_receipt_reference(
+    pool: tauri::State<'_, PgPool>,
+    buyer_id: i32,
+    tranche_index: i32
+) -> Result<Option<String>, String> {
+    let result = sqlx::query(
+        "SELECT year, sequence_number FROM receipt_references 
+         WHERE buyer_id = $1 AND tranche_index = $2 
+         ORDER BY date_issued DESC LIMIT 1"
+    )
+    .bind(buyer_id)
+    .bind(tranche_index)
+    .fetch_optional(&*pool)
+    .await
+    .map_err(|e| format!("Failed to get receipt reference: {}", e))?;
+    
+    if let Some(row) = result {
+        let year: i32 = row.try_get("year").map_err(|e| e.to_string())?;
+        let seq: i32 = row.try_get("sequence_number").map_err(|e| e.to_string())?;
+        Ok(Some(format!("N°{}/{}", seq, year)))
+    } else {
+        Ok(None)
+    }
 }
 
 // Get recap of all projects with total net_a_payer for each
@@ -2323,6 +2466,7 @@ pub fn run() -> Result<(), String> {
             update_employee,
             update_employee_id,
             reset_employee_sequence,
+            cleanup_duplicate_salary_records,
             insert_employee_original,
             get_all_employees_original,
             update_employee_original,
@@ -2363,7 +2507,9 @@ pub fn run() -> Result<(), String> {
             get_employee_attachements,
             get_projects_recap,
             get_employees_recap,
-            import_employees
+            import_employees,
+            create_receipt_reference,
+            get_receipt_reference
         ])
         .setup(|app| {
             // Ensure loading window gets focus
@@ -3136,6 +3282,7 @@ async fn get_buyer(pool: tauri::State<'_, PgPool>, buyer_id: i32) -> Result<Opti
             total_paid: row.try_get("total_paid").map_err(|e| e.to_string())?,
             is_sold: row.try_get("is_sold").map_err(|e| e.to_string())?,
             payment_limits_disabled: row.try_get("payment_limits_disabled").unwrap_or_else(|_| false),
+            complementary_info: row.try_get("complementary_info").unwrap_or_else(|_| String::new()),
         }))
     } else {
         Ok(None)
