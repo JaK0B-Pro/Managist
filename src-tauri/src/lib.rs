@@ -2509,7 +2509,13 @@ pub fn run() -> Result<(), String> {
             get_employees_recap,
             import_employees,
             create_receipt_reference,
-            get_receipt_reference
+            get_receipt_reference,
+            update_buyer_complementary_info,
+            set_payment_reminder,
+            remove_payment_reminder,
+            check_payment_reminders,
+            mark_reminder_notified,
+            has_payment_reminder
         ])
         .setup(|app| {
             // Ensure loading window gets focus
@@ -3287,4 +3293,125 @@ async fn get_buyer(pool: tauri::State<'_, PgPool>, buyer_id: i32) -> Result<Opti
     } else {
         Ok(None)
     }
+}
+
+#[tauri::command]
+async fn update_buyer_complementary_info(
+    pool: tauri::State<'_, PgPool>,
+    buyer_id: i32,
+    complementary_info: String,
+) -> Result<(), String> {
+    sqlx::query("UPDATE buyers SET complementary_info = $1 WHERE id = $2")
+        .bind(&complementary_info)
+        .bind(buyer_id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| format!("Failed to update complementary info: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn set_payment_reminder(
+    pool: tauri::State<'_, PgPool>,
+    buyer_id: i32,
+    project_id: i32,
+) -> Result<(), String> {
+    use chrono::{Utc, Duration};
+    
+    let reminder_date = Utc::now().naive_utc().date() + Duration::days(30);
+    
+    sqlx::query(
+        "INSERT INTO payment_reminders (buyer_id, project_id, reminder_date) 
+         VALUES ($1, $2, $3)
+         ON CONFLICT (buyer_id, project_id) 
+         DO UPDATE SET reminder_date = $3, is_notified = false"
+    )
+    .bind(buyer_id)
+    .bind(project_id)
+    .bind(reminder_date)
+    .execute(&*pool)
+    .await
+    .map_err(|e| format!("Failed to set payment reminder: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn remove_payment_reminder(
+    pool: tauri::State<'_, PgPool>,
+    buyer_id: i32,
+    project_id: i32,
+) -> Result<(), String> {
+    sqlx::query("DELETE FROM payment_reminders WHERE buyer_id = $1 AND project_id = $2")
+        .bind(buyer_id)
+        .bind(project_id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| format!("Failed to remove payment reminder: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn check_payment_reminders(pool: tauri::State<'_, PgPool>) -> Result<Vec<serde_json::Value>, String> {
+    use chrono::Utc;
+    
+    let today = Utc::now().naive_utc().date();
+    
+    let reminders = sqlx::query(
+        "SELECT pr.id, pr.buyer_id, pr.project_id, b.nom, b.prenom, b.logt_num 
+         FROM payment_reminders pr
+         JOIN buyers b ON pr.buyer_id = b.id
+         WHERE pr.reminder_date <= $1 AND pr.is_notified = false"
+    )
+    .bind(today)
+    .fetch_all(&*pool)
+    .await
+    .map_err(|e| format!("Failed to check reminders: {}", e))?;
+
+    let result: Vec<serde_json::Value> = reminders.iter().map(|row| {
+        serde_json::json!({
+            "id": row.get::<i32, _>("id"),
+            "buyer_id": row.get::<i32, _>("buyer_id"),
+            "project_id": row.get::<i32, _>("project_id"),
+            "nom": row.get::<String, _>("nom"),
+            "prenom": row.get::<String, _>("prenom"),
+            "logt_num": row.get::<String, _>("logt_num"),
+        })
+    }).collect();
+
+    Ok(result)
+}
+
+#[tauri::command]
+async fn mark_reminder_notified(
+    pool: tauri::State<'_, PgPool>,
+    reminder_id: i32,
+) -> Result<(), String> {
+    sqlx::query("UPDATE payment_reminders SET is_notified = true WHERE id = $1")
+        .bind(reminder_id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| format!("Failed to mark reminder as notified: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn has_payment_reminder(
+    pool: tauri::State<'_, PgPool>,
+    buyer_id: i32,
+    project_id: i32,
+) -> Result<bool, String> {
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM payment_reminders WHERE buyer_id = $1 AND project_id = $2"
+    )
+    .bind(buyer_id)
+    .bind(project_id)
+    .fetch_one(&*pool)
+    .await
+    .map_err(|e| format!("Failed to check reminder: {}", e))?;
+
+    Ok(count > 0)
 }

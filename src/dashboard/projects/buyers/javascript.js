@@ -1887,7 +1887,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Initialize page
     loadProjectInfo();
-    loadBuyers();    // Open modal when Add New Buyer button is clicked
+    loadBuyers();
+    
+    // Check for due payment reminders
+    setTimeout(() => checkDueReminders(), 2000);
+    
+    // Open modal when Add New Buyer button is clicked
     addBtn.addEventListener('click', async function () {
         // Reset form for new buyer
         form.reset();
@@ -2960,6 +2965,9 @@ async function editBuyer(buyerId) {
         // Store buyer ID for update
         document.getElementById('addBuyerForm').setAttribute('data-buyer-id', buyerId);
 
+        // Load reminder checkbox state
+        setTimeout(() => loadReminderState(buyerId, PROJECT_ID), 100);
+
         // Show modal
         document.getElementById('buyerModal').style.display = 'block';
 
@@ -3102,7 +3110,8 @@ function createPaymentLimitsDisplay(buyer) {
     // Calculate maximum amounts
     const maxVersement = prixUnitaire * surface;
     const maxEspece = reducedTotalPrice - maxVersement;
-    const padAmount = maxVersement * 4 / 5; // PAD calculation
+    const padAmount = maxVersement * 4 / 5; // PAD 4/5 calculation
+    const padOneFifth = maxVersement / 5; // PAD 1/5 calculation
 
     // Calculate used amounts from existing tranches
     let usedVersement = 0;
@@ -3159,8 +3168,18 @@ function createPaymentLimitsDisplay(buyer) {
                 <span class="remaining-value" id="remainingEspeceValue">${remainingEspece.toLocaleString()} DA</span>
             </div>
             <div class="limit-item pad-limit">
+                <span class="limit-label">📊 PAD 1 / 5:</span>
+                <span class="limit-value" id="padOneFifthValue">${padOneFifth.toLocaleString()} DA</span>
+            </div>
+            <div class="limit-item pad-limit">
                 <span class="limit-label">📊 PAD 4 / 5:</span>
                 <span class="limit-value" id="padValue">${padAmount.toLocaleString()} DA</span>
+                <label class="pad-reminder-checkbox" style="margin-left: 15px; display: inline-flex; align-items: center; cursor: pointer;">
+                    <input type="checkbox" id="padReminderCheckbox" data-buyer-id="${buyer.id}" 
+                           style="margin-right: 5px; cursor: pointer;" 
+                           onchange="handlePadReminderToggle(this)">
+                    <span style="font-size: 12px; color: #666;">Rappel 30j</span>
+                </label>
             </div>
         </div>
         
@@ -3336,6 +3355,7 @@ function updatePaymentLimitsDisplay() {
     const maxVersementEl = document.getElementById('maxVersementValue');
     const maxEspeceEl = document.getElementById('maxEspeceValue');
     const padValueEl = document.getElementById('padValue');
+    const padOneFifthEl = document.getElementById('padOneFifthValue');
     const remainingVersementEl = document.getElementById('remainingVersementValue');
     const remainingEspeceEl = document.getElementById('remainingEspeceValue');
 
@@ -3358,7 +3378,8 @@ function updatePaymentLimitsDisplay() {
     // Calculate maximum amounts
     const maxVersement = prixUnitaire * surface;
     const maxEspece = reducedTotalPrice - maxVersement;
-    const padAmount = maxVersement / 5; // PAD calculation
+    const padAmount = maxVersement / 5; // PAD 1/5 calculation (same as PAD)
+    const padFourFifths = maxVersement * 4 / 5; // PAD 4/5 calculation
 
     // Calculate used amounts from current form tranches
     let usedVersement = 0;
@@ -3395,7 +3416,8 @@ function updatePaymentLimitsDisplay() {
     maxVersementEl.textContent = `${maxVersement.toLocaleString()} DA`;
     maxEspeceEl.textContent = `${maxEspece.toLocaleString()} DA`;
 
-    if (padValueEl) padValueEl.textContent = `${padAmount.toLocaleString()} DA`;
+    if (padOneFifthEl) padOneFifthEl.textContent = `${padAmount.toLocaleString()} DA`;
+    if (padValueEl) padValueEl.textContent = `${padFourFifths.toLocaleString()} DA`;
     if (remainingVersementEl) remainingVersementEl.textContent = `${remainingVersement.toLocaleString()} DA`;
     if (remainingEspeceEl) remainingEspeceEl.textContent = `${remainingEspece.toLocaleString()} DA`;
 }
@@ -3515,7 +3537,8 @@ async function printOrdreVersement(trancheIndex) {
                     documentType,
                     documentTitle,
                     apartmentType,
-                    projectTitle
+                    projectTitle,
+                    buyerId: buyerId // Pass the buyer ID
                 });
                 return;
             } else {
@@ -6179,7 +6202,7 @@ function calculateMaxEspece(reducedTotalPrice, maxVersement) {
 // User Information Modal Functions
 let pendingDocumentData = null;
 
-function showUserInfoModal(documentData) {
+async function showUserInfoModal(documentData) {
     pendingDocumentData = documentData;
     const modal = document.getElementById('userInfoModal');
     if (modal) {
@@ -6187,6 +6210,49 @@ function showUserInfoModal(documentData) {
         const form = document.getElementById('userInfoForm');
         if (form) {
             form.reset();
+        }
+
+        // Try to load existing complementary info from database
+        const buyerId = documentData.buyerId || document.getElementById('addBuyerForm')?.getAttribute('data-buyer-id');
+        
+        console.log('🔍 Attempting to load complementary info...');
+        console.log('🆔 Buyer ID (raw):', buyerId);
+        console.log('🆔 Buyer ID type:', typeof buyerId);
+        
+        if (buyerId && buyerId !== 'NEW' && !isNaN(parseInt(buyerId))) {
+            const numericBuyerId = parseInt(buyerId);
+            console.log('🆔 Numeric Buyer ID:', numericBuyerId);
+            
+            try {
+                const buyerData = await invoke('get_buyer', { buyerId: numericBuyerId });
+                console.log('👤 Buyer data retrieved:', buyerData);
+                console.log('📋 complementary_info field:', buyerData.complementary_info);
+                
+                if (buyerData && buyerData.complementary_info && buyerData.complementary_info.trim() !== '') {
+                    console.log('📋 Found complementary_info, parsing...');
+                    // Parse and populate existing data
+                    try {
+                        const info = JSON.parse(buyerData.complementary_info);
+                        console.log('📋 Parsed info:', info);
+                        
+                        document.getElementById('gender').value = info.gender || '';
+                        document.getElementById('birthDate').value = info.birthDate || '';
+                        document.getElementById('birthPlace').value = info.birthPlace || '';
+                        document.getElementById('nationalCardNumber').value = info.nationalCardNumber || '';
+                        document.getElementById('issueDate').value = info.issueDate || '';
+                        document.getElementById('issuePlace').value = info.issuePlace || '';
+                        console.log('✅ Complementary info loaded successfully');
+                    } catch (e) {
+                        console.error('⚠️ Failed to parse complementary_info:', e);
+                    }
+                } else {
+                    console.log('ℹ️ No complementary_info found (empty or null) for buyer ID:', numericBuyerId);
+                }
+            } catch (error) {
+                console.error('❌ Failed to load complementary info:', error);
+            }
+        } else {
+            console.log('ℹ️ Cannot load - Invalid buyer ID:', buyerId);
         }
 
         // Show modal
@@ -6216,7 +6282,7 @@ function closeUserInfoModal() {
     }
 }
 
-function generateRecuWithUserInfo() {
+async function generateRecuWithUserInfo() {
     if (!pendingDocumentData) {
         alert('Aucune donnée de document en attente');
         return;
@@ -6259,6 +6325,42 @@ function generateRecuWithUserInfo() {
         issueDate: issueDate,
         issuePlace: issuePlace
     };
+
+    // Save complementary info to database
+    const buyerId = pendingDocumentData.buyerId || document.getElementById('addBuyerForm')?.getAttribute('data-buyer-id');
+    
+    console.log('💾 Attempting to save complementary info...');
+    console.log('🆔 Buyer ID (raw):', buyerId);
+    console.log('🆔 Buyer ID type:', typeof buyerId);
+    console.log('📋 Data to save:', additionalInfo);
+    
+    if (buyerId && buyerId !== 'NEW' && !isNaN(parseInt(buyerId))) {
+        const numericBuyerId = parseInt(buyerId);
+        console.log('🆔 Numeric Buyer ID:', numericBuyerId);
+        
+        try {
+            await invoke('update_buyer_complementary_info', {
+                buyerId: numericBuyerId,
+                complementaryInfo: JSON.stringify(additionalInfo)
+            });
+            console.log('✅ Complementary info saved to database successfully');
+            
+            // Verify it was saved by reading it back
+            try {
+                const verifyData = await invoke('get_buyer', { buyerId: numericBuyerId });
+                console.log('🔍 Verification - complementary_info in DB:', verifyData.complementary_info);
+            } catch (e) {
+                console.warn('Could not verify save:', e);
+            }
+        } catch (error) {
+            console.error('❌ Failed to save complementary info:', error);
+            alert('Warning: Could not save information to database: ' + error);
+            // Continue anyway - don't block document generation
+        }
+    } else {
+        console.log('⚠️ Cannot save - Invalid buyer ID:', buyerId);
+        alert('Warning: Cannot save information - buyer must be saved first');
+    }
 
     // Generate document with additional info
     const {
@@ -7329,6 +7431,161 @@ async function printPaymentSummary(buyerId) {
     console.log('Attempting to print payment summary for buyer ID:', buyerId);
     // Further implementation will go here
 }
+
+// ========== PAYMENT REMINDER FUNCTIONS ==========
+
+// Handle PAD reminder checkbox toggle
+async function handlePadReminderToggle(checkbox) {
+    const buyerId = parseInt(checkbox.getAttribute('data-buyer-id'));
+    const projectId = PROJECT_ID;
+    
+    console.log('📋 PAD Reminder toggled:', checkbox.checked, 'for buyer', buyerId);
+    
+    try {
+        if (checkbox.checked) {
+            // Set reminder for 30 days
+            await invoke('set_payment_reminder', {
+                buyerId: buyerId,
+                projectId: projectId
+            });
+            
+            // Show confirmation toast
+            showNotificationToast('✅ Rappel activé! Vous serez notifié dans 30 jours pour le paiement 1/5.', 'success');
+        } else {
+            // Remove reminder
+            await invoke('remove_payment_reminder', {
+                buyerId: buyerId,
+                projectId: projectId
+            });
+            
+            showNotificationToast('🔕 Rappel désactivé.', 'info');
+        }
+    } catch (error) {
+        console.error('Error toggling reminder:', error);
+        checkbox.checked = !checkbox.checked; // Revert checkbox state
+        alert('Erreur lors de la configuration du rappel: ' + error);
+    }
+}
+
+// Show notification toast
+function showNotificationToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `notification-toast ${type}`;
+    toast.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: ${type === 'success' ? '#4CAF50' : type === 'error' ? '#f44336' : '#2196F3'};
+        color: white;
+        padding: 16px 24px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        z-index: 10000;
+        font-size: 14px;
+        max-width: 350px;
+        animation: slideIn 0.3s ease;
+    `;
+    toast.textContent = message;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
+}
+
+// Check for due reminders on page load
+async function checkDueReminders() {
+    try {
+        const reminders = await invoke('check_payment_reminders');
+        
+        if (reminders && reminders.length > 0) {
+            for (const reminder of reminders) {
+                // Show notification for each due reminder
+                showPaymentReminderNotification(reminder);
+                
+                // Mark as notified
+                await invoke('mark_reminder_notified', { reminderId: reminder.id });
+            }
+        }
+    } catch (error) {
+        console.error('Error checking reminders:', error);
+    }
+}
+
+// Show payment reminder notification
+function showPaymentReminderNotification(reminder) {
+    const notification = document.createElement('div');
+    notification.className = 'payment-reminder-notification';
+    notification.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+        z-index: 10001;
+        max-width: 400px;
+        animation: bounceIn 0.5s ease;
+    `;
+    
+    notification.innerHTML = `
+        <div style="display: flex; align-items: start; gap: 12px;">
+            <div style="font-size: 32px;">🔔</div>
+            <div style="flex: 1;">
+                <div style="font-weight: bold; font-size: 16px; margin-bottom: 8px;">
+                    Rappel de Paiement
+                </div>
+                <div style="font-size: 14px; line-height: 1.5;">
+                    Le paiement 1/5 est dû pour:<br>
+                    <strong>${reminder.nom} ${reminder.prenom}</strong><br>
+                    Logement: <strong>${reminder.logt_num}</strong>
+                </div>
+                <button onclick="this.closest('.payment-reminder-notification').remove()" 
+                        style="margin-top: 12px; padding: 8px 16px; background: white; color: #667eea; 
+                               border: none; border-radius: 6px; cursor: pointer; font-weight: bold;">
+                    OK, J'ai compris
+                </button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 15 seconds
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.style.animation = 'fadeOut 0.3s ease';
+            setTimeout(() => notification.remove(), 300);
+        }
+    }, 15000);
+}
+
+// Load reminder state for a buyer
+async function loadReminderState(buyerId, projectId) {
+    try {
+        const hasReminder = await invoke('has_payment_reminder', {
+            buyerId: buyerId,
+            projectId: projectId
+        });
+        
+        const checkbox = document.getElementById('padReminderCheckbox');
+        if (checkbox) {
+            checkbox.checked = hasReminder;
+        }
+    } catch (error) {
+        console.error('Error loading reminder state:', error);
+    }
+}
+
+// Make functions globally accessible
+window.handlePadReminderToggle = handlePadReminderToggle;
+window.loadReminderState = loadReminderState;
+
+// ========== END PAYMENT REMINDER FUNCTIONS ==========
 
 // Event listener for the new print summary button
 document.addEventListener('DOMContentLoaded', function () {
