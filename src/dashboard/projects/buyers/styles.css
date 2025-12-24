@@ -594,33 +594,76 @@ td[rowspan] {
 
 /* Print Reservation Button */
 .btn-print-reservation {
-    background-color: #ff0000 !important; /* Red for debugging */
+    background: linear-gradient(135deg, #17a2b8 0%, #138496 100%) !important;
     color: white !important;
-    border: 2px solid #138496 !important;
-    padding: 15px 25px !important;
-    border-radius: 4px;
-    font-size: 16px !important;
+    border: none !important;
+    padding: 12px 24px !important;
+    border-radius: 8px;
+    font-size: 15px !important;
+    font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s;
-    margin: 0 10px !important;
-    display: inline-block !important;
+    transition: all 0.3s ease;
+    margin: 0 !important;
+    display: inline-flex !important;
     align-items: center;
-    gap: 8px;
-    min-width: 200px !important;
+    gap: 10px;
+    min-width: 220px !important;
     justify-content: center;
-    height: 50px !important;
-    z-index: 9999 !important;
+    height: 48px !important;
+    box-shadow: 0 4px 12px rgba(23, 162, 184, 0.3);
     position: relative !important;
 }
 
 .btn-print-reservation:hover {
-    background-color: #138496;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    background: linear-gradient(135deg, #138496 0%, #117a8b 100%) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(23, 162, 184, 0.4);
+}
+
+.btn-print-reservation:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(23, 162, 184, 0.3);
 }
 
 .btn-print-reservation i {
-    font-size: 14px;
+    font-size: 16px;
+}
+
+/* Cancellation Button Styling */
+.btn-print-cancellation {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%) !important;
+    color: white !important;
+    border: none !important;
+    padding: 12px 24px !important;
+    border-radius: 8px;
+    font-size: 15px !important;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin: 0 !important;
+    display: inline-flex !important;
+    align-items: center;
+    gap: 10px;
+    min-width: 220px !important;
+    justify-content: center;
+    height: 48px !important;
+    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+    position: relative !important;
+}
+
+.btn-print-cancellation:hover {
+    background: linear-gradient(135deg, #c82333 0%, #bd2130 100%) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(220, 53, 69, 0.4);
+}
+
+.btn-print-cancellation:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
+}
+
+.btn-print-cancellation i {
+    font-size: 16px;
 }
 
 /* Print Reservation Icon Button (Small Version) */
@@ -2213,7 +2256,197 @@ header {
     }
 }
 
-/* �🚨 Espèce Warning Modal Styles */
+/* ========== CANCELLATION INFO MODAL STYLES ========== */
+.cancellation-info-modal {
+    max-width: 600px;
+    width: 90%;
+    direction: rtl;
+    text-align: right;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(220, 53, 69, 0.15);
+}
+
+.cancellation-info-modal .modal-header {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    border-bottom: none;
+    padding: 20px 25px;
+    border-radius: 12px 12px 0 0;
+    direction: rtl;
+}
+
+.cancellation-info-modal .modal-header h2 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    direction: rtl;
+}
+
+.cancellation-info-modal .modal-header i {
+    color: white;
+    font-size: 22px;
+}
+
+.cancellation-info-modal .close-modal {
+    color: white;
+    opacity: 0.9;
+}
+
+.cancellation-info-modal .close-modal:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.cancellation-info-modal .modal-body {
+    padding: 25px;
+    direction: rtl;
+}
+
+.cancellation-info-modal .modal-description {
+    margin-bottom: 20px;
+    color: #495057;
+    font-size: 14px;
+    line-height: 1.6;
+    direction: rtl;
+    text-align: right;
+    background: #fff3cd;
+    padding: 12px 15px;
+    border-right: 4px solid #ffc107;
+    border-radius: 6px;
+}
+
+.cancellation-info-form .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin-bottom: 18px;
+}
+
+.cancellation-info-form .form-group {
+    display: flex;
+    flex-direction: column;
+    direction: rtl;
+}
+
+.cancellation-info-form label {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    direction: rtl;
+}
+
+.cancellation-info-form label i {
+    color: #dc3545;
+    width: 18px;
+    font-size: 16px;
+}
+
+.cancellation-info-form input,
+.cancellation-info-form select {
+    padding: 12px 14px;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: all 0.3s ease;
+    direction: rtl;
+    text-align: right;
+    background: white;
+}
+
+.cancellation-info-form input:focus,
+.cancellation-info-form select:focus {
+    outline: none;
+    border-color: #dc3545;
+    box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.1);
+}
+
+.cancellation-info-form input::placeholder {
+    color: #adb5bd;
+    direction: rtl;
+}
+
+.cancellation-info-modal .modal-footer {
+    background: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+    padding: 18px 25px;
+    border-radius: 0 0 12px 12px;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    direction: rtl;
+}
+
+.cancellation-info-modal .btn-generate {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+}
+
+.cancellation-info-modal .btn-generate:hover {
+    background: linear-gradient(135deg, #c82333 0%, #bd2130 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(220, 53, 69, 0.4);
+}
+
+.cancellation-info-modal .btn-generate:active {
+    transform: translateY(0);
+}
+
+.cancellation-info-modal .btn-cancel {
+    background: #6c757d;
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+}
+
+.cancellation-info-modal .btn-cancel:hover {
+    background: #5a6268;
+}
+
+/* Responsive design for cancellation modal */
+@media (max-width: 768px) {
+    .cancellation-info-form .form-row {
+        grid-template-columns: 1fr;
+    }
+    
+    .cancellation-info-modal .modal-footer {
+        flex-direction: column-reverse;
+    }
+    
+    .cancellation-info-modal .btn-generate,
+    .cancellation-info-modal .btn-cancel {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* ⚠️ Espèce Warning Modal Styles */
 .warning-modal {
     max-width: 550px;
     width: 90%;

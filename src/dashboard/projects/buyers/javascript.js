@@ -2951,6 +2951,13 @@ async function editBuyer(buyerId) {
             printReservationBtn.setAttribute('data-buyer-id', buyerId);
         }
 
+        // Show cancellation button for existing buyers
+        const printCancellationBtn = document.getElementById('printCancellationBtn');
+        if (printCancellationBtn) {
+            printCancellationBtn.style.display = 'inline-flex';
+            printCancellationBtn.setAttribute('data-buyer-id', buyerId);
+        }
+
         // Ensure prix totale is always editable in edit mode
         const priceInput = document.getElementById('prixTotale');
         if (priceInput) {
@@ -3167,14 +3174,18 @@ function createPaymentLimitsDisplay(buyer) {
                 <span class="remaining-label">Disponible:</span>
                 <span class="remaining-value" id="remainingEspeceValue">${remainingEspece.toLocaleString()} DA</span>
             </div>
-            <div class="limit-item pad-limit">
-                <span class="limit-label">📊 PAD 1 / 5:</span>
-                <span class="limit-value" id="padOneFifthValue">${padOneFifth.toLocaleString()} DA</span>
-            </div>
-            <div class="limit-item pad-limit">
-                <span class="limit-label">📊 PAD 4 / 5:</span>
-                <span class="limit-value" id="padValue">${padAmount.toLocaleString()} DA</span>
-                <label class="pad-reminder-checkbox" style="margin-left: 15px; display: inline-flex; align-items: center; cursor: pointer;">
+            <div class="pad-section" style="display: flex; flex-direction: column; align-items: center; margin-top: 15px; width: 100%;">
+                <div style="display: flex; gap: 20px; justify-content: center; width: 100%;">
+                    <div class="limit-item pad-limit" style="flex: 0 1 auto;">
+                        <span class="limit-label">📊 PAD 1 / 5:</span>
+                        <span class="limit-value" id="padOneFifthValue">${padOneFifth.toLocaleString()} DA</span>
+                    </div>
+                    <div class="limit-item pad-limit" style="flex: 0 1 auto;">
+                        <span class="limit-label">📊 PAD 4 / 5:</span>
+                        <span class="limit-value" id="padValue">${padAmount.toLocaleString()} DA</span>
+                    </div>
+                </div>
+                <label class="pad-reminder-checkbox" style="margin-top: 12px; display: inline-flex; align-items: center; cursor: pointer;">
                     <input type="checkbox" id="padReminderCheckbox" data-buyer-id="${buyer.id}" 
                            style="margin-right: 5px; cursor: pointer;" 
                            onchange="handlePadReminderToggle(this)">
@@ -6470,9 +6481,35 @@ async function printReservationDocument() {
 }
 
 // Show Reservation Info Modal
-function showReservationInfoModal() {
+async function showReservationInfoModal() {
     const modal = document.getElementById('reservationInfoModal');
     if (modal) {
+        // Try to load existing complementary info from database
+        const buyerForm = document.getElementById('addBuyerForm');
+        const buyerId = buyerForm?.getAttribute('data-buyer-id');
+        
+        if (buyerId && buyerId !== 'NEW') {
+            try {
+                const buyerData = await invoke('get_buyer', { buyerId: parseInt(buyerId) });
+                if (buyerData && buyerData.complementary_info && buyerData.complementary_info.trim() !== '') {
+                    // Parse and populate existing data
+                    try {
+                        const info = JSON.parse(buyerData.complementary_info);
+                        // Fill in the reservation form with the saved data
+                        if (info.birthDate) document.getElementById('reservationBirthDate').value = info.birthDate;
+                        if (info.birthPlace) document.getElementById('reservationBirthPlace').value = info.birthPlace;
+                        if (info.nationalCardNumber) document.getElementById('reservationNationalId').value = info.nationalCardNumber;
+                        if (info.issueDate) document.getElementById('reservationIdIssueDate').value = info.issueDate;
+                        if (info.issuePlace) document.getElementById('reservationIdIssuePlace').value = info.issuePlace;
+                    } catch (e) {
+                        console.warn('Failed to parse complementary_info for reservation:', e);
+                    }
+                }
+            } catch (error) {
+                console.warn('Failed to load complementary info for reservation:', error);
+            }
+        }
+
         modal.style.display = 'block';
 
         // Focus on first input
@@ -7411,6 +7448,304 @@ window.generateRecuWithUserInfo = generateRecuWithUserInfo;
 window.showReservationInfoModal = showReservationInfoModal;
 window.closeReservationInfoModal = closeReservationInfoModal;
 window.generateReservationWithInfo = generateReservationWithInfo;
+
+// ========== CANCELLATION DOCUMENT FUNCTIONS ==========
+
+// Show cancellation info modal
+async function showCancellationInfoModal() {
+    try {
+        const buyerForm = document.getElementById('addBuyerForm');
+        const buyerId = buyerForm?.getAttribute('data-buyer-id');
+        
+        if (!buyerId || buyerId === 'NEW') {
+            alert('Veuillez d\'abord enregistrer l\'acheteur');
+            return;
+        }
+
+        // Get buyer data
+        const buyerData = await invoke('get_buyer', { buyerId: parseInt(buyerId) });
+        
+        if (!buyerData) {
+            alert('Buyer not found');
+            return;
+        }
+
+        // Store buyer data for later use
+        window.currentCancellationBuyer = buyerData;
+
+        // Load complementary info if exists
+        let additionalInfo = {};
+        if (buyerData.complementary_info && buyerData.complementary_info.trim() !== '') {
+            try {
+                additionalInfo = JSON.parse(buyerData.complementary_info);
+            } catch (e) {
+                console.warn('Could not parse complementary info:', e);
+            }
+        }
+
+        // Pre-fill form with existing data
+        const cancellationForm = document.getElementById('cancellationInfoForm');
+        if (cancellationForm) {
+            cancellationForm.querySelector('#cancellationBirthDate').value = additionalInfo.birthDate || '';
+            cancellationForm.querySelector('#cancellationBirthPlace').value = additionalInfo.birthPlace || '';
+            cancellationForm.querySelector('#cancellationNationalId').value = additionalInfo.nationalCardNumber || '';
+            cancellationForm.querySelector('#cancellationIdIssueDate').value = additionalInfo.issueDate || '';
+            cancellationForm.querySelector('#cancellationIdIssuePlace').value = additionalInfo.issuePlace || '';
+            cancellationForm.querySelector('#cancellationCheckNumber').value = additionalInfo.checkNumber || '';
+            cancellationForm.querySelector('#cancellationCheckDate').value = additionalInfo.checkDate || '';
+            // Pre-fill refund amount with total_paid as default
+            cancellationForm.querySelector('#cancellationRefundAmount').value = buyerData.total_paid || '';
+        }
+
+        // Show modal
+        document.getElementById('cancellationInfoModal').style.display = 'block';
+        
+    } catch (error) {
+        console.error('Error showing cancellation modal:', error);
+        alert('Erreur lors de l\'ouverture du formulaire: ' + error);
+    }
+}
+
+// Close cancellation info modal
+function closeCancellationInfoModal() {
+    document.getElementById('cancellationInfoModal').style.display = 'none';
+}
+
+// Generate cancellation document with collected info
+async function generateCancellationWithInfo() {
+    try {
+        const form = document.getElementById('cancellationInfoForm');
+        
+        // Validate form
+        if (!form.checkValidity()) {
+            alert('Veuillez remplir tous les champs obligatoires');
+            form.reportValidity();
+            return;
+        }
+
+        // Collect form data
+        const cancellationInfo = {
+            birthDate: form.querySelector('#cancellationBirthDate').value,
+            birthPlace: form.querySelector('#cancellationBirthPlace').value,
+            nationalCardNumber: form.querySelector('#cancellationNationalId').value,
+            issueDate: form.querySelector('#cancellationIdIssueDate').value,
+            issuePlace: form.querySelector('#cancellationIdIssuePlace').value,
+            checkNumber: form.querySelector('#cancellationCheckNumber').value,
+            checkDate: form.querySelector('#cancellationCheckDate').value,
+            refundAmount: parseFloat(form.querySelector('#cancellationRefundAmount').value) || 0
+        };
+
+        // Save to database
+        const buyerForm = document.getElementById('addBuyerForm');
+        const buyerId = buyerForm?.getAttribute('data-buyer-id');
+        
+        if (buyerId && buyerId !== 'NEW') {
+            const complementaryInfoJson = JSON.stringify(cancellationInfo);
+            await invoke('update_buyer_complementary_info', {
+                buyerId: parseInt(buyerId),
+                complementaryInfo: complementaryInfoJson
+            });
+        }
+
+        // Generate document
+        const buyerData = window.currentCancellationBuyer;
+        const documentHTML = generateCancellationDocument(buyerData, cancellationInfo);
+        
+        // Close modal
+        closeCancellationInfoModal();
+        
+        // Open print window
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(documentHTML);
+        printWindow.document.close();
+        
+        setTimeout(() => {
+            printWindow.print();
+        }, 500);
+        
+    } catch (error) {
+        console.error('Error generating cancellation document:', error);
+        alert('Erreur lors de la génération du document: ' + error);
+    }
+}
+
+function generateCancellationDocument(buyerData, cancellationInfo = {}) {
+    const currentDate = new Date();
+    const formattedDate = `${String(currentDate.getDate()).padStart(2, '0')}/${String(currentDate.getMonth() + 1).padStart(2, '0')}/${currentDate.getFullYear()}`;
+
+    // Get buyer full name in Arabic
+    const buyerFullName = `${buyerData.nom || ''} ${buyerData.prenom || ''}`.trim() || 'غير محدد';
+
+    // Use manually entered refund amount
+    const refundAmount = cancellationInfo.refundAmount || 0;
+    const amountInArabic = convertNumberToArabicText(Math.floor(refundAmount));
+
+    return `
+    <!DOCTYPE html>
+    <html dir="rtl" lang="ar">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            @page {
+                margin: 8mm;
+                size: A4;
+            }
+            body {
+                font-family: 'Arial', sans-serif;
+                line-height: 1.5;
+                direction: rtl;
+                text-align: right;
+                margin: 0;
+                padding: 15px;
+                font-size: 14px;
+            }
+            .header {
+                text-align: center;
+                border-bottom: 2px solid #000;
+                padding-bottom: 8px;
+                margin-bottom: 12px;
+            }
+            .header h2 {
+                text-decoration: underline;
+                margin: 4px 0;
+                font-size: 18px;
+            }
+            .header p {
+                margin: 2px 0;
+                font-size: 12px;
+            }
+            .info-section {
+                margin: 10px 0;
+                padding: 5px 0;
+            }
+            .info-section p {
+                margin: 6px 0;
+                font-size: 13px;
+            }
+            .title {
+                text-align: center;
+                font-size: 17px;
+                font-weight: bold;
+                text-decoration: underline;
+                margin: 12px 0;
+            }
+            .subject {
+                text-align: center;
+                font-size: 16px;
+                font-weight: bold;
+                margin: 10px 0;
+            }
+            .content {
+                margin: 10px 0;
+                padding: 8px;
+                text-align: justify;
+            }
+            .content p {
+                margin: 6px 0;
+                font-size: 14px;
+                line-height: 1.6;
+            }
+            .money-section {
+                margin: 10px 0;
+                text-align: right;
+            }
+            .money-section p {
+                margin: 6px 0;
+                font-size: 14px;
+            }
+            .footer {
+                margin-top: 25px;
+                display: flex;
+                justify-content: space-between;
+            }
+            .signature {
+                text-align: center;
+                font-size: 14px;
+            }
+            .signature p {
+                margin: 4px 0;
+                font-size: 13px;
+            }
+            @media print {
+                body {
+                    margin: 0;
+                    padding: 8mm;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h2>مؤسسة الترقية العقارية</h2>
+            <p>فرطاس يزيد</p>
+            <p>رقم الهاتف: 038 30 39 74 </p>
+            <p>الرقم: ......./...../2025</p>
+        </div>
+
+        <div class="info-section">
+            <p><strong>العملية:</strong> مشروع انجاز 136 سكن ترقوي حر طابق أرضي +12 الكائنة ببلدية الطارف وولاية الطارف</p>
+        </div>
+
+        <div class="title">
+            الموضوع: إلغاء حجز شقة
+        </div>
+
+            <p>ليكن في علمكم،</p>
+        <div class="content">
+            <p>أنا الممضي أسفله السيد: <strong>${buyerFullName}</strong>،</p>
+            <p>المولود بتاريخ: <strong>${cancellationInfo.birthDate || '.../.../.....'}</strong> بـ <strong>${cancellationInfo.birthPlace || '............'}</strong>،</p>
+            <p>الحامل لبطاقة التعريف الوطنية رقم: <strong>${cancellationInfo.nationalCardNumber || '............'}</strong>،</p>
+            <p>الصادرة عن بلدية <strong>${cancellationInfo.issuePlace || '............'}</strong> بتاريخ <strong>${cancellationInfo.issueDate || '.../.../.....'}</strong>،</p>
+            <br>
+            <p>أصرّح بموجب هذه الوثيقة أنني قمت بإلغاء حجز شقة من نوع <strong>${buyerData.type_logt || '...'}</strong> بالطابق <strong>${buyerData.niveau || '...'}</strong> مدخل رقم (<strong>${buyerData.logt_num || '...'}</strong>) بمساحة إجمالية قدرها <strong>${buyerData.surface || '....'} م²</strong>، وذلك ضمن مشروع إنجاز 136 مسكن ترقوي حر (أرضي + 12) الكائن ببلدية الطارف، ولاية الطارف، التابع لمكتب الترقية العقارية المتواجد ببلدية الطارف – مركز.</p>
+        </div>
+
+        <div class="money-section">
+            <p>كما أصرّح بأنني قد استلمت مبلغ الحجز المدفوع والمقدّر بـ:</p>
+            <p style="text-align: center; font-size: 16px; font-weight: bold; margin: 8px 0;">${refundAmount.toLocaleString()} دج</p>
+            <p style="text-align: center; font-weight: bold;">(<strong>${amountInArabic} دينار جزائري لا غير</strong>)،</p>
+            <br>
+            <p>وذلك عن طريق الصك البنكي رقم <strong>${cancellationInfo.checkNumber || '............'}</strong> بتاريخ <strong>${cancellationInfo.checkDate || '.../.../.....'}</strong>.</p>
+        </div>
+
+        <div class="footer">
+            <div class="signature">
+                <p>حررت بالطارف في: ${formattedDate}</p>
+                <br>
+                <p><strong>المستفيد</strong></p>
+            </div>
+            <div class="signature">
+                <br><br> <br>
+                <p><strong>المؤسسة العقارية</strong></p>
+            </div>
+        </div>
+    </body>
+    </html>
+    `;
+}
+
+// Helper function to convert payment type to Arabic
+function getPaymentTypeArabic(paymentType) {
+    const typeMap = {
+        'cheque': 'صك',
+        'espece': 'نقدا',
+        'virement': 'تحويل بنكي',
+        'Cheque': 'صك',
+        'Espèce': 'نقدا',
+        'Espece': 'نقدا',
+        'Virement': 'تحويل بنكي',
+        'cash': 'نقدا',
+        'transfer': 'تحويل بنكي'
+    };
+    return typeMap[paymentType] || paymentType || 'دفع';
+}
+
+window.showCancellationInfoModal = showCancellationInfoModal;
+window.closeCancellationInfoModal = closeCancellationInfoModal;
+window.generateCancellationWithInfo = generateCancellationWithInfo;
+
+// ========== END CANCELLATION DOCUMENT FUNCTIONS ==========
 
 function getBankText(bankName) {
     if (!bankName) {

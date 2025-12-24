@@ -2640,6 +2640,48 @@ async fn ensure_payment_limits_column(pool: &PgPool) -> Result<(), String> {
     Ok(())
 }
 
+// Function to ensure payment_reminders table exists
+async fn ensure_payment_reminders_table(pool: &PgPool) -> Result<(), String> {
+    debug_println!("Checking if payment_reminders table exists...");
+    
+    // Check if table exists
+    let table_exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS (
+            SELECT 1 FROM information_schema.tables 
+            WHERE table_name = 'payment_reminders'
+        )"
+    )
+    .fetch_one(pool)
+    .await
+    .map_err(|e| format!("Failed to check table existence: {}", e))?;
+
+    if !table_exists {
+        debug_println!("payment_reminders table doesn't exist, creating it...");
+        
+        // Create the table
+        sqlx::query("
+            CREATE TABLE payment_reminders (
+                id SERIAL PRIMARY KEY,
+                buyer_id INTEGER NOT NULL,
+                project_id INTEGER NOT NULL,
+                reminder_date DATE NOT NULL,
+                is_notified BOOLEAN DEFAULT false,
+                created_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(buyer_id, project_id)
+            )
+        ")
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Failed to create payment_reminders table: {}", e))?;
+        
+        debug_println!("payment_reminders table created successfully!");
+    } else {
+        debug_println!("payment_reminders table already exists");
+    }
+    
+    Ok(())
+}
+
 async fn ensure_database_pool_ready(app: AppHandle) -> Result<(), String> {
     debug_println!("Ensuring database pool is ready during setup...");
     
@@ -2672,6 +2714,11 @@ async fn ensure_database_pool_ready(app: AppHandle) -> Result<(), String> {
                 // Ensure payment_limits_disabled column exists
                 if let Err(e) = ensure_payment_limits_column(&pool).await {
                     debug_println!("Warning: Failed to ensure payment_limits_disabled column: {}", e);
+                }
+                
+                // Ensure payment_reminders table exists
+                if let Err(e) = ensure_payment_reminders_table(&pool).await {
+                    debug_println!("Warning: Failed to ensure payment_reminders table: {}", e);
                 }
                 
                 app.manage(pool);
@@ -2978,7 +3025,27 @@ async fn setup_database_tables(pool: &PgPool) -> Result<(), String> {
     )
     .execute(pool)
     .await
-    .map_err(|e| e.to_string())?;    // Run migrations
+    .map_err(|e| e.to_string())?;
+
+    // Payment reminders table
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS payment_reminders (
+            id SERIAL PRIMARY KEY,
+            buyer_id INTEGER NOT NULL,
+            project_id INTEGER NOT NULL,
+            reminder_date DATE NOT NULL,
+            is_notified BOOLEAN DEFAULT false,
+            created_at TIMESTAMP DEFAULT NOW(),
+            UNIQUE(buyer_id, project_id)
+        )"
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    debug_println!("Payment reminders table created/verified successfully");
+
+    // Run migrations
     migrate_employees_table_internal(pool).await?;
     migrate_employee_salary_table_internal(pool).await?;
     migrate_projects_table_internal(pool).await?;
