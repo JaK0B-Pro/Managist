@@ -67,6 +67,23 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     }
+    
+    // Event listener for status filter dropdown
+    const statusFilter = document.getElementById('statusFilter');
+    if (statusFilter) {
+        statusFilter.addEventListener('change', function() {
+            filterBuyersByStatus(this.value);
+        });
+    }
+    
+    // Event listener for buyer prix unitaire button
+    const buyerPrixUnitaireBtn = document.getElementById('buyerPrixUnitaireBtn');
+    if (buyerPrixUnitaireBtn) {
+        buyerPrixUnitaireBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            openBuyerPrixUnitaireModal();
+        });
+    }
 });
 
 // Get project ID from URL parameters
@@ -186,8 +203,13 @@ function buildBuyerDataFromForm() {
         });
     }
 
+    // Get prix_unitaire_buyer from modal data attribute if set
+    const buyerModal = document.getElementById('buyerModal');
+    const customPrixUnitaire = buyerModal?.getAttribute('data-custom-prix-unitaire');
+    const prixUnitaireBuyer = customPrixUnitaire ? parseFloat(customPrixUnitaire) : null;
+
     // Build and return the buyer data object
-    return {
+    const buyerData = {
         project_id: PROJECT_ID,
         bloc: document.getElementById('bloc')?.value?.trim() || '',
         niveau: document.getElementById('niveau')?.value?.trim() || '',
@@ -202,8 +224,16 @@ function buildBuyerDataFromForm() {
         remise: parseFloat(document.getElementById('remise')?.value || 0),
         total_paid: totalPaidAmount,
         payments: tranches,
-        payment_limits_disabled: document.getElementById('paymentLimitsToggle')?.checked || false
+        payment_limits_disabled: document.getElementById('paymentLimitsToggle')?.checked || false,
+        buyer_status: document.getElementById('buyerStatus')?.value || 'active',
+        complementary_info: '', // Will be preserved through update_buyer_complementary_info if needed
+        prix_unitaire_buyer: prixUnitaireBuyer // Include custom prix unitaire if set
     };
+    
+    console.log('🔍 buildBuyerDataFromForm - buyer_status:', buyerData.buyer_status);
+    console.log('🔍 buildBuyerDataFromForm - prix_unitaire_buyer:', buyerData.prix_unitaire_buyer);
+    
+    return buyerData;
 }
 
 // Validate all loaded buyers and highlight issues
@@ -236,8 +266,8 @@ async function validateAllLoadedBuyers(buyers) {
             console.warn('Error parsing payments for buyer', buyer.id, e);
             return;
         }
-        // Calculate limits
-        const prixUnitaire = currentPrixUnitaire || 0;
+        // Calculate limits - use buyer-specific prix unitaire if available
+        const prixUnitaire = buyer.prix_unitaire_buyer || currentPrixUnitaire || 0;
         const surface = parseFloat(buyer.surface) || 0;
         const prixTotale = parseFloat(buyer.prix_totale) || 0;
         const remise = parseFloat(buyer.remise) || 0;
@@ -1732,7 +1762,12 @@ document.addEventListener('DOMContentLoaded', function () {
             <td>${buyer.date}</td>
             <td>${formatCurrency(buyer.prix_totale || 0)}</td>
             <td>${formatCurrency(buyer.remise || 0)}</td>
-        `;          // Add tranche columns dynamically (T0, T1, T2, etc.)
+        `;
+        
+        // Apply row styling based on buyer status
+        const buyerStatus = buyer.buyer_status || 'active';
+        newRow.classList.add(`buyer-row-${buyerStatus}`);
+        newRow.setAttribute('data-status', buyerStatus);          // Add tranche columns dynamically (T0, T1, T2, etc.)
         for (let i = 0; i <= maxTranches; i++) {
             let trancheAmount = 0;
             let paymentType = 'versement';
@@ -1763,11 +1798,20 @@ document.addEventListener('DOMContentLoaded', function () {
         const totalPaid = formatCurrency(buyer.total_paid || 0);
         const paymentStatus = getPaymentStatusText(buyer.payment_status || 'unpaid');
         const statusClass = getPaymentStatusClass(buyer.payment_status || 'unpaid');
+        
+        // Add buyer status badge (buyerStatus already declared above)
+        const statusText = {
+            'active': 'Active',
+            'cancelled': 'Cancelled',
+            'on_hold': 'On Hold',
+            'completed': 'Completed'
+        }[buyerStatus] || 'Active';
 
         rowHTML += `
             <td class="total-paid-cell">${totalPaid}</td>
             <td class="status-cell">
                 <span class="payment-status ${statusClass}">${paymentStatus}</span>
+                <span class="status-badge ${buyerStatus}">${statusText}</span>
                 <div class="hover-actions" style="display: none;">
                     <button class="action-btn edit-btn" onclick="editBuyer(${buyer.id})" title="Edit Buyer">
                         <i class="fas fa-edit"></i>
@@ -1885,6 +1929,41 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    // Filter buyers by status
+    function filterBuyersByStatus(status) {
+        const allRows = document.querySelectorAll('.buyer-row');
+        const blocSeparators = document.querySelectorAll('.bloc-separator');
+        
+        if (status === 'all') {
+            // Show all rows
+            allRows.forEach(row => row.style.display = '');
+            blocSeparators.forEach(separator => separator.style.display = '');
+        } else if (status === 'active') {
+            // Show only active buyers (default behavior)
+            allRows.forEach(row => {
+                const rowStatus = row.getAttribute('data-status') || 'active';
+                row.style.display = rowStatus === 'active' ? '' : 'none';
+            });
+            // Keep separators visible
+            blocSeparators.forEach(separator => separator.style.display = '');
+        } else {
+            // Show only buyers matching the selected status
+            allRows.forEach(row => {
+                const rowStatus = row.getAttribute('data-status') || 'active';
+                row.style.display = rowStatus === status ? '' : 'none';
+            });
+            // Keep separators visible
+            blocSeparators.forEach(separator => separator.style.display = '');
+        }
+        
+        // Update the count of visible buyers
+        const visibleRows = Array.from(allRows).filter(row => row.style.display !== 'none');
+        updateBuyerCount(visibleRows.length);
+    }
+    
+    // Make filterBuyersByStatus globally accessible
+    window.filterBuyersByStatus = filterBuyersByStatus;
+
     // Initialize page
     loadProjectInfo();
     loadBuyers();
@@ -1900,10 +1979,18 @@ document.addEventListener('DOMContentLoaded', function () {
         document.querySelector('#buyerModal h2').textContent = 'Add New Buyer';
         document.getElementById('addBuyerBtn').textContent = 'Add Buyer';
 
-        // Set default state for payment limits toggle (disabled for new buyers)
+        // Clear any custom prix unitaire from previous buyer
+        const buyerModal = document.getElementById('buyerModal');
+        if (buyerModal) {
+            buyerModal.removeAttribute('data-custom-prix-unitaire');
+        }
+
+        // Set default state for payment limits toggle (enabled by default)
         const paymentLimitsToggle = document.getElementById('paymentLimitsToggle');
         if (paymentLimitsToggle) {
-            paymentLimitsToggle.checked = true; // true = payment limits disabled
+            paymentLimitsToggle.checked = false; // false = payment limits enabled
+            // Hide prix unitaire button for new buyer (payment limits are enabled by default)
+            updatePrixUnitaireButtonVisibility(false);
         }
 
         // Reset prix totale field note to default
@@ -2434,6 +2521,8 @@ document.addEventListener('DOMContentLoaded', function () {
             updateEspeceOptionsAvailability();
             // Update payment limits display
             updatePaymentLimitsDisplay();
+            // Show/hide prix unitaire button based on toggle state
+            updatePrixUnitaireButtonVisibility(this.checked);
         });
     }
 });
@@ -2854,10 +2943,28 @@ async function editBuyer(buyerId) {
         document.getElementById('date').value = buyer.date || '';
         document.getElementById('remise').value = buyer.remise || '';
         
+        // Set buyer status
+        const buyerStatusSelect = document.getElementById('buyerStatus');
+        if (buyerStatusSelect) {
+            buyerStatusSelect.value = buyer.buyer_status || 'active';
+        }
+        
         // Set payment limits toggle state (default to false for existing buyers)
         const paymentLimitsToggle = document.getElementById('paymentLimitsToggle');
         if (paymentLimitsToggle) {
             paymentLimitsToggle.checked = buyer.payment_limits_disabled || false;
+            // Update prix unitaire button visibility based on toggle state
+            updatePrixUnitaireButtonVisibility(paymentLimitsToggle.checked);
+        }
+        
+        // Load prix_unitaire_buyer if exists (only set modal attribute, DON'T change global currentPrixUnitaire)
+        const buyerModal = document.getElementById('buyerModal');
+        if (buyer.prix_unitaire_buyer) {
+            buyerModal.setAttribute('data-custom-prix-unitaire', buyer.prix_unitaire_buyer);
+            console.log('✅ Loaded buyer-specific prix unitaire:', buyer.prix_unitaire_buyer, '(Project prix unitaire remains:', currentPrixUnitaire, ')');
+        } else {
+            buyerModal.removeAttribute('data-custom-prix-unitaire');
+            console.log('✅ No custom prix unitaire for this buyer, will use project prix unitaire:', currentPrixUnitaire);
         }
 
         // Parse and populate payments
@@ -3381,7 +3488,11 @@ function updatePaymentLimitsDisplay() {
     const surface = parseFloat(surfaceEl.value) || 0;
     const prixTotale = parseFloat(prixTotaleEl.value) || 0;
     const remise = parseFloat(remiseEl.value) || 0;
-    const prixUnitaire = currentPrixUnitaire || 0;
+    
+    // Use buyer-specific prix unitaire if set, otherwise use project's prix unitaire
+    const buyerModal = document.getElementById('buyerModal');
+    const customPrixUnitaire = buyerModal?.getAttribute('data-custom-prix-unitaire');
+    const prixUnitaire = customPrixUnitaire ? parseFloat(customPrixUnitaire) : (currentPrixUnitaire || 0);
 
     // Calculate the reduced total price after remise (direct value)
     const reducedTotalPrice = prixTotale - (remise || 0);
@@ -4019,11 +4130,11 @@ function numberToWords(num) {
                         if (onesDigit === 1) {
                             result += '-et-un';
                         } else {
-                            result += '-' + teens[onesDigit - 1];
+                            result += '-' + teens[onesDigit];
                         }
                     } else {
                         result = result.replace('quatre-vingt-dix', 'quatre-vingt');
-                        result += '-' + teens[onesDigit - 1];
+                        result += '-' + teens[onesDigit];
                     }
                 } else {
                     if (onesDigit === 1 && (tensDigit === 2 || tensDigit === 3 || tensDigit === 4 || tensDigit === 5 || tensDigit === 6)) {
@@ -4208,6 +4319,158 @@ async function savePrixUnitaire() {
 window.openSettingsModal = openSettingsModal;
 window.closeSettingsModal = closeSettingsModal;
 window.savePrixUnitaire = savePrixUnitaire;
+
+// Buyer-specific Prix Unitaire Modal Functions
+function openBuyerPrixUnitaireModal() {
+    const modal = document.getElementById('buyerPrixUnitaireModal');
+    const surfaceEl = document.getElementById('surface');
+    const prixTotaleEl = document.getElementById('prixTotale');
+    const remiseEl = document.getElementById('remise');
+    const prixUnitaireInput = document.getElementById('buyerPrixUnitaireInput');
+
+    // Get current form values
+    const surface = parseFloat(surfaceEl?.value || 0);
+    const prixTotale = parseFloat(prixTotaleEl?.value || 0);
+    const remise = parseFloat(remiseEl?.value || 0);
+
+    // Display buyer information
+    document.getElementById('buyerModalSurface').textContent = surface ? `${surface.toLocaleString()} m²` : '--';
+    document.getElementById('buyerModalPrixTotale').textContent = prixTotale ? `${prixTotale.toLocaleString()} DA` : '--';
+    document.getElementById('buyerModalDefaultPrix').textContent = currentPrixUnitaire ? `${currentPrixUnitaire.toLocaleString()} DA/m²` : '0 DA/m²';
+
+    // Check if buyer has custom prix unitaire
+    const buyerModal = document.getElementById('buyerModal');
+    const customPrix = buyerModal.getAttribute('data-custom-prix-unitaire');
+    
+    // Pre-fill with custom prix if exists, otherwise project prix unitaire
+    prixUnitaireInput.value = customPrix || currentPrixUnitaire || '';
+
+    // Calculate initial limits
+    calculateBuyerLimits();
+
+    // Show modal
+    modal.style.display = 'block';
+    modal.classList.add('show');
+    document.body.style.overflow = 'hidden';
+
+    // Focus on input
+    setTimeout(() => {
+        prixUnitaireInput.focus();
+        prixUnitaireInput.select();
+    }, 300);
+}
+
+function closeBuyerPrixUnitaireModal() {
+    const modal = document.getElementById('buyerPrixUnitaireModal');
+    modal.classList.remove('show');
+    modal.style.display = 'none';
+    document.body.style.overflow = 'auto';
+}
+
+function calculateBuyerLimits() {
+    const prixUnitaireInput = document.getElementById('buyerPrixUnitaireInput');
+    const surfaceEl = document.getElementById('surface');
+    const prixTotaleEl = document.getElementById('prixTotale');
+    const remiseEl = document.getElementById('remise');
+
+    const prixUnitaire = parseFloat(prixUnitaireInput?.value || 0);
+    const surface = parseFloat(surfaceEl?.value || 0);
+    const prixTotale = parseFloat(prixTotaleEl?.value || 0);
+    const remise = parseFloat(remiseEl?.value || 0);
+
+    // Calculate limits
+    const maxVersement = prixUnitaire * surface;
+    const reducedPrixTotale = prixTotale - remise;
+    const maxEspece = Math.max(0, reducedPrixTotale - maxVersement);
+
+    // Display results
+    document.getElementById('buyerModalMaxVersement').textContent = maxVersement.toLocaleString() + ' DA';
+    document.getElementById('buyerModalMaxEspece').textContent = maxEspece.toLocaleString() + ' DA';
+
+    // Add visual feedback
+    const versementBox = document.getElementById('buyerModalMaxVersement').parentElement;
+    const especeBox = document.getElementById('buyerModalMaxEspece').parentElement;
+
+    // Highlight if espèce is 0 (prix totale = surface * prix unitaire)
+    if (maxEspece === 0 && maxVersement > 0) {
+        especeBox.style.background = 'rgba(46, 204, 113, 0.3)'; // Green background
+        especeBox.style.border = '2px solid rgba(46, 204, 113, 0.6)';
+    } else {
+        especeBox.style.background = 'rgba(255,255,255,0.2)';
+        especeBox.style.border = 'none';
+    }
+}
+
+async function saveBuyerPrixUnitaire() {
+    const prixUnitaireInput = document.getElementById('buyerPrixUnitaireInput');
+    const newPrixUnitaire = parseFloat(prixUnitaireInput.value);
+    
+    // Validate input
+    if (isNaN(newPrixUnitaire) || newPrixUnitaire < 0) {
+        alert('Please enter a valid positive number for Prix Unitaire.');
+        prixUnitaireInput.focus();
+        return;
+    }
+
+    const saveBtn = document.querySelector('#buyerPrixUnitaireModal .btn-save');
+    const originalText = saveBtn.innerHTML;
+
+    try {
+        // Show loading state
+        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+        saveBtn.disabled = true;
+
+        // Store the custom prix unitaire for this buyer in modal data attribute
+        const buyerModal = document.getElementById('buyerModal');
+        buyerModal.setAttribute('data-custom-prix-unitaire', newPrixUnitaire);
+
+        // DO NOT update currentPrixUnitaire - that's the project's global prix unitaire
+        // The custom prix will only be used for this specific buyer
+
+        // Update payment limits display in the main modal (using the custom prix for this buyer)
+        updatePaymentLimitsDisplay();
+
+        // Show success state
+        saveBtn.innerHTML = '<i class="fas fa-check"></i> Saved!';
+        saveBtn.style.background = 'linear-gradient(135deg, #2ecc71, #27ae60)';
+
+        setTimeout(() => {
+            closeBuyerPrixUnitaireModal();
+            saveBtn.innerHTML = originalText;
+            saveBtn.style.background = 'linear-gradient(135deg, #667eea, #764ba2)';
+            saveBtn.disabled = false;
+        }, 1000);
+
+    } catch (error) {
+        console.error('Error saving buyer prix unitaire:', error);
+        alert('Error saving prix unitaire: ' + error);
+        saveBtn.innerHTML = originalText;
+        saveBtn.disabled = false;
+    }
+}
+
+// Function to update prix unitaire button visibility based on payment limits toggle
+function updatePrixUnitaireButtonVisibility(paymentLimitsDisabled) {
+    const prixUnitaireBtn = document.getElementById('buyerPrixUnitaireBtn');
+    if (prixUnitaireBtn) {
+        // Show button only when payment limits are DISABLED (toggle is ON/checked)
+        prixUnitaireBtn.style.display = paymentLimitsDisabled ? 'flex' : 'none';
+    }
+}
+
+// Make functions globally accessible
+window.openBuyerPrixUnitaireModal = openBuyerPrixUnitaireModal;
+window.closeBuyerPrixUnitaireModal = closeBuyerPrixUnitaireModal;
+window.calculateBuyerLimits = calculateBuyerLimits;
+window.saveBuyerPrixUnitaire = saveBuyerPrixUnitaire;
+window.updatePrixUnitaireButtonVisibility = updatePrixUnitaireButtonVisibility;
+
+// Helper function to get prix_unitaire_buyer from modal data attribute
+function getPrixUnitaireBuyerFromModal() {
+    const buyerModal = document.getElementById('buyerModal');
+    const customPrix = buyerModal?.getAttribute('data-custom-prix-unitaire');
+    return customPrix ? parseFloat(customPrix) : null;
+}
 
 // 🚨 Espèce Warning Modal Functions
 let pendingEspeceData = null;
@@ -4706,6 +4969,25 @@ async function processFormSubmission(formData, isEdit, buyerId, submitBtn, origi
             throw new Error(`Missing required form elements: ${missingElements.join(', ')}`);
         }
 
+        // Get complementary_info if exists
+        let complementaryInfo = '';
+        if (isEdit && buyerId) {
+            try {
+                const buyers = await invoke('get_buyers_by_project', { projectId: PROJECT_ID });
+                const existingBuyer = buyers.find(b => b.id === parseInt(buyerId));
+                if (existingBuyer && existingBuyer.complementary_info) {
+                    complementaryInfo = existingBuyer.complementary_info;
+                }
+            } catch (e) {
+                console.warn('Could not retrieve existing complementary_info:', e);
+            }
+        }
+
+        // Get prix_unitaire_buyer from modal data attribute if set
+        const buyerModal = document.getElementById('buyerModal');
+        const customPrixUnitaire = buyerModal?.getAttribute('data-custom-prix-unitaire');
+        const prixUnitaireBuyer = customPrixUnitaire ? parseFloat(customPrixUnitaire) : null;
+
         const buyerData = {
             nom: nomEl.value.trim(),
             prenom: prenomEl.value.trim(),
@@ -4719,9 +5001,15 @@ async function processFormSubmission(formData, isEdit, buyerId, submitBtn, origi
             appartementNumber: document.getElementById('appartementNumber').value.trim(),
             projectId: PROJECT_ID,
             payments: JSON.stringify(tranches),
-            totalPaid: totalPaidAmount
+            totalPaid: totalPaidAmount,
+            buyer_status: document.getElementById('buyerStatus')?.value || 'active',
+            complementary_info: complementaryInfo,
+            prix_unitaire_buyer: prixUnitaireBuyer // Include custom prix unitaire if set
         };
 
+        console.log('🔍 DEBUG: buyerStatus dropdown value:', document.getElementById('buyerStatus')?.value);
+        console.log('🔍 DEBUG: buyerData.buyer_status:', buyerData.buyer_status);
+        console.log('🔍 DEBUG: buyerData.prix_unitaire_buyer:', buyerData.prix_unitaire_buyer);
         console.log('📤 Submitting buyer data:', buyerData);
 
         // Submit to backend
@@ -5409,6 +5697,29 @@ function numberToFrenchWords(number) {
     if (number < 100) {
         const ten = Math.floor(number / 10);
         const unit = number % 10;
+        
+        // Handle special French cases for 70-79 and 90-99
+        if (ten === 7) {
+            // 70-79: soixante-dix, soixante-et-onze, ... soixante-dix-neuf
+            if (unit === 0) return 'soixante-dix';
+            if (unit === 1) return 'soixante-et-onze';
+            return 'soixante-' + teens[unit];
+        }
+        if (ten === 9) {
+            // 90-99: quatre-vingt-dix, quatre-vingt-onze, ...
+            if (unit === 0) return 'quatre-vingt-dix';
+            return 'quatre-vingt-' + teens[unit];
+        }
+        if (ten === 8) {
+            // 80-89: quatre-vingts, quatre-vingt-un, ...
+            if (unit === 0) return 'quatre-vingts';
+            return 'quatre-vingt-' + units[unit];
+        }
+        
+        // Normal tens (20-69)
+        if (unit === 1 && ten >= 2 && ten <= 6) {
+            return tens[ten] + '-et-un';
+        }
         return tens[ten] + (unit > 0 ? '-' + units[unit] : '');
     }
 
@@ -6294,7 +6605,10 @@ function closeUserInfoModal() {
 }
 
 async function generateRecuWithUserInfo() {
-    if (!pendingDocumentData) {
+    // Check if we're generating Arabic receipt or regular document
+    const isArabicReceipt = window.isGeneratingArabicReceipt;
+    
+    if (!pendingDocumentData && !isArabicReceipt) {
         alert('Aucune donnée de document en attente');
         return;
     }
@@ -6338,7 +6652,9 @@ async function generateRecuWithUserInfo() {
     };
 
     // Save complementary info to database
-    const buyerId = pendingDocumentData.buyerId || document.getElementById('addBuyerForm')?.getAttribute('data-buyer-id');
+    const buyerId = isArabicReceipt ? 
+        window.currentArabicReceiptBuyer?.id : 
+        (pendingDocumentData?.buyerId || document.getElementById('addBuyerForm')?.getAttribute('data-buyer-id'));
     
     console.log('💾 Attempting to save complementary info...');
     console.log('🆔 Buyer ID (raw):', buyerId);
@@ -6373,6 +6689,19 @@ async function generateRecuWithUserInfo() {
         alert('Warning: Cannot save information - buyer must be saved first');
     }
 
+    // Check if we're generating Arabic receipt
+    if (isArabicReceipt) {
+        // Re-trigger Arabic receipt generation with saved info
+        window.isGeneratingArabicReceipt = false;
+        const buyerData = window.currentArabicReceiptBuyer;
+        if (buyerData) {
+            buyerData.complementary_info = JSON.stringify(additionalInfo);
+            await generateArabicReceiptDocument(buyerData, additionalInfo);
+        }
+        closeUserInfoModal();
+        return;
+    }
+    
     // Generate document with additional info
     const {
         buyerName,
@@ -7439,11 +7768,301 @@ function printPaymentSummaryFromModal() {
 document.addEventListener('DOMContentLoaded', () => {
     const topBtn = document.getElementById('printPaymentSummaryTopBtn');
     if (topBtn) topBtn.addEventListener('click', printPaymentSummaryFromModal);
+    
+    const arabicBtn = document.getElementById('printArabicReceiptBtn');
+    if (arabicBtn) arabicBtn.addEventListener('click', printArabicReceipt);
 });
+
+// ========== ARABIC RECEIPT FUNCTION ==========
+async function printArabicReceipt() {
+    try {
+        const buyerForm = document.getElementById('addBuyerForm');
+        const buyerId = buyerForm?.getAttribute('data-buyer-id');
+        
+        if (!buyerId || buyerId === 'NEW') {
+            alert('Veuillez d\'abord enregistrer l\'acheteur');
+            return;
+        }
+
+        // Get buyer data
+        const buyerData = await invoke('get_buyer', { buyerId: parseInt(buyerId) });
+        if (!buyerData) {
+            alert('Buyer not found');
+            return;
+        }
+
+        // Parse complementary info
+        let complementaryInfo = {};
+        let hasCompleteInfo = false;
+        
+        if (buyerData.complementary_info && buyerData.complementary_info.trim() !== '') {
+            try {
+                complementaryInfo = JSON.parse(buyerData.complementary_info);
+                // Check if all required fields exist
+                hasCompleteInfo = complementaryInfo.nationalCardNumber && 
+                                 complementaryInfo.issueDate && 
+                                 complementaryInfo.issuePlace;
+            } catch (e) {
+                console.error('Failed to parse complementary info:', e);
+            }
+        }
+        
+        // If no complete info, show modal to collect it
+        if (!hasCompleteInfo) {
+            // Store buyer data for later use
+            window.currentArabicReceiptBuyer = buyerData;
+            
+            // Show the user info modal (reuse existing modal)
+            const modal = document.getElementById('userInfoModal');
+            if (modal) {
+                // Pre-fill with any existing data
+                if (complementaryInfo.gender) document.getElementById('gender').value = complementaryInfo.gender;
+                if (complementaryInfo.birthDate) document.getElementById('birthDate').value = complementaryInfo.birthDate;
+                if (complementaryInfo.birthPlace) document.getElementById('birthPlace').value = complementaryInfo.birthPlace;
+                if (complementaryInfo.nationalCardNumber) document.getElementById('nationalCardNumber').value = complementaryInfo.nationalCardNumber;
+                if (complementaryInfo.issueDate) document.getElementById('issueDate').value = complementaryInfo.issueDate;
+                if (complementaryInfo.issuePlace) document.getElementById('issuePlace').value = complementaryInfo.issuePlace;
+                
+                modal.style.display = 'block';
+                
+                // Set flag to know we're generating Arabic receipt after form submission
+                window.isGeneratingArabicReceipt = true;
+            }
+            return;
+        }
+
+        // Store buyer data and complementary info for the Arabic receipt modal
+        window.currentArabicReceiptBuyer = buyerData;
+        window.currentArabicReceiptComplementaryInfo = complementaryInfo;
+        
+        // Show Arabic receipt info modal
+        const arabicModal = document.getElementById('arabicReceiptInfoModal');
+        if (arabicModal) {
+            arabicModal.style.display = 'block';
+        }
+
+    } catch (error) {
+        console.error('Error printing Arabic receipt:', error);
+        alert('Erreur lors de l\'impression: ' + error);
+    }
+}
+
+// Helper function to generate and print Arabic receipt document
+async function generateArabicReceiptDocument(buyerData, complementaryInfo, refNumber = '', receiptDate = '') {
+    try {
+        // Get buyer full name
+        const buyerFullName = `${buyerData.nom} ${buyerData.prenom}`;
+
+        // Calculate total espece amount and collect all espece payments
+        const payments = buyerData.payments;
+        let totalEspece = 0;
+        let especePayments = [];
+        
+        if (payments && Array.isArray(payments.tranches)) {
+            payments.tranches.forEach(tranche => {
+                if (tranche.type === 'espece' && tranche.amount > 0) {
+                    totalEspece += parseFloat(tranche.amount);
+                    especePayments.push({
+                        amount: parseFloat(tranche.amount),
+                        date: tranche.date || 'غير محدد'
+                    });
+                }
+            });
+        }
+
+        // Get project name
+        const projectId = buyerData.project_id;
+        let projectName = 'المشروع';
+        try {
+            const projects = await invoke('get_projects');
+            const project = projects.find(p => p.id === projectId);
+            if (project) {
+                projectName = project.project_name;
+            }
+        } catch (e) {
+            console.error('Failed to get project name:', e);
+        }
+
+        // Get today's date in Arabic format
+        const today = new Date();
+        const arabicDate = `${today.getFullYear()}/${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}`;
+
+        // Build espece payments list HTML (compact for A4)
+        let especeListHTML = '';
+        if (especePayments.length > 0) {
+            especeListHTML = '<div style="margin: 10px 0; padding: 10px; background-color: #f5f5f5; border: 1px solid #ccc;">';
+            especeListHTML += '<p style="font-weight: bold; margin-bottom: 5px; font-size: 14px;">المبالغ المدفوعة نقدًا:</p>';
+            especePayments.forEach((payment, index) => {
+                especeListHTML += `<p style="margin: 3px 0; font-size: 13px;">• المبلغ ${index + 1}: <strong>${payment.amount.toLocaleString('ar-DZ')} دج</strong> - ${payment.date}</p>`;
+            });
+            especeListHTML += '</div>';
+        }
+
+        // Build HTML for Arabic receipt (optimized for A4)
+        const html = `
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        @page { 
+            size: A4;
+            margin: 1.5cm;
+        }
+        * { 
+            margin: 0; 
+            padding: 0; 
+            box-sizing: border-box; 
+        }
+        body {
+            font-family: 'Simplified Arabic', 'Traditional Arabic', 'Arial', sans-serif;
+            direction: rtl;
+            text-align: right;
+            padding: 20px 40px;
+            line-height: 1.8;
+            font-size: 15px;
+            max-width: 210mm;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 3px solid #333;
+        }
+        .title {
+            font-size: 26px;
+            font-weight: bold;
+            text-decoration: underline;
+        }
+        .amount-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .amount-box .label {
+            font-size: 16px;
+            margin-bottom: 5px;
+        }
+        .amount-box .value {
+            font-size: 28px;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+        .content {
+            text-align: right;
+            line-height: 2;
+            margin: 15px 0;
+        }
+        .content p {
+            margin: 8px 0;
+        }
+        .signature-section {
+            margin-top: 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+        }
+        @media print {
+            body {
+                padding: 15px 30px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="title">إبـــــــــــــراء ذمــــــــــــة</div>
+    </div>
+
+    <div class="amount-box">
+        <div class="label">المبلغ الإجمالي</div>
+        <div class="value">${totalEspece.toLocaleString('ar-DZ')} دج</div>
+    </div>
+
+    <div class="content">
+        <p>أنا الممضي أسفله السيد: <strong>${buyerFullName}</strong></p>
+        <p>الساكن بـ: <strong>${complementaryInfo.birthPlace || '........................................'}</strong></p>
+        <p>الحامل لبطاقة التعريف الوطنية / جواز السفر رقم: <strong>${complementaryInfo.nationalCardNumber || '....................'}</strong></p>
+        <br>
+        <p>بناءً على نص قانون المالية لسنة 2025، الذي ينص على أن جميع المعاملات التجارية العقارية تتم حصرا عن طريق الحسابات البنكية،</p>
+        <p>وعليه أُقِرّ وأُصَرِّح بمحض إرادتي، بأنني استلمت المبلغ المدوَّن في وصل الاستلام تحت رقم: <strong>${refNumber || '............................'}</strong></p>
+        <p>المؤرخ في: <strong>${receiptDate || '../../2025'}</strong>، وذلك لتسوية وضعية المعاملة موضوع عقد البيع.</p>
+        
+        ${especeListHTML}
+        
+        <p style="margin-top: 15px;">وبموجب هذا الإشهاد، أُبرئ ذمة المعني إبراءً تامًا وشاملاً ونهائيًا من أي التزام أو مطالبة، حالية أو مستقبلية، تتعلق بالمبلغ موضوع الوصل المذكور أعلاه.</p>
+    </div>
+
+    <div class="signature-section">
+        <div style="text-align: right;">
+            <p>حرر في: <strong>${arabicDate}</strong></p>
+        </div>
+        <div style="text-align: left;">
+            <p>الإمضاء: ......................................</p>
+        </div>
+    </div>
+</body>
+</html>
+        `;
+
+        // Open print window
+        const w = window.open('', '_blank', 'width=800,height=900');
+        w.document.write(html);
+        w.document.close();
+        w.focus();
+        setTimeout(() => { w.print(); }, 500);
+        
+    } catch (error) {
+        console.error('Error generating Arabic receipt document:', error);
+        throw error;
+    }
+}
+
+// Close Arabic receipt info modal
+function closeArabicReceiptInfoModal() {
+    const modal = document.getElementById('arabicReceiptInfoModal');
+    if (modal) {
+        modal.style.display = 'none';
+        document.getElementById('arabicReceiptInfoForm').reset();
+    }
+}
+
+// Generate Arabic receipt with info from modal
+async function generateArabicReceiptWithInfo() {
+    const refNumber = document.getElementById('receiptRefNumber')?.value?.trim();
+    const receiptDate = document.getElementById('receiptDate')?.value?.trim();
+    
+    if (!refNumber || !receiptDate) {
+        alert('الرجاء ملء جميع الحقول المطلوبة');
+        return;
+    }
+    
+    const buyerData = window.currentArabicReceiptBuyer;
+    const complementaryInfo = window.currentArabicReceiptComplementaryInfo;
+    
+    if (!buyerData || !complementaryInfo) {
+        alert('خطأ في البيانات');
+        return;
+    }
+    
+    // Close modal
+    closeArabicReceiptInfoModal();
+    
+    // Generate document with the provided info
+    await generateArabicReceiptDocument(buyerData, complementaryInfo, refNumber, receiptDate);
+}
 
 // Make functions globally accessible
 window.showUserInfoModal = showUserInfoModal;
 window.closeUserInfoModal = closeUserInfoModal;
+window.closeArabicReceiptInfoModal = closeArabicReceiptInfoModal;
+window.generateArabicReceiptWithInfo = generateArabicReceiptWithInfo;
 window.generateRecuWithUserInfo = generateRecuWithUserInfo;
 window.showReservationInfoModal = showReservationInfoModal;
 window.closeReservationInfoModal = closeReservationInfoModal;

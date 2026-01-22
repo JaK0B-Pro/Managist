@@ -477,9 +477,9 @@ document.getElementById('projectForm').addEventListener('submit', async function
   const project = {
     project_name: document.getElementById('nomProjet').value,
     project_location: document.getElementById('location').value,
-    nombre_des_bloc: parseInt(document.getElementById('nmbrDesBlocs').value, 10),
-    nombre_des_etages: parseInt(document.getElementById('nmbrDesEtages').value, 10),
-    nombre_des_appartement: parseInt(document.getElementById('nmbrDesAppartementsTotal').value, 10),
+    nombre_des_bloc: parseInt(document.getElementById('nmbrDesBlocs').value, 10) || 0,
+    nombre_des_etages: parseInt(document.getElementById('nmbrDesEtages').value, 10) || 0,
+    nombre_des_appartement: parseInt(document.getElementById('nmbrDesAppartementsTotal').value, 10) || 0,
     nda_dans_chaque_etage: Math.floor(parseInt(document.getElementById('nmbrDesAppartementsDansChaqueBloc').value, 10) / parseInt(document.getElementById('nmbrDesEtages').value, 10)) || 0,
     nda_vendus: 0, // Initially no apartments are sold
     project_start_date: document.getElementById('dateDeDebut').value,

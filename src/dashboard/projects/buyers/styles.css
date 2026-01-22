@@ -21,6 +21,62 @@ body {
     max-width: 95%;
     flex-direction: row-reverse;
     padding: 0 10px;
+    gap: 15px;
+}
+
+/* Status Filter Container */
+.status-filter-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: white;
+    padding: 8px 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    border: 2px solid #e9ecef;
+}
+
+.filter-label {
+    font-weight: 600;
+    color: #495057;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.filter-label i {
+    color: #6c757d;
+}
+
+.status-filter-select {
+    padding: 8px 35px 8px 12px;
+    font-size: 14px;
+    border: 2px solid #dee2e6;
+    border-radius: 6px;
+    background: white;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.3s ease;
+    font-weight: 500;
+    color: #495057;
+    min-width: 170px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23343a40' d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 12px;
+    appearance: none;
+}
+
+.status-filter-select:hover {
+    border-color: #4a90e2;
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+}
+
+.status-filter-select:focus {
+    border-color: #4a90e2;
+    box-shadow: 0 0 0 4px rgba(74, 144, 226, 0.15);
 }
 
 #addNewBuyerButton {
@@ -411,6 +467,111 @@ td[rowspan] {
 
 .delete-btn i {
     font-size: 12px;
+}
+
+/* ========== BUYER STATUS STYLES ========== */
+
+/* Status selector in form */
+.status-select {
+    padding: 10px 35px 10px 12px;
+    font-size: 14px;
+    border: 2px solid #dee2e6;
+    border-radius: 6px;
+    background: white;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.3s ease;
+    font-weight: 500;
+    color: #495057;
+    width: 100%;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23343a40' d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 12px;
+    appearance: none;
+}
+
+.status-select:hover {
+    border-color: #4a90e2;
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+}
+
+.status-select:focus {
+    border-color: #4a90e2;
+    box-shadow: 0 0 0 4px rgba(74, 144, 226, 0.15);
+}
+
+/* Status badges in table */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+.status-badge.active {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
+}
+
+.status-badge.cancelled {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
+}
+
+.status-badge.on_hold {
+    background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%);
+    color: #212529;
+    box-shadow: 0 2px 8px rgba(255, 193, 7, 0.3);
+}
+
+.status-badge.completed {
+    background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(23, 162, 184, 0.3);
+}
+
+/* Row styling based on status */
+tr.buyer-row.cancelled {
+    opacity: 0.5;
+    background-color: #ffe5e5 !important;
+}
+
+tr.buyer-row.cancelled:hover {
+    opacity: 0.7;
+    background-color: #ffd5d5 !important;
+}
+
+tr.buyer-row.on_hold {
+    background-color: #fff9e6 !important;
+}
+
+tr.buyer-row.on_hold:hover {
+    background-color: #fff3cc !important;
+}
+
+tr.buyer-row.completed {
+    background-color: #e6f7ff !important;
+}
+
+tr.buyer-row.completed:hover {
+    background-color: #cce7ff !important;
+}
+
+tr.buyer-row.active {
+    background-color: #f0fff0 !important;
+}
+
+tr.buyer-row.active:hover {
+    background-color: #e0ffe0 !important;
 }
 
 /* Animation for success message */

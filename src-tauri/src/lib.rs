@@ -182,6 +182,10 @@ pub struct Buyer {
     payment_limits_disabled: bool,
     #[serde(default)]
     complementary_info: String,
+    #[serde(default = "default_buyer_status")]
+    buyer_status: String,
+    #[serde(default)]
+    prix_unitaire_buyer: Option<Decimal>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -203,6 +207,14 @@ pub struct BuyerInput {
     payment_limits_disabled: bool,
     #[serde(default)]
     complementary_info: String,
+    #[serde(default = "default_buyer_status")]
+    buyer_status: String,
+    #[serde(default)]
+    prix_unitaire_buyer: Option<f64>,
+}
+
+fn default_buyer_status() -> String {
+    "active".to_string()
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
@@ -584,6 +596,153 @@ async fn insert_employee_original(app: AppHandle, pool: tauri::State<'_, PgPool>
     Ok(())
 }
 
+// Function to get employees salary data by project and date (for auto-fill feature)
+#[tauri::command]
+async fn get_employees_salary(pool: tauri::State<'_, PgPool>, project: String, annee: i32, mois: i32) -> Result<Vec<EmployeeAddInput>, String> {
+    debug_println!("=== GET EMPLOYEES SALARY DEBUG ===");
+    debug_println!("Searching for - Project: '{}', Year: {}, Month: {}", project, annee, mois);
+    
+    // First, check what data actually exists in the database
+    let check_query = r#"
+        SELECT DISTINCT project_id, annee, mois 
+        FROM employee_salary 
+        ORDER BY annee DESC, mois DESC 
+        LIMIT 20
+    "#;
+    
+    let check_rows = sqlx::query(check_query)
+        .fetch_all(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    debug_println!("=== EXISTING DATA IN DATABASE ===");
+    for row in check_rows.iter() {
+        let proj: String = row.try_get("project_id").unwrap_or_default();
+        let year: i32 = row.try_get("annee").unwrap_or_default();
+        let month: i32 = row.try_get("mois").unwrap_or_default();
+        debug_println!("  Found: Project='{}', Year={}, Month={}", proj, year, month);
+    }
+    debug_println!("=== END EXISTING DATA ===");
+    
+    let query = r#"
+        SELECT 
+            e.nom_et_prenom,
+            es.prix_jour,
+            es.prix_hour,
+            es.nombre_des_jours,
+            es.nombre_des_heurx,
+            es.travaux_attache,
+            es.salaire,
+            es.acompte,
+            es.net_a_payer,
+            es.observation
+        FROM employees e
+        INNER JOIN employee_salary es ON e.id = es.employee_id
+        WHERE es.project_id = $1 
+        AND es.annee = $2 
+        AND es.mois = $3
+        AND (es.salaire > 0 OR es.net_a_payer > 0)
+        ORDER BY e.id
+    "#;
+    
+    let rows = sqlx::query(query)
+        .bind(&project)
+        .bind(annee)
+        .bind(mois)
+        .fetch_all(&*pool)
+        .await
+        .map_err(|e| {
+            debug_println!("Query error: {}", e);
+            e.to_string()
+        })?;
+    
+    debug_println!("Found {} rows", rows.len());
+    
+    let mut employees = Vec::new();
+    for row in rows {
+        let prix_jour: Decimal = row.try_get("prix_jour").map_err(|e| e.to_string())?;
+        let prix_hour: Decimal = row.try_get("prix_hour").map_err(|e| e.to_string())?;
+        let travaux_attache: Decimal = row.try_get("travaux_attache").map_err(|e| e.to_string())?;
+        let salaire: Decimal = row.try_get("salaire").map_err(|e| e.to_string())?;
+        let acompte: Decimal = row.try_get("acompte").map_err(|e| e.to_string())?;
+        let net_a_payer: Decimal = row.try_get("net_a_payer").map_err(|e| e.to_string())?;
+        
+        employees.push(EmployeeAddInput {
+            nom_et_prenom: row.try_get("nom_et_prenom").map_err(|e| e.to_string())?,
+            prix_jour: prix_jour.to_string().parse::<f64>().unwrap_or(0.0),
+            prix_hour: prix_hour.to_string().parse::<f64>().unwrap_or(0.0),
+            nombre_des_jours: row.try_get("nombre_des_jours").map_err(|e| e.to_string())?,
+            nombre_des_heurx: row.try_get("nombre_des_heurx").map_err(|e| e.to_string())?,
+            travaux_attache: travaux_attache.to_string().parse::<f64>().unwrap_or(0.0),
+            salaire: salaire.to_string().parse::<f64>().unwrap_or(0.0),
+            acompte: acompte.to_string().parse::<f64>().unwrap_or(0.0),
+            net_a_payer: net_a_payer.to_string().parse::<f64>().unwrap_or(0.0),
+            observation: row.try_get("observation").unwrap_or_else(|_| String::new()),
+        });
+    }
+    
+    Ok(employees)
+}
+
+// Function to insert employee salary data for a specific project (for auto-fill feature)
+#[tauri::command]
+async fn insert_employee_salary(pool: tauri::State<'_, PgPool>, employee: EmployeeAddInput, project: String, annee: i32, mois: i32) -> Result<(), String> {
+    // First, get or create the employee in the main employees table
+    let employee_id = match sqlx::query("SELECT id FROM employees WHERE nom_et_prenom = $1")
+        .bind(&employee.nom_et_prenom)
+        .fetch_optional(&*pool)
+        .await
+        .map_err(|e| e.to_string())?
+    {
+        Some(row) => row.try_get::<i32, _>("id").map_err(|e| e.to_string())?,
+        None => {
+            let row = sqlx::query("INSERT INTO employees (nom_et_prenom) VALUES ($1) RETURNING id")
+                .bind(&employee.nom_et_prenom)
+                .fetch_one(&*pool)
+                .await
+                .map_err(|e| e.to_string())?;
+            row.try_get::<i32, _>("id").map_err(|e| e.to_string())?
+        }
+    };
+    
+    // Check if record already exists for this employee, project, year, and month
+    let existing = sqlx::query("SELECT id FROM employee_salary WHERE employee_id = $1 AND project_id = $2 AND annee = $3 AND mois = $4")
+        .bind(employee_id)
+        .bind(&project)
+        .bind(annee)
+        .bind(mois)
+        .fetch_optional(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    if existing.is_some() {
+        return Err(format!("L'employé {} existe déjà pour ce projet et cette période", employee.nom_et_prenom));
+    }
+    
+    // Insert salary record
+    let query = "INSERT INTO employee_salary (employee_id, project_id, prix_jour, prix_hour, nombre_des_jours, nombre_des_heurx, travaux_attache, salaire, acompte, net_a_payer, observation, annee, mois) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)";
+    
+    sqlx::query(query)
+        .bind(employee_id)
+        .bind(&project)
+        .bind(Decimal::from_f64_retain(employee.prix_jour).unwrap_or_default())
+        .bind(Decimal::from_f64_retain(employee.prix_hour).unwrap_or_default())
+        .bind(employee.nombre_des_jours)
+        .bind(employee.nombre_des_heurx)
+        .bind(employee.travaux_attache)
+        .bind(Decimal::from_f64_retain(employee.salaire).unwrap_or_default())
+        .bind(Decimal::from_f64_retain(employee.acompte).unwrap_or_default())
+        .bind(Decimal::from_f64_retain(employee.net_a_payer).unwrap_or_default())
+        .bind(&employee.observation)
+        .bind(annee)
+        .bind(mois)
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    Ok(())
+}
+
 
 // Get all the projects name and insert them into a vector
 #[tauri::command]
@@ -814,7 +973,7 @@ async fn add_buyer_to_database(pool: tauri::State<'_, PgPool>, buyer: BuyerInput
     
     debug_println!("Final price: {}, Is sold: {}, Payment status: {}", final_price, is_sold, payment_status);
 
-    let query = "INSERT INTO buyers (project_id, bloc, niveau, logt_num, nom, prenom, type_logt, type_of_logt, surface, date, prix_totale, remise, payments, payment_status, total_paid, is_sold, payment_limits_disabled, complementary_info) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)";
+    let query = "INSERT INTO buyers (project_id, bloc, niveau, logt_num, nom, prenom, type_logt, type_of_logt, surface, date, prix_totale, remise, payments, payment_status, total_paid, is_sold, payment_limits_disabled, complementary_info, buyer_status, prix_unitaire_buyer) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)";
 
     sqlx::query(query)
         .bind(&buyer.project_id)
@@ -835,6 +994,8 @@ async fn add_buyer_to_database(pool: tauri::State<'_, PgPool>, buyer: BuyerInput
         .bind(is_sold)
         .bind(buyer.payment_limits_disabled)
         .bind(&buyer.complementary_info)
+        .bind(&buyer.buyer_status)
+        .bind(buyer.prix_unitaire_buyer.map(|v| Decimal::from_f64_retain(v).unwrap_or_default()))
         .execute(&*pool)
         .await
         .map_err(|e| {
@@ -884,6 +1045,8 @@ async fn get_buyers_by_project(pool: tauri::State<'_, PgPool>, project_id: i32) 
             is_sold: row.try_get("is_sold").map_err(|e| e.to_string())?,
             payment_limits_disabled: row.try_get("payment_limits_disabled").unwrap_or_else(|_| false),
             complementary_info: row.try_get("complementary_info").unwrap_or_else(|_| "".to_string()),
+            buyer_status: row.try_get("buyer_status").unwrap_or_else(|_| "active".to_string()),
+            prix_unitaire_buyer: row.try_get("prix_unitaire_buyer").ok(),
         });
     }
     Ok(buyers)
@@ -1135,7 +1298,7 @@ async fn edit_buyer_in_database(pool: tauri::State<'_, PgPool>, buyer_id: i32, b
     let is_sold = total_paid >= final_price;
     let payment_status = if is_sold { "paid" } else if total_paid > 0.0 { "partial" } else { "unpaid" };
 
-    let query = "UPDATE buyers SET project_id = $1, bloc = $2, niveau = $3, logt_num = $4, nom = $5, prenom = $6, type_logt = $7, type_of_logt = $8, surface = $9, date = $10, prix_totale = $11, remise = $12, payments = $13, payment_status = $14, total_paid = $15, is_sold = $16, payment_limits_disabled = $17, complementary_info = $18 WHERE id = $19";
+    let query = "UPDATE buyers SET project_id = $1, bloc = $2, niveau = $3, logt_num = $4, nom = $5, prenom = $6, type_logt = $7, type_of_logt = $8, surface = $9, date = $10, prix_totale = $11, remise = $12, payments = $13, payment_status = $14, total_paid = $15, is_sold = $16, payment_limits_disabled = $17, complementary_info = $18, buyer_status = $19, prix_unitaire_buyer = $20 WHERE id = $21";
 
     sqlx::query(query)
         .bind(&buyer.project_id)
@@ -1156,6 +1319,8 @@ async fn edit_buyer_in_database(pool: tauri::State<'_, PgPool>, buyer_id: i32, b
         .bind(is_sold)
         .bind(buyer.payment_limits_disabled)
         .bind(&buyer.complementary_info)
+        .bind(&buyer.buyer_status)
+        .bind(buyer.prix_unitaire_buyer.map(|v| Decimal::from_f64_retain(v).unwrap_or_default()))
         .bind(buyer_id)
         .execute(&*pool)
         .await
@@ -2515,7 +2680,9 @@ pub fn run() -> Result<(), String> {
             remove_payment_reminder,
             check_payment_reminders,
             mark_reminder_notified,
-            has_payment_reminder
+            has_payment_reminder,
+            get_employees_salary,
+            insert_employee_salary
         ])
         .setup(|app| {
             // Ensure loading window gets focus
@@ -2691,14 +2858,19 @@ async fn ensure_database_pool_ready(app: AppHandle) -> Result<(), String> {
     
     debug_println!("Using database URL for setup: {}", database_url);
     
-    // Start PostgreSQL if needed (non-blocking)
-    tokio::spawn(async move {
-        if let Err(e) = ensure_postgres_running().await {
-            debug_println!("PostgreSQL startup warning during setup: {}", e);
+    // Start PostgreSQL if needed (blocking to ensure it starts before proceeding)
+    debug_println!("Checking PostgreSQL status...");
+    match ensure_postgres_running().await {
+        Ok(()) => {
+            debug_println!("PostgreSQL is running and accessible.");
         }
-    });
+        Err(e) => {
+            debug_println!("PostgreSQL startup warning: {}", e);
+            debug_println!("Continuing with database connection attempts...");
+        }
+    }
     
-    // Give PostgreSQL a moment to start
+    // Give PostgreSQL a moment to fully initialize
     tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
     
     // Try to connect to database with retries
@@ -2978,7 +3150,8 @@ async fn setup_database_tables(pool: &PgPool) -> Result<(), String> {
             payment_status VARCHAR(20) DEFAULT 'unpaid',
             total_paid NUMERIC(15, 2) DEFAULT 0,
             is_sold BOOLEAN DEFAULT FALSE,
-            payment_limits_disabled BOOLEAN DEFAULT FALSE
+            payment_limits_disabled BOOLEAN DEFAULT FALSE,
+            buyer_status VARCHAR(20) DEFAULT 'active'
         )"
     )
     .execute(pool)
@@ -2998,7 +3171,22 @@ async fn setup_database_tables(pool: &PgPool) -> Result<(), String> {
         }
         Err(e) => {
             debug_println!("Note: Could not add payment_limits_disabled column (might already exist): {}", e);
-            // This is not critical - the column might already exist
+        }
+    }
+
+    // Add buyer_status column to existing buyers table if it doesn't exist
+    let add_status_column_result = sqlx::query(
+        "ALTER TABLE buyers ADD COLUMN IF NOT EXISTS buyer_status VARCHAR(20) DEFAULT 'active'"
+    )
+    .execute(pool)
+    .await;
+
+    match add_status_column_result {
+        Ok(_) => {
+            debug_println!("Buyer status column added/verified successfully");
+        }
+        Err(e) => {
+            debug_println!("Note: Could not add buyer_status column (might already exist): {}", e);
         }
     }
 
@@ -3356,6 +3544,8 @@ async fn get_buyer(pool: tauri::State<'_, PgPool>, buyer_id: i32) -> Result<Opti
             is_sold: row.try_get("is_sold").map_err(|e| e.to_string())?,
             payment_limits_disabled: row.try_get("payment_limits_disabled").unwrap_or_else(|_| false),
             complementary_info: row.try_get("complementary_info").unwrap_or_else(|_| String::new()),
+            buyer_status: row.try_get("buyer_status").unwrap_or_else(|_| "active".to_string()),
+            prix_unitaire_buyer: row.try_get("prix_unitaire_buyer").ok(),
         }))
     } else {
         Ok(None)

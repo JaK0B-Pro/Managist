@@ -2909,4 +2909,205 @@ window.addEventListener('click', (event) => {
     if (event.target === changeIdModal) {
         changeIdModal.style.display = 'none';
     }
+    
+    const autoFillModal = document.getElementById('autoFillModal');
+    if (event.target === autoFillModal) {
+        closeAutoFillModal();
+    }
 });
+
+// ============================================
+// AUTO-FILL FROM LAST MONTH FUNCTIONALITY
+// ============================================
+
+let lastMonthData = null;
+
+// Open auto-fill modal
+function openAutoFillModal() {
+    const modal = document.getElementById('autoFillModal');
+    const projectSelect = document.getElementById('autoFillProjectSelect');
+    const applyBtn = document.getElementById('applyAutoFillBtn');
+    const infoDiv = document.getElementById('autoFillInfo');
+    
+    // Reset modal state
+    projectSelect.value = '';
+    applyBtn.disabled = true;
+    infoDiv.style.display = 'none';
+    lastMonthData = null;
+    
+    // Load projects into dropdown
+    loadProjectsForAutoFill();
+    
+    modal.style.display = 'block';
+}
+
+// Close auto-fill modal
+function closeAutoFillModal() {
+    const modal = document.getElementById('autoFillModal');
+    modal.style.display = 'none';
+    lastMonthData = null;
+}
+
+// Load projects into auto-fill dropdown
+async function loadProjectsForAutoFill() {
+    const projectSelect = document.getElementById('autoFillProjectSelect');
+    
+    try {
+        const projects = await invoke('get_projects');
+        
+        // Clear existing options except the first one
+        projectSelect.innerHTML = '<option value="">-- Sélectionner un projet --</option><option value="administration">Administration</option>';
+        
+        projects.forEach(project => {
+            const option = document.createElement('option');
+            // Use project ID as value (this matches what's stored in employee_salary)
+            option.value = project.id.toString();
+            option.textContent = project.project_name;
+            projectSelect.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading projects for auto-fill:', error);
+    }
+}
+
+// Handle project selection for auto-fill
+document.addEventListener('DOMContentLoaded', function() {
+    const autoFillBtn = document.getElementById('auto-fill-settings-btn');
+    const projectSelect = document.getElementById('autoFillProjectSelect');
+    const applyBtn = document.getElementById('applyAutoFillBtn');
+    
+    if (autoFillBtn) {
+        autoFillBtn.addEventListener('click', openAutoFillModal);
+    }
+    
+    if (projectSelect) {
+        projectSelect.addEventListener('change', async function() {
+            const selectedProject = this.value;
+            const infoDiv = document.getElementById('autoFillInfo');
+            const applyBtn = document.getElementById('applyAutoFillBtn');
+            
+            if (!selectedProject) {
+                infoDiv.style.display = 'none';
+                applyBtn.disabled = true;
+                lastMonthData = null;
+                return;
+            }
+            
+            // Get previous month
+            const { annee, mois } = getCurrentYearMonth();
+            let prevMonth = mois - 1;
+            let prevYear = annee;
+            
+            if (prevMonth === 0) {
+                prevMonth = 12;
+                prevYear = annee - 1;
+            }
+            
+            console.log('🔍 Auto-fill search:', {
+                selectedProject,
+                prevYear,
+                prevMonth,
+                currentYear: annee,
+                currentMonth: mois
+            });
+            
+            try {
+                // Fetch employees from previous month
+                const employees = await invoke('get_employees_salary', {
+                    project: selectedProject,
+                    annee: prevYear,
+                    mois: prevMonth
+                });
+                
+                console.log('✅ Found employees:', employees.length);
+                
+                lastMonthData = {
+                    project: selectedProject,
+                    employees: employees,
+                    sourceMonth: prevMonth,
+                    sourceYear: prevYear
+                };
+                
+                // Show info
+                const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 
+                                   'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+                document.getElementById('autoFillPeriod').textContent = 
+                    `${monthNames[prevMonth - 1]} ${prevYear}`;
+                document.getElementById('autoFillEmployeeCount').textContent = employees.length;
+                
+                infoDiv.style.display = 'block';
+                applyBtn.disabled = employees.length === 0;
+                
+                if (employees.length === 0) {
+                    showNotification('Aucune donnée trouvée pour le mois précédent', 'warning');
+                }
+            } catch (error) {
+                console.error('Error fetching last month data:', error);
+                showNotification('Erreur lors du chargement des données', 'error');
+                infoDiv.style.display = 'none';
+                applyBtn.disabled = true;
+            }
+        });
+    }
+    
+    if (applyBtn) {
+        applyBtn.addEventListener('click', async function() {
+            if (!lastMonthData || !lastMonthData.employees || lastMonthData.employees.length === 0) {
+                showNotification('Aucune donnée à importer', 'warning');
+                return;
+            }
+            
+            const { annee, mois } = getCurrentYearMonth();
+            const currentProject = document.getElementById('project-selector').value;
+            
+            try {
+                applyBtn.disabled = true;
+                applyBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Application...';
+                
+                // Insert each employee into the current month/project
+                let successCount = 0;
+                for (const emp of lastMonthData.employees) {
+                    try {
+                        await invoke('insert_employee_salary', {
+                            employee: {
+                                nom_et_prenom: emp.nom_et_prenom,
+                                prix_jour: emp.prix_jour,
+                                prix_hour: emp.prix_hour,
+                                nombre_des_jours: emp.nombre_des_jours,
+                                nombre_des_heurx: emp.nombre_des_heurx,
+                                travaux_attache: emp.travaux_attache,
+                                salaire: emp.salaire,
+                                acompte: emp.acompte,
+                                net_a_payer: emp.net_a_payer,
+                                observation: emp.observation || ''
+                            },
+                            project: currentProject,
+                            annee: annee,
+                            mois: mois
+                        });
+                        successCount++;
+                    } catch (error) {
+                        console.error('Error inserting employee:', emp.nom_et_prenom, error);
+                    }
+                }
+                
+                closeAutoFillModal();
+                showNotification(`${successCount} employé(s) importé(s) avec succès`, 'success');
+                
+                // Reload employees for current project
+                await reloadCurrentEmployees();
+                
+            } catch (error) {
+                console.error('Error applying auto-fill:', error);
+                showNotification('Erreur lors de l\'application', 'error');
+            } finally {
+                applyBtn.disabled = false;
+                applyBtn.innerHTML = '<i class="fas fa-check"></i> Appliquer';
+            }
+        });
+    }
+});
+
+// Make functions globally accessible
+window.openAutoFillModal = openAutoFillModal;
+window.closeAutoFillModal = closeAutoFillModal;
