@@ -162,7 +162,7 @@ function isCurrentFormPaymentLimitsDisabled() {
 }
 
 // Helper function to build buyer data object from the current form
-function buildBuyerDataFromForm() {
+async function buildBuyerDataFromForm() {
     // Collect tranches data
     const tranchesContainer = document.getElementById('tranchesContainer');
     const tranches = {};
@@ -208,6 +208,24 @@ function buildBuyerDataFromForm() {
     const customPrixUnitaire = buyerModal?.getAttribute('data-custom-prix-unitaire');
     const prixUnitaireBuyer = customPrixUnitaire ? parseFloat(customPrixUnitaire) : null;
 
+    // Get existing complementary_info to preserve it
+    let complementaryInfo = '';
+    const buyerForm = document.getElementById('addBuyerForm');
+    const buyerId = buyerForm?.getAttribute('data-buyer-id');
+    
+    if (buyerId && buyerId !== 'NEW') {
+        try {
+            const buyers = await invoke('get_buyers_by_project', { projectId: PROJECT_ID });
+            const existingBuyer = buyers.find(b => b.id === parseInt(buyerId));
+            if (existingBuyer && existingBuyer.complementary_info) {
+                complementaryInfo = existingBuyer.complementary_info;
+                console.log('✅ Preserving existing complementary_info:', complementaryInfo);
+            }
+        } catch (e) {
+            console.warn('Could not retrieve existing complementary_info:', e);
+        }
+    }
+
     // Build and return the buyer data object
     const buyerData = {
         project_id: PROJECT_ID,
@@ -226,12 +244,13 @@ function buildBuyerDataFromForm() {
         payments: tranches,
         payment_limits_disabled: document.getElementById('paymentLimitsToggle')?.checked || false,
         buyer_status: document.getElementById('buyerStatus')?.value || 'active',
-        complementary_info: '', // Will be preserved through update_buyer_complementary_info if needed
+        complementary_info: complementaryInfo, // Preserve existing complementary_info
         prix_unitaire_buyer: prixUnitaireBuyer // Include custom prix unitaire if set
     };
     
     console.log('🔍 buildBuyerDataFromForm - buyer_status:', buyerData.buyer_status);
     console.log('🔍 buildBuyerDataFromForm - prix_unitaire_buyer:', buyerData.prix_unitaire_buyer);
+    console.log('🔍 buildBuyerDataFromForm - complementary_info preserved:', !!complementaryInfo);
     
     return buyerData;
 }
@@ -811,7 +830,7 @@ async function performFormValidation() {
     return { passed: true };
 }
 // SYNCHRONOUS ESPECE VALIDATION - BLOCKS FORM AND SHOWS MODAL
-function checkEspeceViolationSync() {
+async function checkEspeceViolationSync() {
     console.log('�🚨🚨 CHECKESPECE FUNCTION STARTED 🚨🚨🚨');
     console.log('�🔍 CHECKING ESPECE VIOLATIONS SYNCHRONOUSLY...');
 
@@ -949,7 +968,7 @@ function checkEspeceViolationSync() {
                     enteredAmount: enteredAmount,
                     acceptedEspece: availableForThisTranche,
                     remainingVersement: remainingAmount,
-                    formData: buildBuyerDataFromForm(),
+                    formData: await buildBuyerDataFromForm(),
                     isEdit: !!formEl.getAttribute('data-buyer-id'),
                     buyerId: formEl.getAttribute('data-buyer-id'),
                     submitBtn: submitBtnEl,
@@ -2114,7 +2133,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             }
 
-            const hasEspeceViolation = checkEspeceViolationSync();
+            const hasEspeceViolation = await checkEspeceViolationSync();
             console.log('📊 ESPECE VIOLATION RESULT:', hasEspeceViolation);
 
             if (hasEspeceViolation) {
@@ -2215,7 +2234,7 @@ document.addEventListener('DOMContentLoaded', function () {
             console.log('=== END TRANCHE COLLECTION DEBUG ===');
 
             // Prepare buyer data using helper function
-            const buyerData = buildBuyerDataFromForm();
+            const buyerData = await buildBuyerDataFromForm();
 
             console.log('=== BUYER DATA DEBUG ===');
             console.log('Full buyer data being sent to Rust:', buyerData);
@@ -3686,7 +3705,8 @@ function generateSimpleDocument(buyerName, prenom, trancheIndex, amount, date, t
 
     const currentDate = new Date();
     const paymentDate = date ? new Date(date) : currentDate;
-    const refNumber = `N°${Math.floor(Math.random() * 100)}/2025`;
+    const currentYear = currentDate.getFullYear();
+    const refNumber = `N°${Math.floor(Math.random() * 100)}/${currentYear}`;
 
     const htmlContent = `
         <!DOCTYPE html>
@@ -5144,9 +5164,9 @@ async function completeFormSubmission() {
         });
 
         // Rebuild buyer data from current form state (this ensures all fields are included)
-        const updatedBuyerData = buildBuyerDataFromForm();
+        const updatedBuyerData = await buildBuyerDataFromForm();
         
-        console.log('� completeFormSubmission - using fresh buyer data:', updatedBuyerData);
+        console.log('📋 completeFormSubmission - using fresh buyer data:', updatedBuyerData);
 
         // Add or update buyer in database
         if (isEdit) {
@@ -5493,7 +5513,8 @@ async function printOrdreVersementForRemaining() {
 
     // Generate reference number (current date + random)
     const currentDate = new Date();
-    const refNumber = `N°${Math.floor(Math.random() * 100)}/2025`;
+    const currentYear = currentDate.getFullYear();
+    const refNumber = `N°${Math.floor(Math.random() * 100)}/${currentYear}`;
 
     // Get current project title
     const projectTitle = document.getElementById('pageTitle')?.textContent || '136 logements promotionnels à EL TARF';
@@ -5934,7 +5955,7 @@ async function printRecuCheque(trancheIndex) {
         const buyerName = document.getElementById('nom')?.value || 'N/A';
         const prenom = document.getElementById('prenom')?.value || '';
         const buyerId = form.getAttribute('data-buyer-id');
-        const projectId = parseInt(form.querySelector('[name="project_id"]')?.value || currentProjectId);
+        const projectId = getCurrentProjectId();
 
         // Get tranche information from FormData (these have name attributes)
         const formData = new FormData(form);
@@ -5980,9 +6001,10 @@ async function generateRecuCheque(buyerName, prenom, trancheIndex, amount, date,
 
     const currentDate = new Date();
     const paymentDate = date ? new Date(date) : currentDate;
+    const currentYear = currentDate.getFullYear();
     
     // Get or create receipt reference from database
-    let refNumber = 'N°000/2025';
+    let refNumber = `N°000/${currentYear}`;
     try {
         if (buyerId && buyerId !== 'NEW') {
             // Try to get existing reference
@@ -6009,7 +6031,7 @@ async function generateRecuCheque(buyerName, prenom, trancheIndex, amount, date,
     } catch (error) {
         console.error('Error getting receipt reference:', error);
         // Fall back to random number if backend fails
-        refNumber = `N°${String(Math.floor(Math.random() * 9999)).padStart(4, '0')}/2025`;
+        refNumber = `N°${String(Math.floor(Math.random() * 9999)).padStart(4, '0')}/${currentYear}`;
     }
 
     // Convert number to French words (corrected)
@@ -7769,8 +7791,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const topBtn = document.getElementById('printPaymentSummaryTopBtn');
     if (topBtn) topBtn.addEventListener('click', printPaymentSummaryFromModal);
     
-    const arabicBtn = document.getElementById('printArabicReceiptBtn');
-    if (arabicBtn) arabicBtn.addEventListener('click', printArabicReceipt);
+    const dischargeBtn = document.getElementById('printDischargeBtn');
+    if (dischargeBtn) dischargeBtn.addEventListener('click', showDischargeModal);
 });
 
 // ========== ARABIC RECEIPT FUNCTION ==========
@@ -7850,6 +7872,9 @@ async function printArabicReceipt() {
 // Helper function to generate and print Arabic receipt document
 async function generateArabicReceiptDocument(buyerData, complementaryInfo, refNumber = '', receiptDate = '') {
     try {
+        // Get current year
+        const currentYear = new Date().getFullYear();
+        
         // Get buyer full name
         const buyerFullName = `${buyerData.nom} ${buyerData.prenom}`;
 
@@ -7990,9 +8015,9 @@ async function generateArabicReceiptDocument(buyerData, complementaryInfo, refNu
         <p>الساكن بـ: <strong>${complementaryInfo.birthPlace || '........................................'}</strong></p>
         <p>الحامل لبطاقة التعريف الوطنية / جواز السفر رقم: <strong>${complementaryInfo.nationalCardNumber || '....................'}</strong></p>
         <br>
-        <p>بناءً على نص قانون المالية لسنة 2025، الذي ينص على أن جميع المعاملات التجارية العقارية تتم حصرا عن طريق الحسابات البنكية،</p>
+        <p>بناءً على نص قانون المالية لسنة ${currentYear}، الذي ينص على أن جميع المعاملات التجارية العقارية تتم حصرا عن طريق الحسابات البنكية،</p>
         <p>وعليه أُقِرّ وأُصَرِّح بمحض إرادتي، بأنني استلمت المبلغ المدوَّن في وصل الاستلام تحت رقم: <strong>${refNumber || '............................'}</strong></p>
-        <p>المؤرخ في: <strong>${receiptDate || '../../2025'}</strong>، وذلك لتسوية وضعية المعاملة موضوع عقد البيع.</p>
+        <p>المؤرخ في: <strong>${receiptDate || '../../' + currentYear}</strong>، وذلك لتسوية وضعية المعاملة موضوع عقد البيع.</p>
         
         ${especeListHTML}
         
@@ -8190,7 +8215,8 @@ async function generateCancellationWithInfo() {
 
 function generateCancellationDocument(buyerData, cancellationInfo = {}) {
     const currentDate = new Date();
-    const formattedDate = `${String(currentDate.getDate()).padStart(2, '0')}/${String(currentDate.getMonth() + 1).padStart(2, '0')}/${currentDate.getFullYear()}`;
+    const currentYear = currentDate.getFullYear();
+    const formattedDate = `${String(currentDate.getDate()).padStart(2, '0')}/${String(currentDate.getMonth() + 1).padStart(2, '0')}/${currentYear}`;
 
     // Get buyer full name in Arabic
     const buyerFullName = `${buyerData.nom || ''} ${buyerData.prenom || ''}`.trim() || 'غير محدد';
@@ -8299,7 +8325,7 @@ function generateCancellationDocument(buyerData, cancellationInfo = {}) {
             <h2>مؤسسة الترقية العقارية</h2>
             <p>فرطاس يزيد</p>
             <p>رقم الهاتف: 038 30 39 74 </p>
-            <p>الرقم: ......./...../2025</p>
+            <p>الرقم: ......./...../" + currentYear + "</p>
         </div>
 
         <div class="info-section">
@@ -8540,6 +8566,144 @@ window.handlePadReminderToggle = handlePadReminderToggle;
 window.loadReminderState = loadReminderState;
 
 // ========== END PAYMENT REMINDER FUNCTIONS ==========
+
+// ========== DISCHARGE CERTIFICATE FUNCTIONS ==========
+
+let dischargeGenerator = null;
+let currentDischargeBuyer = null;
+
+// Initialize discharge generator
+async function initDischargeGenerator() {
+    if (!dischargeGenerator) {
+        const { DischargeGenerator } = await import('../../../utils/DischargeGenerator.js');
+        dischargeGenerator = new DischargeGenerator();
+    }
+    return dischargeGenerator;
+}
+
+// Show discharge certificate modal
+async function showDischargeModal() {
+    try {
+        const buyerForm = document.getElementById('addBuyerForm');
+        const buyerId = buyerForm?.getAttribute('data-buyer-id');
+        
+        if (!buyerId || buyerId === 'NEW') {
+            alert('Veuillez d\'abord enregistrer l\'acheteur');
+            return;
+        }
+
+        // Get buyer data
+        const buyer = await invoke('get_buyer', { buyerId: parseInt(buyerId) });
+        currentDischargeBuyer = buyer;
+
+        // Populate form
+        document.getElementById('dischargeBuyerName').value = buyer.nom_et_prenom || '';
+        document.getElementById('dischargeBuyerCity').value = buyer.city || 'عين الكرمة';
+        document.getElementById('dischargeReferenceNumber').value = buyer.cin || '';
+        
+        // Set issue date to today
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('dischargeIssueDate').value = today;
+        document.getElementById('dischargeSignatureDate').value = today;
+
+        // Calculate total amount paid
+        const totalPaid = calculateBuyerTotalPaid(buyer);
+        document.getElementById('dischargeTotalAmount').value = totalPaid.toFixed(2);
+
+        // Show modal
+        document.getElementById('dischargeModal').style.display = 'block';
+    } catch (error) {
+        console.error('Error showing discharge modal:', error);
+        alert('Erreur lors de l\'ouverture du formulaire: ' + error);
+    }
+}
+
+// Close discharge modal
+function closeDischargeModal() {
+    document.getElementById('dischargeModal').style.display = 'none';
+    document.getElementById('dischargeForm').reset();
+    currentDischargeBuyer = null;
+}
+
+// Calculate total paid amount for discharge certificate
+function calculateBuyerTotalPaid(buyer) {
+    let total = 0;
+    
+    if (buyer.payments && typeof buyer.payments === 'object') {
+        Object.values(buyer.payments).forEach(payment => {
+            if (typeof payment === 'number') {
+                total += payment;
+            }
+        });
+    }
+    
+    return total;
+}
+
+// Get discharge data from form
+function getDischargeData() {
+    if (!currentDischargeBuyer) {
+        throw new Error('No buyer data available');
+    }
+
+    return {
+        buyerName: document.getElementById('dischargeBuyerName').value,
+        buyerCity: document.getElementById('dischargeBuyerCity').value,
+        referenceNumber: document.getElementById('dischargeReferenceNumber').value,
+        issueDate: document.getElementById('dischargeIssueDate').value,
+        totalAmount: document.getElementById('dischargeTotalAmount').value,
+        signatureDate: document.getElementById('dischargeSignatureDate').value
+    };
+}
+
+// Preview discharge certificate
+async function previewDischarge() {
+    try {
+        const dischargeData = getDischargeData();
+        const generator = await initDischargeGenerator();
+        await generator.preview(dischargeData);
+    } catch (error) {
+        console.error('Error previewing discharge:', error);
+        alert('Erreur lors de la prévisualisation: ' + error.message);
+    }
+}
+
+// Download discharge certificate
+async function downloadDischarge() {
+    try {
+        const dischargeData = getDischargeData();
+        const generator = await initDischargeGenerator();
+        
+        const filename = `Discharge_${currentDischargeBuyer.nom_et_prenom.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+        await generator.download(dischargeData, filename);
+        
+        alert('Le certificat de décharge a été téléchargé avec succès');
+    } catch (error) {
+        console.error('Error downloading discharge:', error);
+        alert('Erreur lors du téléchargement: ' + error.message);
+    }
+}
+
+// Print discharge certificate
+async function printDischarge() {
+    try {
+        const dischargeData = getDischargeData();
+        const generator = await initDischargeGenerator();
+        await generator.print(dischargeData);
+    } catch (error) {
+        console.error('Error printing discharge:', error);
+        alert('Erreur lors de l\'impression: ' + error.message);
+    }
+}
+
+// Make functions globally accessible
+window.showDischargeModal = showDischargeModal;
+window.closeDischargeModal = closeDischargeModal;
+window.previewDischarge = previewDischarge;
+window.downloadDischarge = downloadDischarge;
+window.printDischarge = printDischarge;
+
+// ========== END DISCHARGE CERTIFICATE FUNCTIONS ==========
 
 // Event listener for the new print summary button
 document.addEventListener('DOMContentLoaded', function () {

@@ -1458,6 +1458,20 @@ async fn migrate_buyers_table_internal(pool: &PgPool) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
     }
     
+    if !column_names.contains(&"complementary_info".to_string()) {
+        sqlx::query("ALTER TABLE buyers ADD COLUMN complementary_info TEXT DEFAULT ''")
+            .execute(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    
+    if !column_names.contains(&"prix_unitaire_buyer".to_string()) {
+        sqlx::query("ALTER TABLE buyers ADD COLUMN prix_unitaire_buyer NUMERIC(15, 2)")
+            .execute(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    
     // Update any null bloc values to 'A'
     sqlx::query("UPDATE buyers SET bloc = 'A' WHERE bloc IS NULL")
         .execute(pool)
