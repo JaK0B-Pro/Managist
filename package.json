@@ -15,6 +15,7 @@
     "vite": "^6.2.5"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.4.1"
+    "@tauri-apps/api": "^2.4.1",
+    "xlsx-js-style": "^1.2.0"
   }
 }

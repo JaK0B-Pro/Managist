@@ -76,8 +76,13 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Display current user name in header
     displayCurrentUserName();
     
-    // Set initial amount to 0
-    document.querySelector('.amount').textContent = '0,00';
+    // Set initial amounts to 0
+    const balSalaire = document.getElementById('balance-salaire');
+    const balAcompte = document.getElementById('balance-acompte');
+    const balNet     = document.getElementById('balance-net');
+    if (balSalaire) balSalaire.textContent = '0,00 DA';
+    if (balAcompte) balAcompte.textContent = '0,00 DA';
+    if (balNet)     balNet.textContent     = '0,00 DA';
     // Get modal elements
     const modal = document.getElementById('addEmployeeModal');
     const addButton = document.getElementById('ajouter-un-emploee-button');
@@ -1350,8 +1355,11 @@ function updateEmployeeTable(employees) {
     
     tbody.innerHTML = '';
     
+    let totalSalaire = 0;
+    let totalAcompte = 0;
     let totalNetAPayer = 0;
-      employees.forEach((employee) => {
+
+    employees.forEach((employee) => {
         const row = document.createElement('tr');
         row.setAttribute('data-employee-id', employee.employee_id);
         row.setAttribute('data-project-id', employee.project_id);
@@ -1375,12 +1383,54 @@ function updateEmployeeTable(employees) {
         `;
         tbody.appendChild(row);
         
-        // Add to total Net a Payer
-        totalNetAPayer += Number(employee.net_a_payer);
+        // Accumulate totals
+        totalSalaire    += Number(employee.salaire)     || 0;
+        totalAcompte    += Number(employee.acompte)     || 0;
+        totalNetAPayer  += Number(employee.net_a_payer) || 0;
     });
-    
-    // Update total Net a Payer in the balance section
-    document.querySelector('.amount').textContent = totalNetAPayer.toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+    // ── Totals row ────────────────────────────────────────────────────────────
+    if (employees.length > 0) {
+        // Thin separator line above the totals
+        const separatorRow = document.createElement('tr');
+        separatorRow.innerHTML = `<td colspan="11" style="border-top: 3px solid #2c3e50; padding: 0; height: 4px;"></td>`;
+        tbody.appendChild(separatorRow);
+
+        const totalRow = document.createElement('tr');
+        totalRow.style.backgroundColor = '#2c3e50';
+        totalRow.style.color = 'white';
+        totalRow.style.fontWeight = 'bold';
+        totalRow.style.fontSize = '1.05em';
+        totalRow.innerHTML = `
+            <td colspan="7" style="text-align: right; padding-right: 18px; letter-spacing: 0.5px;">
+                ⭐ TOTAUX
+            </td>
+            <td style="text-align: right; padding-right: 8px; color: #2ecc71;">
+                ${totalSalaire.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} DA
+            </td>
+            <td style="text-align: right; padding-right: 8px; color: #f39c12;">
+                ${totalAcompte.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} DA
+            </td>
+            <td style="text-align: right; padding-right: 8px; color: #3498db; font-size: 1.1em;">
+                ${totalNetAPayer.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} DA
+            </td>
+            <td></td>
+        `;
+        tbody.appendChild(totalRow);
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // Update balance panel
+    const fmt = v => v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' DA';
+    const balSalaire = document.getElementById('balance-salaire');
+    const balAcompte = document.getElementById('balance-acompte');
+    const balNet     = document.getElementById('balance-net');
+    if (balSalaire) balSalaire.textContent = fmt(totalSalaire);
+    if (balAcompte) balAcompte.textContent = fmt(totalAcompte);
+    if (balNet)     balNet.textContent     = fmt(totalNetAPayer);
+    // Keep legacy .amount selector working
+    const legacyAmount = document.querySelector('.amount');
+    if (legacyAmount) legacyAmount.textContent = totalNetAPayer.toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 }
 
 // Delete employee function (global scope for onclick)
@@ -1595,20 +1645,33 @@ function performSearch() {
 // Function to update total amount based on visible rows
 function updateVisibleTotal() {
     const visibleRows = document.querySelectorAll('table tbody tr:not([style*="display: none"])');
+    let totalSalaire   = 0;
+    let totalAcompte   = 0;
     let totalNetAPayer = 0;
-      visibleRows.forEach(row => {
-        const netPayCell = row.cells[9]; // Net a Payer is the 10th column (index 9)
-        if (netPayCell) {
-            const value = parseFloat(netPayCell.textContent) || 0;
-            totalNetAPayer += value;
-        }
+
+    visibleRows.forEach(row => {
+        // Skip separator / totals rows (they have colspan cells)
+        if (row.cells.length < 11) return;
+        const salaireCell = row.cells[7];  // Salaire   – column index 7
+        const acompteCell = row.cells[8];  // Acompte   – column index 8
+        const netPayCell  = row.cells[9];  // Net Payer – column index 9
+        if (salaireCell) totalSalaire   += parseFloat(salaireCell.textContent) || 0;
+        if (acompteCell) totalAcompte   += parseFloat(acompteCell.textContent) || 0;
+        if (netPayCell)  totalNetAPayer += parseFloat(netPayCell.textContent)  || 0;
     });
-    
-    // Update the total amount display
-    document.querySelector('.amount').textContent = totalNetAPayer.toLocaleString('fr-FR', {
-        minimumFractionDigits: 2, 
-        maximumFractionDigits: 2
-    });
+
+    const fmt = v => v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' DA';
+
+    const balSalaire = document.getElementById('balance-salaire');
+    const balAcompte = document.getElementById('balance-acompte');
+    const balNet     = document.getElementById('balance-net');
+    if (balSalaire) balSalaire.textContent = fmt(totalSalaire);
+    if (balAcompte) balAcompte.textContent = fmt(totalAcompte);
+    if (balNet)     balNet.textContent     = fmt(totalNetAPayer);
+
+    // Keep legacy .amount selector working for any other code that reads it
+    const legacyAmount = document.querySelector('.amount');
+    if (legacyAmount) legacyAmount.textContent = totalNetAPayer.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 // PDF Generation Functionality

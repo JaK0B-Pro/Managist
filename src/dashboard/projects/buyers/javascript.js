@@ -8706,6 +8706,153 @@ window.printDischarge = printDischarge;
 // ========== END DISCHARGE CERTIFICATE FUNCTIONS ==========
 
 // Event listener for the new print summary button
+// ========== EXPORT TO EXCEL ==========
+async function exportBuyersToExcel() {
+    const btn = document.getElementById('exportToExcelButton');
+    const originalHTML = btn ? btn.innerHTML : '';
+    try {
+        if (btn) {
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Exporting...';
+            btn.disabled = true;
+        }
+
+        // Fetch buyers
+        const buyers = await invoke('get_buyers_by_project', { projectId: PROJECT_ID });
+
+        // Get project name for the title row
+        let projectName = 'Projet';
+        try {
+            const projects = await invoke('get_projects');
+            const project = projects.find(p => p.id === PROJECT_ID);
+            if (project) projectName = project.project_name;
+        } catch (e) { /* ignore – use default */ }
+
+        if (!buyers || buyers.length === 0) {
+            alert('Aucun acheteur à exporter.');
+            return;
+        }
+
+        // Determine the highest tranche index used by any buyer
+        let maxT = 0;
+        buyers.forEach(buyer => {
+            let payments = {};
+            try { payments = typeof buyer.payments === 'string' ? JSON.parse(buyer.payments) : buyer.payments || {}; } catch (e) {}
+            Object.keys(payments).forEach(key => {
+                const idx = parseInt(key.replace('T', ''));
+                if (!isNaN(idx) && idx > maxT) maxT = idx;
+            });
+        });
+
+        // Build column headers – matches the on-screen table exactly
+        const baseHeaders = [
+            'BLOC', 'NIVEAU', 'N° LOGT', 'NOM', 'PRENOM',
+            'TYPE LOGT', 'SURFACE (m²)', 'DATE',
+            'PRIX TOTALE (DA)', 'REMISE (DA)'
+        ];
+        const trancheHeaders = [];
+        for (let i = 0; i <= maxT; i++) trancheHeaders.push(`T${i} (DA)`);
+        const headers = [...baseHeaders, ...trancheHeaders, 'TOTAL PAYÉ (DA)', 'STATUT PAIEMENT', 'STATUT ACHETEUR'];
+
+        // Build one row per buyer
+        const dataRows = buyers.map(buyer => {
+            let payments = {};
+            try { payments = typeof buyer.payments === 'string' ? JSON.parse(buyer.payments) : buyer.payments || {}; } catch (e) {}
+
+            const row = [
+                buyer.bloc || '',
+                buyer.niveau || '',
+                buyer.logt_num || '',
+                buyer.nom || '',
+                buyer.prenom || '',
+                buyer.type_logt || '',
+                parseFloat(buyer.surface) || 0,
+                buyer.date || '',
+                parseFloat(buyer.prix_totale) || 0,
+                parseFloat(buyer.remise) || 0,
+            ];
+
+            // Tranche columns
+            for (let i = 0; i <= maxT; i++) {
+                const td = payments[`T${i}`];
+                let amount = 0;
+                if (typeof td === 'object' && td !== null) {
+                    amount = parseFloat(td.amount) || 0;
+                } else if (typeof td === 'number') {
+                    amount = td;
+                }
+                row.push(amount);
+            }
+
+            row.push(parseFloat(buyer.total_paid) || 0);
+            row.push(getPaymentStatusText(buyer.payment_status || 'unpaid'));
+            row.push(buyer.buyer_status || 'active');
+            return row;
+        });
+
+        // Totals row
+        const totalsRow = new Array(headers.length).fill('');
+        totalsRow[0] = 'TOTAL';
+        const COL_PRIX     = 8;
+        const COL_REMISE   = 9;
+        const COL_TOTAL_PAID = 10 + maxT + 1;
+        totalsRow[COL_PRIX]       = buyers.reduce((s, b) => s + (parseFloat(b.prix_totale) || 0), 0);
+        totalsRow[COL_REMISE]     = buyers.reduce((s, b) => s + (parseFloat(b.remise) || 0), 0);
+        for (let i = 0; i <= maxT; i++) {
+            const colIdx = 10 + i;
+            totalsRow[colIdx] = dataRows.reduce((s, r) => s + (parseFloat(r[colIdx]) || 0), 0);
+        }
+        totalsRow[COL_TOTAL_PAID] = buyers.reduce((s, b) => s + (parseFloat(b.total_paid) || 0), 0);
+
+        // Sheet layout: title row → blank → header → data rows → blank → totals
+        const exportDate = new Date().toLocaleDateString('fr-FR');
+        const titleRow   = [`${projectName} — Liste des Acheteurs — Exporté le ${exportDate}`];
+        const sheetData  = [titleRow, [], headers, ...dataRows, [], totalsRow];
+
+        const ws = XLSX.utils.aoa_to_sheet(sheetData);
+
+        // Column widths
+        const colWidths = [
+            { wch: 8  }, // BLOC
+            { wch: 10 }, // NIVEAU
+            { wch: 10 }, // N° LOGT
+            { wch: 20 }, // NOM
+            { wch: 20 }, // PRENOM
+            { wch: 14 }, // TYPE LOGT
+            { wch: 12 }, // SURFACE
+            { wch: 12 }, // DATE
+            { wch: 20 }, // PRIX TOTALE
+            { wch: 14 }, // REMISE
+        ];
+        for (let i = 0; i <= maxT; i++) colWidths.push({ wch: 14 });
+        colWidths.push({ wch: 18 }); // TOTAL PAYÉ
+        colWidths.push({ wch: 20 }); // STATUT PAIEMENT
+        colWidths.push({ wch: 16 }); // STATUT ACHETEUR
+        ws['!cols'] = colWidths;
+
+        // Merge title cell across all columns
+        ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } }];
+
+        // Freeze panes: keep title + header rows visible while scrolling
+        ws['!views'] = [{ state: 'frozen', ySplit: 3 }];
+
+        // Create workbook and trigger download
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Acheteurs');
+
+        const safeName = projectName.replace(/[^\w\-]/g, '_');
+        const dateStr  = new Date().toISOString().slice(0, 10);
+        XLSX.writeFile(wb, `${safeName}_acheteurs_${dateStr}.xlsx`);
+
+    } catch (error) {
+        console.error('❌ Error exporting to Excel:', error);
+        alert("Erreur lors de l'export Excel : " + error);
+    } finally {
+        if (btn) { btn.innerHTML = originalHTML; btn.disabled = false; }
+    }
+}
+// ========== END EXPORT TO EXCEL ==========
+
+// Event listener for the new print summary button
 document.addEventListener('DOMContentLoaded', function () {
     const printSummaryButton = document.getElementById('printPaymentSummaryBtn');
     if (printSummaryButton) {
@@ -8720,5 +8867,9 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    // ... existing code ...
+    // Export to Excel button
+    const exportExcelBtn = document.getElementById('exportToExcelButton');
+    if (exportExcelBtn) {
+        exportExcelBtn.addEventListener('click', exportBuyersToExcel);
+    }
 });

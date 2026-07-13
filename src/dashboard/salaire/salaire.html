@@ -129,7 +129,21 @@
             </section>
             
             <section class="balance">
-                <p class="amount"></p>
+                <!-- <p class="balance-title" style="margin:0 0 10px 0; font-size:0.72rem; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#888;">&#x1F4CA; Récap du Chantier</p> -->
+                <div class="balance-totals">
+                    <div class="balance-item">
+                        <span class="balance-label">&#x1F4B0; Salaire</span>
+                        <span class="balance-value total-salaire-display" id="balance-salaire">0,00 DA</span>
+                    </div>
+                    <div class="balance-item">
+                        <span class="balance-label">&#x1F4E4; Acompte</span>
+                        <span class="balance-value total-acompte-display" id="balance-acompte">0,00 DA</span>
+                    </div>
+                    <div class="balance-item balance-item--highlight">
+                        <span class="balance-label">&#x2705; Net à Payer</span>
+                        <span class="balance-value total-net-display amount" id="balance-net">0,00 DA</span>
+                    </div>
+                </div>
             </section>
         </main>
     </div>
