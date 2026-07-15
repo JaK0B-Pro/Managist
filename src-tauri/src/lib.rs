@@ -1393,6 +1393,58 @@ async fn update_buyer_payments(app: AppHandle, pool: tauri::State<'_, PgPool>, b
     Ok(())
 }
 
+// Save a scanned/attached check image or PDF for a specific buyer tranche.
+// The file bytes are received as a base64 string (optionally as a data: URL)
+// from the frontend, decoded, and written into the app's local data directory.
+// Returns the absolute path of the saved file so it can be stored inside the
+// buyer's `payments` JSONB (as `scan_path` on the relevant tranche) and reopened later.
+#[tauri::command]
+async fn save_check_scan(
+    app: AppHandle,
+    buyer_id: i32,
+    tranche_index: i32,
+    file_name: String,
+    file_data: String,
+) -> Result<String, String> {
+    use base64::{engine::general_purpose, Engine as _};
+
+    // Strip a potential "data:<mime>;base64," prefix coming from FileReader.readAsDataURL
+    let base64_payload = match file_data.find(',') {
+        Some(idx) if file_data.starts_with("data:") => &file_data[idx + 1..],
+        _ => file_data.as_str(),
+    };
+
+    let bytes = general_purpose::STANDARD
+        .decode(base64_payload)
+        .map_err(|e| format!("Failed to decode scanned file: {}", e))?;
+
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to resolve app data directory: {}", e))?;
+
+    let scans_dir = app_data_dir.join("check_scans");
+    std::fs::create_dir_all(&scans_dir)
+        .map_err(|e| format!("Failed to create check_scans directory: {}", e))?;
+
+    // Only keep a safe, whitelisted extension from the original file name
+    let ext = std::path::Path::new(&file_name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase())
+        .filter(|e| ["jpg", "jpeg", "png", "webp", "pdf"].contains(&e.as_str()))
+        .unwrap_or_else(|| "jpg".to_string());
+
+    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S%3f");
+    let safe_file_name = format!("buyer{}_T{}_{}.{}", buyer_id, tranche_index, timestamp, ext);
+    let file_path = scans_dir.join(&safe_file_name);
+
+    std::fs::write(&file_path, &bytes)
+        .map_err(|e| format!("Failed to write scanned check file: {}", e))?;
+
+    Ok(file_path.to_string_lossy().to_string())
+}
+
 // Internal migration function for startup
 async fn migrate_buyers_table_internal(pool: &PgPool) -> Result<(), String> {
     // First, check if the table exists and what columns it has
@@ -2663,6 +2715,7 @@ pub fn run() -> Result<(), String> {
             edit_buyer_in_database,
             update_buyer,
             update_buyer_payments,
+            save_check_scan,
             migrate_buyers_table,
             migrate_employees_table,
             migrate_employee_salary_table,

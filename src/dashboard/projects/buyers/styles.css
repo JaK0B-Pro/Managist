@@ -2883,6 +2883,62 @@ header {
     font-size: 14px;
 }
 
+.btn-scan-cheque {
+    background-color: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 8px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background-color 0.3s ease;
+    min-width: 32px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-scan-cheque:hover {
+    background-color: #545b62;
+}
+
+.btn-scan-cheque.has-scan {
+    background-color: #28a745;
+}
+
+.btn-scan-cheque.has-scan:hover {
+    background-color: #1e7e34;
+}
+
+.btn-scan-cheque i {
+    font-size: 14px;
+}
+
+.btn-view-scan {
+    background-color: #17a2b8;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 8px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background-color 0.3s ease;
+    min-width: 32px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-view-scan:hover {
+    background-color: #117a8b;
+}
+
+.btn-view-scan i {
+    font-size: 14px;
+}
+
 .check-input::placeholder {
     color: #999;
     font-size: 11px;

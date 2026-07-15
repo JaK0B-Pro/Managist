@@ -179,6 +179,8 @@ async function buildBuyerDataFromForm() {
             const dateInput = row.querySelector('input[type="date"]') || row.querySelector('input[name*="date"]');
             const typeSelect = row.querySelector('select[name^="tranche_"][name$="_type"]') || row.querySelector('select[name*="type"]');
             const checkInput = row.querySelector('.check-input') || row.querySelector('input[name*="check"]');
+            const scanBtn = row.querySelector('.btn-scan-cheque');
+            const scanPath = scanBtn ? (scanBtn.getAttribute('data-scan-path') || '') : '';
 
             if (amountInput && typeSelect) {
                 const value = parseFloat(amountInput.value) || 0;
@@ -195,7 +197,8 @@ async function buildBuyerDataFromForm() {
                         amount: value,
                         date: date,
                         type: type,
-                        check_number: checkNumber || null
+                        check_number: checkNumber || null,
+                        scan_path: scanPath || null
                     };
                     totalPaidAmount += value;
                 }
@@ -702,6 +705,9 @@ function addTranche() {
                        placeholder="N° Chèque" class="check-input" title="Numéro de chèque">
                 <button type="button" class="btn-print-cheque" onclick="printRecuCheque(${trancheCount})" title="Print Reçu de Chèque">
                     <i class="fas fa-print"></i>
+                </button>
+                <button type="button" class="btn-scan-cheque" onclick="scanCheque(this, ${trancheCount})" title="Scanner / Joindre le Chèque">
+                    <i class="fas fa-camera"></i>
                 </button>
             </div>
         </div>
@@ -3023,13 +3029,15 @@ async function editBuyer(buyerId) {
             let date = '';
             let type = 'versement';
             let checkNumber = '';
+            let scanPath = '';
 
             if (typeof payments[key] === 'object' && payments[key] !== null) {
-                // New format: {amount: x, date: 'yyyy-mm-dd', type: 'versement|espece', check_number: 'xxx'}
+                // New format: {amount: x, date: 'yyyy-mm-dd', type: 'versement|espece', check_number: 'xxx', scan_path: 'xxx'}
                 amount = payments[key].amount || 0;
                 date = payments[key].date || '';
                 type = payments[key].type || 'versement';
                 checkNumber = payments[key].check_number || '';
+                scanPath = payments[key].scan_path || '';
             } else {
                 // Old format: just a number
                 amount = payments[key] || 0;
@@ -3049,6 +3057,10 @@ async function editBuyer(buyerId) {
                         <button type="button" class="btn-print-cheque" onclick="printRecuCheque(${index})" title="Print Reçu de Chèque">
                             <i class="fas fa-print"></i>
                         </button>
+                        <button type="button" class="btn-scan-cheque ${scanPath ? 'has-scan' : ''}" onclick="scanCheque(this, ${index})" title="${scanPath ? 'Chèque scanné joint - Cliquez pour remplacer' : 'Scanner / Joindre le Chèque'}" data-scan-path="${scanPath ? scanPath.replace(/"/g, '&quot;') : ''}">
+                            <i class="fas fa-camera"></i>
+                        </button>
+                        ${scanPath ? `<button type="button" class="btn-view-scan" onclick="viewCheckScan(this)" title="Voir le chèque scanné" data-scan-path="${scanPath.replace(/"/g, '&quot;')}"><i class="fas fa-eye"></i></button>` : ''}
                     </div>
                 </div>
                 <input type="date" name="tranche_date_${index}" value="${date}" title="Payment date for T${index}">
@@ -6537,6 +6549,99 @@ async function generateRecuCheque(buyerName, prenom, trancheIndex, amount, date,
 
 // Make printRecuCheque function globally accessible
 window.printRecuCheque = printRecuCheque;
+
+// ========== SCAN / ATTACH CHECK FUNCTIONS ==========
+// Opens a native file picker so the user can select an existing scan
+// (image or PDF) of the physical check, then saves it into the app's
+// local data folder via the Rust backend and remembers its path on the
+// tranche row so it gets persisted with the buyer's payments on save.
+function scanCheque(buttonEl, trancheIndex) {
+    const form = document.getElementById('addBuyerForm');
+    const buyerId = form?.getAttribute('data-buyer-id') || 'NEW';
+
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*,.pdf';
+    fileInput.style.display = 'none';
+
+    fileInput.addEventListener('change', async () => {
+        const file = fileInput.files && fileInput.files[0];
+        if (!file) {
+            fileInput.remove();
+            return;
+        }
+
+        const originalHTML = buttonEl.innerHTML;
+        buttonEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        buttonEl.disabled = true;
+
+        try {
+            const base64Data = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+
+            const savedPath = await invoke('save_check_scan', {
+                buyerId: parseInt(buyerId) || 0,
+                trancheIndex: parseInt(trancheIndex) || 0,
+                fileName: file.name,
+                fileData: base64Data
+            });
+
+            // Remember the saved path directly on the button so buildBuyerDataFromForm can read it
+            buttonEl.setAttribute('data-scan-path', savedPath);
+            buttonEl.classList.add('has-scan');
+            buttonEl.title = 'Chèque scanné joint - Cliquez pour remplacer';
+
+            // Add/refresh the "view scan" button right after the scan button
+            const container = buttonEl.closest('.check-number-and-print-container');
+            let viewBtn = container ? container.querySelector('.btn-view-scan') : null;
+            if (!viewBtn && container) {
+                viewBtn = document.createElement('button');
+                viewBtn.type = 'button';
+                viewBtn.className = 'btn-view-scan';
+                viewBtn.title = 'Voir le chèque scanné';
+                viewBtn.innerHTML = '<i class="fas fa-eye"></i>';
+                viewBtn.addEventListener('click', () => viewCheckScan(viewBtn));
+                container.appendChild(viewBtn);
+            }
+            if (viewBtn) viewBtn.setAttribute('data-scan-path', savedPath);
+
+            console.log('✅ Check scan saved:', savedPath);
+        } catch (error) {
+            console.error('❌ Error saving check scan:', error);
+            alert("Erreur lors de l'enregistrement du chèque scanné : " + error);
+        } finally {
+            buttonEl.innerHTML = originalHTML.includes('fa-spinner') ? '<i class="fas fa-camera"></i>' : originalHTML;
+            buttonEl.disabled = false;
+            fileInput.remove();
+        }
+    });
+
+    document.body.appendChild(fileInput);
+    fileInput.click();
+}
+
+// Opens a previously saved check scan with the OS default viewer/app
+async function viewCheckScan(buttonEl) {
+    const path = buttonEl.getAttribute('data-scan-path');
+    if (!path) {
+        alert('Aucun chèque scanné disponible.');
+        return;
+    }
+    try {
+        await window.__TAURI__.opener.openPath(path);
+    } catch (error) {
+        console.error('❌ Error opening check scan:', error);
+        alert("Impossible d'ouvrir le fichier scanné : " + error);
+    }
+}
+
+window.scanCheque = scanCheque;
+window.viewCheckScan = viewCheckScan;
+// ========== END SCAN / ATTACH CHECK FUNCTIONS ==========
 
 // Utility function to calculate maxEspece safely (never negative)
 function calculateMaxEspece(reducedTotalPrice, maxVersement) {

@@ -5,6 +5,12 @@
   "windows": ["main", "loading"],  "permissions": [
     "core:default",
     "opener:default",
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [
+        { "path": "$APPDATA/check_scans/**" }
+      ]
+    },
     "core:window:allow-set-size",
     "core:window:allow-center",
     "core:event:allow-listen",
