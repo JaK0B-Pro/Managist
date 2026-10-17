@@ -27,6 +27,14 @@ target/
 *.sqlite
 *.sqlite3
 
+# Database dumps and backups (contain real client data - never commit)
+managist*.sql
+*backup*.sql
+*.dump
+
+# Windows stray files created by redirecting to "nul"
+nul
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -53,6 +61,3 @@ Thumbs.db
 
 # Build outputs
 build/
-
-# Rust specific
-Cargo.lock

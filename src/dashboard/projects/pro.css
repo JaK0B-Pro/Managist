@@ -633,6 +633,12 @@ form button {
   position: relative;
 }
 
+/* Edit Project Modal - wider width */
+#editProjectModal .modal-content {
+  width: 650px;
+  max-width: 90%;
+}
+
 @keyframes modalFadeIn {
   from {
     opacity: 0;
@@ -1168,3 +1174,16 @@ form button {
   border: 2px dashed #dee2e6;
 }
 
+/* Settings button specific styling */
+.settings-btn {
+  background-color: #3498db;
+  color: white;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+}
+
+.settings-btn:hover {
+  background-color: #2980b9;
+  transform: scale(1.1);
+  box-shadow: 0 4px 8px rgba(0, 86, 179, 0.4);
+}

@@ -7,17 +7,17 @@ export default defineConfig({
   clearScreen: false,
   root: 'src',
   server: {
-    port: 1422,
+    port: 1420,
     // Tauri expects a fixed port, fail if that port is not available
     strictPort: true,
     // if the host Tauri is expecting is set, use it
     host: host || false,
     hmr: host
       ? {
-          protocol: 'ws',
-          host,
-          port: 1423,
-        }
+        protocol: 'ws',
+        host,
+        port: 1423,
+      }
       : undefined,
 
     watch: {
@@ -28,6 +28,8 @@ export default defineConfig({
   // Env variables starting with the item of `envPrefix` will be exposed in tauri's source code through `import.meta.env`.
   envPrefix: ['VITE_', 'TAURI_ENV_*'],
   build: {
+    outDir: 'dist',
+    emptyOutDir: true,
     // Tauri uses Chromium on Windows and WebKit on macOS and Linux
     target:
       process.env.TAURI_ENV_PLATFORM == 'windows'

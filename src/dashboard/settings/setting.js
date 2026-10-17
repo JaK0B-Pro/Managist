@@ -7,7 +7,7 @@ function getCurrentUserRole() {
     if (storedUser) {
         try {
             const userObject = JSON.parse(storedUser);
-            return userObject.role || '0';
+            return userObject.role || userObject.admin || '0';
         } catch (error) {
             return '0';
         }
@@ -18,7 +18,8 @@ function getCurrentUserRole() {
 function setupRoleBasedNavigation() {
     const role = getCurrentUserRole();
     
-    // Hide salary link for role 2 (Manager)
+    // Hide salary link ONLY for Manager (role 2)
+    // Admin (role 1) should have access to everything
     if (role === '2') {
         const salaryLinks = document.querySelectorAll('a[href*="salaire"]');
         salaryLinks.forEach(link => {

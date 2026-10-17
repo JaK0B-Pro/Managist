@@ -1,6 +1,6 @@
 [package]
 name = "Managist"
-version = "0.1.0"
+version = "0.1.4"
 description = "A Tauri Entreprise Managment App"
 authors = ["Fezzaa Lamri Yaakoub, Bouhara Yahia Abderraouf"]
 edition = "2021"
@@ -13,6 +13,10 @@ edition = "2021"
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
 name = "my_application_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "Managist"
+path = "src/main.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -32,6 +36,17 @@ rust_decimal = { version = "1.32", features = ["serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 num-traits = "0.2"
 dotenvy = "0.15"
+base64 = "0.22"
+
+# Windows-specific configuration to prevent console window
+[target.'cfg(windows)'.dependencies]
+
+# Profile configuration to ensure console is hidden in release builds
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+panic = "abort"
 
 
 

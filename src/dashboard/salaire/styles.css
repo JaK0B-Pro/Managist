@@ -102,15 +102,11 @@ header h1 {
     bottom: 20px;
     right: 20px;
     width: 250px;
-    z-index: 100;
+    z-index: 10;
+    pointer-events: none;
 }
 
-.balance .amount {
-    font-size: 2rem;
-    font-weight: bold;
-    color: #27ae60;
-    margin-top: 10px;
-}
+/* .balance .amount legacy rule removed — balance panel now uses .balance-value */
 
 .transactions {
     position: relative;
@@ -299,7 +295,8 @@ tbody tr:hover {
 }
 
 /* Delete confirmation modal flexbox centering */
-#deleteConfirmationModal {
+#deleteConfirmationModal,
+#updateSuccessModal {
     align-items: center;
     justify-content: center;
 }
@@ -508,6 +505,7 @@ tbody tr:hover {
 }
 
 .form-group input,
+.form-group select,
 .form-group textarea {
     width: 100%;
     padding: 10px;
@@ -518,10 +516,16 @@ tbody tr:hover {
 }
 
 .form-group input:focus,
+.form-group select:focus,
 .form-group textarea:focus {
     outline: none;
     border-color: #4a90e2;
     box-shadow: 0 2px 8px rgba(74, 144, 226, 0.2);
+}
+
+.form-group select {
+    cursor: pointer;
+    background-color: white;
 }
 
 .form-group textarea {
@@ -696,27 +700,7 @@ table th, table td {
 
 
 
-.balance {
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    margin-top: 20px;
-    padding: 10px 0;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-.amount {
-    font-size: 2.2rem;
-    font-weight: bold;
-    color: #2b9348;
-    background: none;
-    border-radius: 0;
-    padding: 0;
-    box-shadow: none;
-    min-width: 160px;
-    text-align: center;
-}
+/* stale .balance flex override + standalone .amount removed — definitive panel CSS is in the BALANCE PANEL block below */
 
 tbody tr {
     position: relative;
@@ -790,6 +774,43 @@ tbody tr:hover .action-buttons {
 }
 
 /* Project dropdown styling */
+/* Date dropdown styles (year and month) */
+.date-dropdown {
+    position: absolute;
+    top: 20px;
+    padding: 12px 16px;
+    margin-right: 10px;
+    background-color: white;
+    border: 2px solid #e1e4e8;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #333;
+    width: 120px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+#year-selector {
+    right: 840px;
+}
+
+#month-selector {
+    right: 700px;
+}
+
+.date-dropdown:focus {
+    outline: none;
+    border-color: #4a90e2;
+    box-shadow: 0 2px 8px rgba(74, 144, 226, 0.2);
+}
+
+.date-dropdown option {
+    padding: 10px;
+    font-size: 14px;
+}
+
 .project-dropdown {
     position: absolute;
     right: 420px;
@@ -887,50 +908,677 @@ tbody tr:hover .action-buttons {
     width: 400px;
     max-width: 90%;
     text-align: center;
+    padding: 0 !important;
+    overflow: hidden;
 }
 
 .success-header {
     background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
     color: white;
-    padding: 20px;
+    padding: 25px 20px;
     border-radius: 12px 12px 0 0;
-    margin: -15px -15px 20px -15px;
+    margin: 0;
 }
 
 .success-header h2 {
     margin: 0;
-    font-size: 1.4rem;
+    font-size: 1.5rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: 12px;
+    font-weight: 600;
 }
 
 .success-header i {
-    font-size: 1.6rem;
+    font-size: 1.8rem;
+}
+
+.success-modal .modal-body {
+    padding: 30px 20px;
+    font-size: 1.05rem;
+    color: #333;
+}
+
+.success-modal .modal-body p {
+    margin: 0;
+    line-height: 1.5;
+}
+
+.success-modal .modal-footer {
+    padding: 0 20px 25px 20px;
+    border-top: none;
+    justify-content: center;
+    margin-top: 0;
 }
 
 .success-ok-btn {
     background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
     color: white;
-    padding: 12px 32px;
+    padding: 12px 40px;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    min-width: 120px;
+    box-shadow: 0 3px 8px rgba(40, 167, 69, 0.3);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.success-ok-btn:hover {
+    background: linear-gradient(135deg, #20c997 0%, #17a2b8 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(40, 167, 69, 0.4);
+}
+
+.success-ok-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 5px rgba(40, 167, 69, 0.3);
+}
+
+/* ========================================
+   ATTACHEMENT MODAL STYLES
+   ======================================== */
+
+/* Attachement button - slightly red */
+.attachement-btn {
+    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+    color: white;
+    padding: 12px 20px;
     border: none;
     border-radius: 10px;
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.3s ease;
-    min-width: 120px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 2px 8px rgba(231, 76, 60, 0.3);
 }
 
-.success-ok-btn:hover {
-    background: linear-gradient(135deg, #20c997 0%, #17a2b8 100%);
+.attachement-btn:hover {
+    background: linear-gradient(135deg, #c0392b 0%, #a93226 100%);
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+    box-shadow: 0 4px 12px rgba(231, 76, 60, 0.4);
 }
 
-.success-ok-btn:active {
+.attachement-btn:active {
     transform: translateY(0);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
+
+/* Undo button - orange/amber gradient */
+.undo-btn {
+    background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+    color: white;
+    padding: 12px 20px;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 2px 8px rgba(243, 156, 18, 0.3);
+    position: absolute;
+    right: 20px;
+    top: 80px;
+}
+
+.undo-btn:hover {
+    background: linear-gradient(135deg, #e67e22 0%, #d35400 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(243, 156, 18, 0.4);
+}
+
+.undo-btn:active {
+    transform: translateY(0);
+}
+
+.undo-btn:disabled {
+    background: #bdc3c7;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* Excel export button - green Excel color gradient */
+.excel-btn {
+    background: linear-gradient(135deg, #1d7044 0%, #0f5132 100%);
+    color: white;
+    padding: 12px 20px;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 2px 8px rgba(29, 112, 68, 0.3);
+}
+
+.excel-btn:hover {
+    background: linear-gradient(135deg, #0f5132 0%, #0a3622 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(29, 112, 68, 0.4);
+}
+
+.excel-btn:active {
+    transform: translateY(0);
+}
+
+/* Reset Sequence button - purple/indigo gradient */
+.reset-sequence-btn {
+    background: linear-gradient(135deg, #6c5ce7 0%, #5f27cd 100%);
+    color: white;
+    padding: 12px 20px;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 2px 8px rgba(108, 92, 231, 0.3);
+    position: absolute;
+    right: 20px;
+    top: 140px;
+}
+
+.reset-sequence-btn:hover {
+    background: linear-gradient(135deg, #5f27cd 0%, #4834df 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(108, 92, 231, 0.4);
+}
+
+.reset-sequence-btn:active {
+    transform: translateY(0);
+}
+
+/* Change ID modal styling */
+.change-id-modal {
+    width: 500px;
+    max-width: 90%;
+}
+
+.change-id-modal select,
+.change-id-modal input[type="number"],
+.change-id-modal input[disabled] {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: border-color 0.3s ease;
+}
+
+.change-id-modal select:focus,
+.change-id-modal input[type="number"]:focus {
+    border-color: #6c5ce7;
+    outline: none;
+}
+
+.change-id-modal input[disabled] {
+    background: #f8f9fa;
+    color: #6c757d;
+    cursor: not-allowed;
+}
+
+.cancel-change-id-btn,
+.save-change-id-btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.cancel-change-id-btn {
+    background: #e1e4e8;
+    color: #333;
+}
+
+.cancel-change-id-btn:hover {
+    background: #d1d5db;
+}
+
+.save-change-id-btn {
+    background: linear-gradient(135deg, #6c5ce7 0%, #5f27cd 100%);
+    color: white;
+}
+
+.save-change-id-btn:hover {
+    background: linear-gradient(135deg, #5f27cd 0%, #4834df 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(108, 92, 231, 0.3);
+}
+
+/* Import button - green gradient */
+.import-btn {
+    background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+    color: white;
+    padding: 12px 20px;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 2px 8px rgba(39, 174, 96, 0.3);
+}
+
+.import-btn:hover {
+    background: linear-gradient(135deg, #229954 0%, #1e8449 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(39, 174, 96, 0.4);
+}
+
+.import-btn:active {
+    transform: translateY(0);
+}
+
+/* Plus button next to Travaux Attaché field - red */
+.plus-attachement-btn {
+    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 6px rgba(231, 76, 60, 0.3);
+    font-size: 16px;
+}
+
+.plus-attachement-btn:hover {
+    background: linear-gradient(135deg, #c0392b 0%, #a93226 100%);
+    transform: scale(1.1);
+    box-shadow: 0 4px 10px rgba(231, 76, 60, 0.4);
+}
+
+.plus-attachement-btn:active {
+    transform: scale(0.95);
+}
+
+/* Attachement modal content */
+.attachement-modal-content {
+    width: 800px;
+    max-width: 95%;
+}
+
+.attachement-modal-content .form-group {
+    margin-bottom: 20px;
+}
+
+.attachement-modal-content .form-group label {
+    display: block;
+    margin-bottom: 8px;
+    color: #2c3e50;
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.attachement-modal-content .form-group input[type="text"] {
+    width: 100%;
+    padding: 12px 15px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    background: white;
+}
+
+.attachement-modal-content .form-group input[type="text"]:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.attachement-modal-content .form-group input[type="text"]:disabled {
+    background-color: #f0f0f0;
+    cursor: not-allowed;
+    color: #666;
+}
+
+.attachement-items-header {
+    margin: 20px 0 15px 0;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #3498db;
+}
+
+.attachement-items-header h3 {
+    color: #2c3e50;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.attachement-items-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin-bottom: 15px;
+}
+
+.attachement-item-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1.5fr 50px;
+    gap: 12px;
+    align-items: end;
+    background: white;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+}
+
+.attachement-item-row:hover {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.attachement-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.attachement-field label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #555;
+    margin-bottom: 2px;
+}
+
+.attachement-field input {
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: all 0.3s ease;
+}
+
+.attachement-field input:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.remove-item-btn {
+    background: #e74c3c;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 18px;
+}
+
+.remove-item-btn:hover {
+    background: #c0392b;
+    transform: scale(1.1);
+}
+
+.remove-item-btn:active {
+    transform: scale(0.95);
+}
+
+.add-item-btn {
+    background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+    color: white;
+    padding: 12px 20px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+.add-item-btn:hover {
+    background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(46, 204, 113, 0.3);
+}
+
+.add-item-btn:active {
+    transform: translateY(0);
+}
+
+.attachement-total {
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+    color: white;
+    padding: 15px 20px;
+    border-radius: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 16px;
+    font-weight: bold;
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+    margin-bottom: 20px;
+}
+
+.attachement-total strong {
+    font-size: 18px;
+}
+
+#attachementTotalAmount {
+    font-size: 20px;
+    letter-spacing: 1px;
+}
+
+.cancel-attachement-btn {
+    background: #95a5a6;
+    color: white;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.cancel-attachement-btn:hover {
+    background: #7f8c8d;
+    transform: translateY(-2px);
+}
+
+.save-attachement-btn {
+    background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+    color: white;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(46, 204, 113, 0.3);
+}
+
+.save-attachement-btn:hover {
+    background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(46, 204, 113, 0.4);
+}
+
+.save-attachement-btn:active {
+    transform: translateY(0);
+}
+
+/* Responsive design for attachement modal */
+@media (max-width: 768px) {
+    .attachement-item-row {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+    
+    .remove-item-btn {
+        width: 100%;
+        margin-top: 10px;
+    }
+    
+    .attachement-modal-content {
+        width: 95%;
+    }
+}
+
+/* Settings Icon Button for Auto-Fill */
+.settings-icon-btn {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    border: none;
+    padding: 12px 16px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    width: 48px;
+    height: 48px;
+}
+
+.settings-icon-btn:hover {
+    transform: translateY(-2px) rotate(90deg);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+}
+
+.settings-icon-btn:active {
+    transform: translateY(0) rotate(90deg);
+}
+
+.settings-icon-btn i {
+    font-size: 20px;
+}
+
+/* ============================================================
+   SALARY TOTALS ROW  (bottom of every chantier table)
+   ============================================================ */
+tr.salary-totals-row {
+    background: linear-gradient(90deg, #1a1a2e 0%, #16213e 100%);
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.95rem;
+    border-top: 3px solid #27ae60;
+    pointer-events: none;
+}
+
+tr.salary-totals-row td {
+    padding: 12px 10px;
+    border: none;
+}
+
+td.salary-totals-label {
+    font-size: 1rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #adb5bd;
+    padding-left: 14px !important;
+}
+
+td.salary-totals-cell {
+    text-align: right;
+    font-size: 1rem;
+    white-space: nowrap;
+}
+
+td.salaire-total  { color: #74b9ff; }
+td.acompte-total  { color: #fdcb6e; }
+td.net-total      { color: #55efc4; font-size: 1.1rem; }
+
+/* ============================================================
+   BALANCE PANEL  (fixed bottom-right — three totals)
+   ============================================================ */
+.balance {
+    background: #fff;
+    padding: 16px 20px;
+    border-radius: 14px;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.15);
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 280px;
+    z-index: 10;
+    pointer-events: none;
+    border-top: 4px solid #27ae60;
+}
+
+.balance-totals {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.balance-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: #f8f9fa;
+}
+
+.balance-item--highlight {
+    background: #e8f8f0;
+    border: 1px solid #27ae60;
+}
+
+.balance-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #555;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.balance-value {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #2c3e50;
+}
+
+.total-salaire-display { color: #2980b9; }
+.total-acompte-display  { color: #e67e22; }
+.total-net-display { color: #27ae60; font-size: 2.1rem; line-height: 1; }
+.amount { color: #27ae60; }

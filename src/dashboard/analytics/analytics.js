@@ -4,7 +4,7 @@ function getCurrentUserRole() {
     if (storedUser) {
         try {
             const userObject = JSON.parse(storedUser);
-            return userObject.role || '0';
+            return userObject.role || userObject.admin || '0';
         } catch (error) {
             return '0';
         }
@@ -15,7 +15,8 @@ function getCurrentUserRole() {
 function setupRoleBasedNavigation() {
     const role = getCurrentUserRole();
     
-    // Hide salary link for role 2 (Manager)
+    // Hide salary link ONLY for Manager (role 2)
+    // Admin (role 1) should have access to everything
     if (role === '2') {
         const salaryLinks = document.querySelectorAll('a[href*="salaire"]');
         salaryLinks.forEach(link => {
@@ -73,6 +74,12 @@ async function loadAnalyticsData() {
         
         // Display tables
         displayTables(projects, employees);
+        
+        // Load and display today's payments
+        await loadTodaysPayments();
+        
+        // Setup refresh button and date display
+        setupTodaysPaymentsUI();
         
         console.log('Analytics page fully loaded!');
         
@@ -399,3 +406,239 @@ document.getElementById('logout-button')?.addEventListener('click', () => {
 
 // Role-based navigation setup
 setupRoleBasedNavigation();
+
+// Load and display today's payments (wrapper for today)
+async function loadTodaysPayments() {
+    const today = new Date().toISOString().split('T')[0];
+    await loadPaymentsForDate(today);
+}
+
+// Load and display payments for a specific date
+async function loadPaymentsForDate(targetDate) {
+    try {
+        console.log('Loading payments for date:', targetDate);
+        
+        // Show loading state
+        const paymentsList = document.getElementById('todays-payment-list');
+        if (paymentsList) {
+            paymentsList.innerHTML = `
+                <div class="no-payments">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <p>Loading payments for ${targetDate}...</p>
+                </div>
+            `;
+        }
+        
+        const invoke = window.__TAURI__.core.invoke;
+        if (!invoke) {
+            console.error('Tauri invoke function not available');
+            displayTodaysPayments([], 0, 0, 0, 0, targetDate);
+            return;
+        }
+
+        // Get all projects to iterate through their buyers
+        const projects = await invoke('get_projects');
+        console.log('Found projects:', projects.length);
+        
+        let todaysPayments = [];
+        let totalVersements = 0;
+        let totalEspeces = 0;
+        let versementCount = 0;
+        let especeCount = 0;
+
+        // Iterate through all projects to get buyers and their payments
+        for (const project of projects) {
+            try {
+                const buyers = await invoke('get_buyers_by_project', { projectId: project.id });
+                console.log(`Project ${project.project_name}: ${buyers.length} buyers`);
+                
+                for (const buyer of buyers) {
+                    // Check if buyer has payment data
+                    if (buyer.payments) {
+                        console.log(`Buyer ${buyer.nom} ${buyer.prenom} has payments:`, typeof buyer.payments);
+                    }
+                    
+                    if (buyer.payments && typeof buyer.payments === 'string') {
+                        try {
+                            const payments = JSON.parse(buyer.payments);
+                            console.log(`Buyer ${buyer.nom} parsed payments:`, payments);
+                            
+                            // Check each payment tranche for today's date
+                            for (const [trancheKey, tranche] of Object.entries(payments)) {
+                                console.log(`Checking tranche ${trancheKey}:`, tranche, 'vs target date:', targetDate);
+                                
+                                // Skip if tranche is just a number (legacy format)
+                                if (typeof tranche !== 'object' || tranche === null) {
+                                    console.log(`Skipping ${trancheKey} - not an object`);
+                                    continue;
+                                }
+                                
+                                // Check if payment date matches target date and amount > 0
+                                if (tranche.date === targetDate && tranche.amount && parseFloat(tranche.amount) > 0) {
+                                    console.log(`Found today's payment:`, tranche);
+                                    todaysPayments.push({
+                                        buyerName: `${buyer.nom} ${buyer.prenom}`,
+                                        projectName: project.project_name,
+                                        type: tranche.type || 'versement',
+                                        amount: parseFloat(tranche.amount),
+                                        tranche: trancheKey
+                                    });
+                                    
+                                    // Add to totals based on type
+                                    if (tranche.type === 'espece') {
+                                        totalEspeces += parseFloat(tranche.amount);
+                                        especeCount++;
+                                    } else {
+                                        totalVersements += parseFloat(tranche.amount);
+                                        versementCount++;
+                                    }
+                                }
+                            }
+                        } catch (parseError) {
+                            console.log('Error parsing payments for buyer:', buyer.id, parseError);
+                        }
+                    } else if (buyer.payments && typeof buyer.payments === 'object') {
+                        // Handle case where payments is already an object
+                        const payments = buyer.payments;
+                        
+                        for (const [trancheKey, tranche] of Object.entries(payments)) {
+                            // Skip if tranche is just a number (legacy format)
+                            if (typeof tranche !== 'object' || tranche === null) continue;
+                            
+                            // Check if payment date matches target date and amount > 0
+                            if (tranche.date === targetDate && tranche.amount && parseFloat(tranche.amount) > 0) {
+                                todaysPayments.push({
+                                    buyerName: `${buyer.nom} ${buyer.prenom}`,
+                                    projectName: project.project_name,
+                                    type: tranche.type || 'versement',
+                                    amount: parseFloat(tranche.amount),
+                                    tranche: trancheKey
+                                });
+                                
+                                // Add to totals based on type
+                                if (tranche.type === 'espece') {
+                                    totalEspeces += parseFloat(tranche.amount);
+                                    especeCount++;
+                                } else {
+                                    totalVersements += parseFloat(tranche.amount);
+                                    versementCount++;
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (buyerError) {
+                console.log('Error loading buyers for project:', project.id, buyerError);
+            }
+        }
+
+        // Display the results
+        displayTodaysPayments(todaysPayments, totalVersements, totalEspeces, versementCount, especeCount, targetDate);
+        
+        console.log('Payments loaded for', targetDate, ':', {
+            total: todaysPayments.length,
+            versements: versementCount,
+            especes: especeCount
+        });
+        
+    } catch (error) {
+        console.error('Error loading today\'s payments:', error);
+        displayTodaysPayments([], 0, 0, 0, 0, targetDate);
+    }
+}
+
+// Display today's payments in the UI
+function displayTodaysPayments(payments, totalVersements, totalEspeces, versementCount, especeCount, selectedDate) {
+    // Update summary cards
+    const versementsEl = document.getElementById('today-versements');
+    const especesEl = document.getElementById('today-especes');
+    const totalEl = document.getElementById('today-total');
+    const versementCountEl = document.getElementById('versement-count');
+    const especeCountEl = document.getElementById('espece-count');
+    const totalCountEl = document.getElementById('total-count');
+    
+    if (versementsEl) versementsEl.textContent = formatCurrency(totalVersements);
+    if (especesEl) especesEl.textContent = formatCurrency(totalEspeces);
+    if (totalEl) totalEl.textContent = formatCurrency(totalVersements + totalEspeces);
+    if (versementCountEl) versementCountEl.textContent = `${versementCount} payment${versementCount !== 1 ? 's' : ''}`;
+    if (especeCountEl) especeCountEl.textContent = `${especeCount} payment${especeCount !== 1 ? 's' : ''}`;
+    if (totalCountEl) totalCountEl.textContent = `${payments.length} payment${payments.length !== 1 ? 's' : ''}`;
+
+    // Display payment list
+    const paymentsList = document.getElementById('todays-payment-list');
+    if (paymentsList) {
+        if (payments.length === 0) {
+            paymentsList.innerHTML = `
+                <div class="no-payments">
+                    <i class="fas fa-calendar-times"></i>
+                    <p>No payments recorded for today</p>
+                </div>
+            `;
+        } else {
+            // Sort payments by amount (highest first)
+            const sortedPayments = payments.sort((a, b) => b.amount - a.amount);
+            
+            paymentsList.innerHTML = sortedPayments.map(payment => `
+                <div class="payment-item">
+                    <div class="payment-info">
+                        <div class="payment-buyer">${payment.buyerName}</div>
+                        <div class="payment-details-text">
+                            ${payment.projectName} • Tranche ${payment.tranche}
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span class="payment-type ${payment.type}">${payment.type}</span>
+                        <div class="payment-amount">${formatCurrency(payment.amount)}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+    }
+}
+
+// Setup today's payments UI elements
+function setupTodaysPaymentsUI() {
+    // Display current date
+    const currentDateEl = document.getElementById('current-date');
+    if (currentDateEl) {
+        const today = new Date();
+        const options = { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+        };
+        currentDateEl.textContent = today.toLocaleDateString('fr-FR', options);
+    }
+
+    // Setup date picker with today's date
+    const datePicker = document.getElementById('payment-date-picker');
+    if (datePicker) {
+        const today = new Date().toISOString().split('T')[0];
+        datePicker.value = today;
+        
+        // Add event listener for date changes
+        datePicker.addEventListener('change', async () => {
+            await loadPaymentsForDate(datePicker.value);
+        });
+    }
+
+    // Setup refresh button
+    const refreshBtn = document.getElementById('refresh-payments-btn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', async () => {
+            refreshBtn.classList.add('loading');
+            refreshBtn.disabled = true;
+            
+            try {
+                const selectedDate = document.getElementById('payment-date-picker')?.value || new Date().toISOString().split('T')[0];
+                await loadPaymentsForDate(selectedDate);
+            } catch (error) {
+                console.error('Error refreshing payments:', error);
+            } finally {
+                refreshBtn.classList.remove('loading');
+                refreshBtn.disabled = false;
+            }
+        });
+    }
+}
