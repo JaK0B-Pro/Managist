@@ -7,6 +7,8 @@ use chrono::NaiveDate;
 use std::env;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
+use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
+use argon2::password_hash::{rand_core::OsRng, SaltString};
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -213,6 +215,57 @@ pub struct ProjectInput {
     surfaces_appartements: Option<String>,
 }
 
+// Hash a password with Argon2id; the result is a self-describing PHC string (salt included)
+fn hash_password(password: &str) -> Result<String, String> {
+    let salt = SaltString::generate(&mut OsRng);
+    Argon2::default()
+        .hash_password(password.as_bytes(), &salt)
+        .map(|h| h.to_string())
+        .map_err(|e| e.to_string())
+}
+
+// Check a password against the stored value. Returns (matches, needs_rehash):
+// accounts created before hashing still hold plain text, which is accepted once
+// and flagged so the caller can replace it with a hash.
+fn verify_password(password: &str, stored: &str) -> (bool, bool) {
+    match PasswordHash::new(stored) {
+        Ok(parsed) => (Argon2::default().verify_password(password.as_bytes(), &parsed).is_ok(), false),
+        Err(_) => {
+            let matches = password == stored;
+            (matches, matches)
+        }
+    }
+}
+
+// Look up a user and verify their password, upgrading a legacy plain-text password to a hash
+async fn authenticate_user(pool: &PgPool, user: &str, password: &str) -> Result<Option<sqlx::postgres::PgRow>, String> {
+    let row = sqlx::query("SELECT id, name, password, admin FROM users WHERE name = $1")
+        .bind(user)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let Some(row) = row else { return Ok(None) };
+    let stored: String = row.try_get("password").map_err(|e| e.to_string())?;
+    let (matches, needs_rehash) = verify_password(password, &stored);
+    if !matches {
+        return Ok(None);
+    }
+
+    if needs_rehash {
+        let id: i32 = row.try_get("id").map_err(|e| e.to_string())?;
+        sqlx::query("UPDATE users SET password = $1 WHERE id = $2")
+            .bind(hash_password(password)?)
+            .bind(id)
+            .execute(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+        debug_println!("Upgraded plain-text password to hash for user: {}", user);
+    }
+
+    Ok(Some(row))
+}
+
 // Function to handle login process
 #[tauri::command]
 async fn login(app: AppHandle, pool: tauri::State<'_, PgPool>, user: String, password: String) -> Result<(), String> {
@@ -221,14 +274,7 @@ async fn login(app: AppHandle, pool: tauri::State<'_, PgPool>, user: String, pas
     
     debug_println!("Login attempt - User: {}", user);
     
-    let rows = sqlx::query("SELECT id, name, password, admin FROM users WHERE name = $1 AND password = $2")
-        .bind(&user)
-        .bind(&password)
-        .fetch_all(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    if let Some(row) = rows.first() {
+    if let Some(row) = authenticate_user(&pool, &user, &password).await? {
         let admin_value: String = row.try_get("admin").map_err(|e| e.to_string())?;
         debug_println!("Login successful - User: {}, Admin role from DB: {}", user, admin_value);
         app.emit_to("login", "login-result", format!("LoggedIn:{}", admin_value)).map_err(|e| e.to_string())?;
@@ -264,7 +310,7 @@ async fn signup_proccess(app: AppHandle, pool: tauri::State<'_, PgPool>, name: S
     // Insert new user
     sqlx::query("INSERT INTO users(name, password, admin) VALUES ($1, $2, $3)")
         .bind(&name)
-        .bind(&password)
+        .bind(hash_password(&password)?)
         .bind(&admin)
         .execute(&*pool)
         .await
@@ -282,21 +328,14 @@ async fn signup_proccess(app: AppHandle, pool: tauri::State<'_, PgPool>, name: S
 #[tauri::command]
 async fn update_user_password(app: AppHandle, pool: tauri::State<'_, PgPool>, username: String, current_password: String, new_password: String) -> Result<(), String> {
     // First verify the current password
-    let rows = sqlx::query("SELECT id, name, password FROM users WHERE name = $1 AND password = $2")
-        .bind(&username)
-        .bind(&current_password)
-        .fetch_all(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    if rows.is_empty() {
+    if authenticate_user(&pool, &username, &current_password).await?.is_none() {
         app.emit_to("password-update", "password-update-result", "Invalid current password").map_err(|e| e.to_string())?;
         return Err("Invalid current password".to_string());
     }
 
     // Update the password in the database
     sqlx::query("UPDATE users SET password = $1 WHERE name = $2")
-        .bind(&new_password)
+        .bind(hash_password(&new_password)?)
         .bind(&username)
         .execute(&*pool)
         .await
@@ -1350,7 +1389,7 @@ async fn create_default_admin_user(pool: &PgPool) -> Result<(), String> {
         // Create default admin user
         sqlx::query("INSERT INTO users (name, password, admin) VALUES ($1, $2, $3)")
             .bind("admin")
-            .bind("admin123")
+            .bind(hash_password("admin123")?)
             .bind("1")
             .execute(pool)
             .await
@@ -2474,5 +2513,23 @@ async fn get_buyer(pool: tauri::State<'_, PgPool>, buyer_id: i32) -> Result<Opti
         }))
     } else {
         Ok(None)
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hashed_password_verifies() {
+        let hash = hash_password("secret").unwrap();
+        assert_ne!(hash, "secret");
+        assert_eq!(verify_password("secret", &hash), (true, false));
+        assert_eq!(verify_password("wrong", &hash), (false, false));
+    }
+
+    #[test]
+    fn legacy_plain_text_password_is_flagged_for_rehash() {
+        assert_eq!(verify_password("admin123", "admin123"), (true, true));
+        assert_eq!(verify_password("wrong", "admin123"), (false, false));
     }
 }
